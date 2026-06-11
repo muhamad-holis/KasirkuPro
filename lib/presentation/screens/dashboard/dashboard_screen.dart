@@ -5,6 +5,8 @@ import '../../../core/utils/currency.dart';
 import '../../providers/dashboard_provider.dart';
 import '../../providers/products_provider.dart';
 import '../../providers/database_provider.dart';
+import '../../providers/settings_provider.dart';
+import '../../navigation/app_router.dart';
 import '../../../data/database/app_database.dart';
 
 class DashboardScreen extends ConsumerWidget {
@@ -12,16 +14,14 @@ class DashboardScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final summary    = ref.watch(dashboardSummaryProvider);
-    final lowStock   = ref.watch(lowStockProvider);
-    final topProducts= ref.watch(topProductsProvider);
-    final todayTx    = ref.watch(todayTransactionsProvider);
+    final stats    = ref.watch(dashboardStatsProvider);
+    final lowStock = ref.watch(lowStockProvider);
+    final todayTx  = ref.watch(todayTransactionsProvider);
 
     return Scaffold(
       backgroundColor: AppColors.bg,
       body: CustomScrollView(
         slivers: [
-          // Header teal
           SliverToBoxAdapter(child: _Header()),
 
           SliverPadding(
@@ -30,10 +30,16 @@ class DashboardScreen extends ConsumerWidget {
               delegate: SliverChildListDelegate([
 
                 // Ringkasan hari ini
-                _SectionTitle('Ringkasan Hari Ini', action: 'Lihat semua'),
+                _SectionTitle(
+                  'Ringkasan Hari Ini',
+                  action: 'Lihat semua',
+                  onAction: () => ref
+                      .read(currentNavIndexProvider.notifier)
+                      .state = 4, // tab Laporan
+                ),
                 const SizedBox(height: 10),
-                summary.when(
-                  data: (d) => _SummaryGrid(data: d),
+                stats.when(
+                  data: (s) => _SummaryGrid(stats: s),
                   loading: () => _shimmer(),
                   error: (e, _) => Text('$e'),
                 ),
@@ -49,14 +55,24 @@ class DashboardScreen extends ConsumerWidget {
                 lowStock.when(
                   data: (list) => list.isEmpty
                       ? const SizedBox()
-                      : _LowStockBanner(products: list),
+                      : _LowStockBanner(
+                          products: list,
+                          onLihatStok: () => ref
+                              .read(currentNavIndexProvider.notifier)
+                              .state = 2, // tab Stok
+                        ),
                   loading: () => const SizedBox(),
                   error: (_, __) => const SizedBox(),
                 ),
 
                 // Transaksi terakhir
-                _SectionTitle('Transaksi Terakhir',
-                  action: 'Lihat semua'),
+                _SectionTitle(
+                  'Transaksi Terakhir',
+                  action: 'Lihat semua',
+                  onAction: () => ref
+                      .read(currentNavIndexProvider.notifier)
+                      .state = 4, // tab Laporan
+                ),
                 const SizedBox(height: 10),
                 todayTx.when(
                   data: (list) => list.isEmpty
@@ -96,9 +112,13 @@ class DashboardScreen extends ConsumerWidget {
   );
 }
 
+// ─── Header ──────────────────────────────────────────────────────────────────
+
 class _Header extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final settings = ref.watch(storeSettingsProvider);
+
     return Container(
       decoration: const BoxDecoration(
         color: AppColors.primary,
@@ -120,9 +140,8 @@ class _Header extends ConsumerWidget {
               Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('Halo, Kasir 👋',
-                    style:
-const TextStyle(
+                  const Text('Halo, Kasir 👋',
+                    style: TextStyle(
                       color: Colors.white,
                       fontSize: 20,
                       fontWeight: FontWeight.w700,
@@ -135,33 +154,20 @@ const TextStyle(
                     )),
                 ],
               ),
-              Stack(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(10),
-                    decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.2),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: const Icon(Icons.notifications_outlined,
-                      color: Colors.white, size: 22),
-                  ),
-                  Positioned(
-                    right: 6, top: 6,
-                    child: Container(
-                      width: 8, height: 8,
-                      decoration: const BoxDecoration(
-                        color: AppColors.danger,
-                        shape: BoxShape.circle,
-                      ),
-                    ),
-                  ),
-                ],
+              // Bell icon — dekoratif, belum ada sistem notifikasi
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.2),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: const Icon(Icons.notifications_outlined,
+                  color: Colors.white, size: 22),
               ),
             ],
           ),
           const SizedBox(height: 14),
-          // Toko card
+          // Nama toko dari storeSettingsProvider
           Container(
             padding: const EdgeInsets.symmetric(
               horizontal: 14, vertical: 12),
@@ -180,18 +186,26 @@ const TextStyle(
                   color: AppColors.primary, size: 22),
               ),
               const SizedBox(width: 12),
-              const Expanded(
+              Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('Toko Sejahtera',
-                      style: TextStyle(
+                    Text(
+                      settings.storeName.isNotEmpty
+                          ? settings.storeName
+                          : 'KasirKu',
+                      style: const TextStyle(
                         fontWeight: FontWeight.w700,
                         fontSize: 14,
                         color: AppColors.textPrimary,
                       )),
-                    Text('Kasir Pagi',
-                      style: TextStyle(
+                    Text(
+                      settings.storeAddress.isNotEmpty
+                          ? settings.storeAddress
+                          : 'Pengaturan toko',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
                         fontSize: 12,
                         color: AppColors.textSecondary,
                       )),
@@ -208,10 +222,13 @@ const TextStyle(
   }
 }
 
+// ─── Section Title ────────────────────────────────────────────────────────────
+
 class _SectionTitle extends StatelessWidget {
   final String title;
   final String? action;
-  const _SectionTitle(this.title, {this.action});
+  final VoidCallback? onAction;
+  const _SectionTitle(this.title, {this.action, this.onAction});
 
   @override
   Widget build(BuildContext context) {
@@ -226,7 +243,7 @@ class _SectionTitle extends StatelessWidget {
           )),
         if (action != null)
           GestureDetector(
-            onTap: () {},
+            onTap: onAction,
             child: Row(children: [
               Text(action!,
                 style: const TextStyle(
@@ -243,15 +260,22 @@ class _SectionTitle extends StatelessWidget {
   }
 }
 
+// ─── Summary Grid ─────────────────────────────────────────────────────────────
+
 class _SummaryGrid extends StatelessWidget {
-  final Map<String, dynamic> data;
-  const _SummaryGrid({required this.data});
+  final DashboardStats stats;
+  const _SummaryGrid({required this.stats});
+
+  String _badge(double pct) {
+    if (pct == 0) return '= sama seperti kemarin';
+    final sign = pct > 0 ? '+' : '';
+    return '$sign${pct.toStringAsFixed(1)}% dari kemarin';
+  }
+
+  bool _isUp(double pct) => pct >= 0;
 
   @override
   Widget build(BuildContext context) {
-    final omzet = (data['omzet'] as num?)?.toDouble() ?? 0;
-    final count = data['jumlah_transaksi'] ?? 0;
-
     return GridView.count(
       crossAxisCount: 2,
       shrinkWrap: true,
@@ -262,30 +286,33 @@ class _SummaryGrid extends StatelessWidget {
       children: [
         _StatCard(
           title: 'Total Penjualan',
-          value: CurrencyFormatter.format(omzet),
-          badge: '+12% dari kemarin',
+          value: CurrencyFormatter.format(stats.omzetToday),
+          badge: _badge(stats.omzetChange),
+          isUp: _isUp(stats.omzetChange),
           icon: Icons.shopping_bag_outlined,
           color: AppColors.primary,
         ),
         _StatCard(
           title: 'Transaksi',
-          value: '$count',
-          badge: '+8% dari kemarin',
+          value: '${stats.txToday}',
+          badge: _badge(stats.txChange),
+          isUp: _isUp(stats.txChange),
           icon: Icons.receipt_long_outlined,
           color: AppColors.info,
         ),
         _StatCard(
           title: 'Rata-rata Transaksi',
-          value: CurrencyFormatter.format(
-            count > 0 ? omzet / count : 0),
-          badge: '+5% dari kemarin',
+          value: CurrencyFormatter.format(stats.avgToday),
+          badge: _badge(stats.avgChange),
+          isUp: _isUp(stats.avgChange),
           icon: Icons.bar_chart_rounded,
           color: AppColors.success,
         ),
         _StatCard(
           title: 'Produk Terjual',
-          value: '0',
-          badge: '+10% dari kemarin',
+          value: '${stats.productsSold}',
+          badge: 'hari ini',
+          isUp: true,
           icon: Icons.inventory_2_outlined,
           color: AppColors.warning,
         ),
@@ -296,6 +323,7 @@ class _SummaryGrid extends StatelessWidget {
 
 class _StatCard extends StatelessWidget {
   final String title, value, badge;
+  final bool isUp;
   final IconData icon;
   final Color color;
 
@@ -303,12 +331,18 @@ class _StatCard extends StatelessWidget {
     required this.title,
     required this.value,
     required this.badge,
+    required this.isUp,
     required this.icon,
     required this.color,
   });
 
   @override
   Widget build(BuildContext context) {
+    final badgeColor = isUp ? AppColors.success : AppColors.danger;
+    final badgeIcon = isUp
+        ? Icons.arrow_upward_rounded
+        : Icons.arrow_downward_rounded;
+
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
@@ -342,14 +376,18 @@ class _StatCard extends StatelessWidget {
             )),
           const SizedBox(height: 2),
           Row(children: [
-            const Icon(Icons.arrow_upward_rounded,
-              size: 10, color: AppColors.success),
-            Text(badge,
-              style: const TextStyle(
-                fontSize: 9,
-                color: AppColors.success,
-                fontWeight: FontWeight.w600,
-              )),
+            Icon(badgeIcon, size: 10, color: badgeColor),
+            const SizedBox(width: 2),
+            Flexible(
+              child: Text(badge,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontSize: 9,
+                  color: badgeColor,
+                  fontWeight: FontWeight.w600,
+                )),
+            ),
           ]),
         ],
       ),
@@ -357,43 +395,73 @@ class _StatCard extends StatelessWidget {
   }
 }
 
-class _QuickActions extends StatelessWidget {
+// ─── Quick Actions ────────────────────────────────────────────────────────────
+
+class _QuickActions extends ConsumerWidget {
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final actions = [
       _QuickAction(
         icon: Icons.shopping_cart_outlined,
         label: 'Mulai\nKasir',
         color: AppColors.primary,
-        onTap: () {},
+        onTap: () => ref
+            .read(currentNavIndexProvider.notifier)
+            .state = 1, // tab Kasir
       ),
       _QuickAction(
         icon: Icons.add_box_outlined,
         label: 'Tambah\nProduk',
         color: AppColors.success,
-        onTap: () {},
+        onTap: () {
+          // Navigasi ke Stok dulu, lalu buka sheet tambah produk
+          ref.read(currentNavIndexProvider.notifier).state = 2;
+          // Kecil delay agar screen sudah mount
+          Future.delayed(const Duration(milliseconds: 300), () {
+            if (context.mounted) {
+              showModalBottomSheet(
+                context: context,
+                isScrollControlled: true,
+                shape: const RoundedRectangleBorder(
+                  borderRadius:
+                      BorderRadius.vertical(top: Radius.circular(24)),
+                ),
+                builder: (_) => ProviderScope(
+                  parent: ProviderScope.containerOf(context),
+                  child: const _AddProductQuickSheet(),
+                ),
+              );
+            }
+          });
+        },
       ),
       _QuickAction(
         icon: Icons.history_rounded,
         label: 'Riwayat\nTransaksi',
         color: AppColors.info,
-        onTap: () {},
+        onTap: () => ref
+            .read(currentNavIndexProvider.notifier)
+            .state = 4, // tab Laporan
       ),
       _QuickAction(
         icon: Icons.insert_chart_outlined_rounded,
         label: 'Laporan\nHari Ini',
         color: AppColors.warning,
-        onTap: () {},
+        onTap: () => ref
+            .read(currentNavIndexProvider.notifier)
+            .state = 4, // tab Laporan
       ),
     ];
 
     return Row(
-      children: actions.map((a) => Expanded(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 4),
-          child: _QuickActionCard(action: a),
-        ),
-      )).toList(),
+      children: actions
+          .map((a) => Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 4),
+                  child: _QuickActionCard(action: a),
+                ),
+              ))
+          .toList(),
     );
   }
 }
@@ -420,13 +488,11 @@ class _QuickActionCard extends StatelessWidget {
     return GestureDetector(
       onTap: action.onTap,
       child: Container(
-        padding: const EdgeInsets.symmetric(
-          vertical: 14, horizontal: 8),
+        padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 8),
         decoration: BoxDecoration(
           color: Colors.white,
           borderRadius: BorderRadius.circular(14),
-          border: Border.all(
-            color: AppColors.border, width: 0.5),
+          border: Border.all(color: AppColors.border, width: 0.5),
         ),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -437,8 +503,7 @@ class _QuickActionCard extends StatelessWidget {
                 color: action.color.withOpacity(0.1),
                 borderRadius: BorderRadius.circular(12),
               ),
-              child: Icon(action.icon,
-                color: action.color, size: 22),
+              child: Icon(action.icon, color: action.color, size: 22),
             ),
             const SizedBox(height: 8),
             Text(action.label,
@@ -456,9 +521,15 @@ class _QuickActionCard extends StatelessWidget {
   }
 }
 
+// ─── Low Stock Banner ─────────────────────────────────────────────────────────
+
 class _LowStockBanner extends StatelessWidget {
   final List products;
-  const _LowStockBanner({required this.products});
+  final VoidCallback onLihatStok;
+  const _LowStockBanner({
+    required this.products,
+    required this.onLihatStok,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -466,10 +537,10 @@ class _LowStockBanner extends StatelessWidget {
       margin: const EdgeInsets.only(bottom: 20),
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: const Color(0xFFECFDF5),
+        color: const Color(0xFFFFF7ED),
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
-          color: AppColors.primary.withOpacity(0.2)),
+          color: AppColors.warning.withOpacity(0.3)),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -478,12 +549,17 @@ class _LowStockBanner extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text('Stok Hampir Habis',
-                  style: TextStyle(
-                    color: AppColors.primary,
-                    fontWeight: FontWeight.w700,
-                    fontSize: 14,
-                  )),
+                Row(children: [
+                  const Icon(Icons.warning_amber_rounded,
+                    size: 16, color: AppColors.warning),
+                  const SizedBox(width: 6),
+                  const Text('Stok Hampir Habis',
+                    style: TextStyle(
+                      color: AppColors.warning,
+                      fontWeight: FontWeight.w700,
+                      fontSize: 14,
+                    )),
+                ]),
                 const SizedBox(height: 4),
                 Text(
                   '${products.length} produk stoknya hampir habis. '
@@ -495,12 +571,12 @@ class _LowStockBanner extends StatelessWidget {
                   )),
                 const SizedBox(height: 10),
                 GestureDetector(
-                  onTap: () {},
+                  onTap: onLihatStok,
                   child: Container(
                     padding: const EdgeInsets.symmetric(
                       horizontal: 16, vertical: 8),
                     decoration: BoxDecoration(
-                      color: AppColors.primary,
+                      color: AppColors.warning,
                       borderRadius: BorderRadius.circular(8),
                     ),
                     child: const Text('Lihat Stok',
@@ -516,13 +592,15 @@ class _LowStockBanner extends StatelessWidget {
           ),
           const SizedBox(width: 12),
           Icon(Icons.inventory_2_outlined,
-            size: 60,
-            color: AppColors.primary.withOpacity(0.3)),
+            size: 56,
+            color: AppColors.warning.withOpacity(0.3)),
         ],
       ),
     );
   }
 }
+
+// ─── Transaction List ─────────────────────────────────────────────────────────
 
 class _TxList extends ConsumerWidget {
   final List<Transaction> transactions;
@@ -531,80 +609,449 @@ class _TxList extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     return Column(
-      children: transactions.map((tx) => Container(
-        margin: const EdgeInsets.only(bottom: 8),
-        padding: const EdgeInsets.all(14),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(
-            color: AppColors.border, width: 0.5),
-        ),
-        child: Row(children: [
-          Container(
-            padding: const EdgeInsets.all(10),
-            decoration: BoxDecoration(
-              color: AppColors.primaryLight,
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: const Icon(Icons.shopping_bag_outlined,
-              color: AppColors.primary, size: 20),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(tx.invoiceNumber,
-                  style: const TextStyle(
-                    fontWeight: FontWeight.w700,
-                    fontSize: 13,
-                  )),
-                Text(
-                  _formatDate(tx.createdAt),
-                  style: const TextStyle(
-                    fontSize: 11,
-                    color: AppColors.textSecondary,
-                  )),
-              ],
-            ),
-          ),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              Text(CurrencyFormatter.format(tx.total),
-                style: const TextStyle(
-                  fontWeight: FontWeight.w700,
-                  fontSize: 14,
-                  color: AppColors.textPrimary,
-                )),
-              Container(
-                margin: const EdgeInsets.only(top: 3),
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 8, vertical: 2),
-                decoration: BoxDecoration(
-                  color: AppColors.success.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(20),
+      children: transactions
+          .map((tx) => GestureDetector(
+                onTap: () => _showTxDetail(context, ref, tx),
+                child: Container(
+                  margin: const EdgeInsets.only(bottom: 8),
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(
+                        color: AppColors.border, width: 0.5),
+                  ),
+                  child: Row(children: [
+                    Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: AppColors.primaryLight,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: const Icon(Icons.shopping_bag_outlined,
+                        color: AppColors.primary, size: 20),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(tx.invoiceNumber,
+                            style: const TextStyle(
+                              fontWeight: FontWeight.w700,
+                              fontSize: 13,
+                            )),
+                          Text(
+                            _formatDate(tx.createdAt),
+                            style: const TextStyle(
+                              fontSize: 11,
+                              color: AppColors.textSecondary,
+                            )),
+                        ],
+                      ),
+                    ),
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        Text(CurrencyFormatter.format(tx.total),
+                          style: const TextStyle(
+                            fontWeight: FontWeight.w700,
+                            fontSize: 14,
+                            color: AppColors.textPrimary,
+                          )),
+                        Container(
+                          margin: const EdgeInsets.only(top: 3),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: AppColors.success.withOpacity(0.1),
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                          child: Text(
+                            _methodLabel(tx.paymentMethod),
+                            style: const TextStyle(
+                              fontSize: 10,
+                              color: AppColors.success,
+                              fontWeight: FontWeight.w600,
+                            )),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(width: 4),
+                    const Icon(Icons.chevron_right,
+                      size: 16, color: AppColors.textSecondary),
+                  ]),
                 ),
-                child: const Text('Selesai',
-                  style: TextStyle(
-                    fontSize: 10,
-                    color: AppColors.success,
-                    fontWeight: FontWeight.w600,
-                  )),
-              ),
-            ],
-          ),
-        ]),
-      )).toList(),
+              ))
+          .toList(),
     );
   }
 
+  void _showTxDetail(
+      BuildContext context, WidgetRef ref, Transaction tx) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (_) => ProviderScope(
+        parent: ProviderScope.containerOf(context),
+        child: _TxDetailSheet(transaction: tx),
+      ),
+    );
+  }
+
+  String _methodLabel(String? method) {
+    switch (method) {
+      case 'tunai':    return 'Tunai';
+      case 'transfer': return 'Transfer';
+      case 'qris':     return 'QRIS';
+      case 'hutang':   return 'Hutang';
+      default:         return 'Selesai';
+    }
+  }
+
   String _formatDate(DateTime dt) {
-    final months = ['Jan','Feb','Mar','Apr','Mei','Jun',
-                    'Jul','Ags','Sep','Okt','Nov','Des'];
-    return '${dt.day} ${months[dt.month-1]} ${dt.year} • '
-        '${dt.hour.toString().padLeft(2,'0')}:'
-        '${dt.minute.toString().padLeft(2,'0')}';
+    final months = [
+      'Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun',
+      'Jul', 'Ags', 'Sep', 'Okt', 'Nov', 'Des'
+    ];
+    return '${dt.day} ${months[dt.month - 1]} ${dt.year} • '
+        '${dt.hour.toString().padLeft(2, '0')}:'
+        '${dt.minute.toString().padLeft(2, '0')}';
+  }
+}
+
+// ─── Transaction Detail Sheet ─────────────────────────────────────────────────
+
+class _TxDetailSheet extends ConsumerWidget {
+  final Transaction transaction;
+  const _TxDetailSheet({required this.transaction});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final itemsFuture = ref.watch(
+      _txItemsProvider(transaction.id),
+    );
+
+    return DraggableScrollableSheet(
+      expand: false,
+      initialChildSize: 0.6,
+      maxChildSize: 0.92,
+      builder: (_, controller) => Column(
+        children: [
+          // Handle
+          Container(
+            margin: const EdgeInsets.only(top: 12, bottom: 8),
+            width: 40, height: 4,
+            decoration: BoxDecoration(
+              color: Colors.grey.shade300,
+              borderRadius: BorderRadius.circular(2),
+            ),
+          ),
+          Padding(
+            padding:
+                const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(transaction.invoiceNumber,
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w800,
+                        color: AppColors.textPrimary,
+                      )),
+                    Text(
+                      _formatDate(transaction.createdAt),
+                      style: const TextStyle(
+                        fontSize: 12,
+                        color: AppColors.textSecondary,
+                      )),
+                  ],
+                ),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 12, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: AppColors.success.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Text(
+                    _methodLabel(transaction.paymentMethod),
+                    style: const TextStyle(
+                      fontSize: 12,
+                      color: AppColors.success,
+                      fontWeight: FontWeight.w700,
+                    )),
+                ),
+              ],
+            ),
+          ),
+          const Divider(height: 1),
+          Expanded(
+            child: ListView(
+              controller: controller,
+              padding: const EdgeInsets.all(20),
+              children: [
+                // Item produk
+                const Text('Item Produk',
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.textSecondary,
+                  )),
+                const SizedBox(height: 8),
+                itemsFuture.when(
+                  data: (items) => items.isEmpty
+                      ? const Text('Tidak ada item',
+                          style: TextStyle(
+                              color: AppColors.textSecondary))
+                      : Column(
+                          children: items
+                              .map((item) => _ItemRow(item: item))
+                              .toList()),
+                  loading: () => const Center(
+                    child: Padding(
+                      padding: EdgeInsets.all(16),
+                      child: CircularProgressIndicator(),
+                    )),
+                  error: (e, _) => Text('Error: $e'),
+                ),
+                const Divider(height: 24),
+                // Ringkasan bayar
+                _SummaryRow('Subtotal',
+                  CurrencyFormatter.format(transaction.subtotal)),
+                if ((transaction.discountAmount) > 0)
+                  _SummaryRow(
+                    'Diskon',
+                    '- ${CurrencyFormatter.format(transaction.discountAmount)}',
+                    color: AppColors.danger,
+                  ),
+                if ((transaction.taxAmount) > 0)
+                  _SummaryRow(
+                    'Pajak',
+                    CurrencyFormatter.format(transaction.taxAmount),
+                  ),
+                const Divider(height: 16),
+                _SummaryRow(
+                  'Total',
+                  CurrencyFormatter.format(transaction.total),
+                  bold: true,
+                  color: AppColors.primary,
+                ),
+                _SummaryRow(
+                  'Dibayar',
+                  CurrencyFormatter.format(transaction.amountPaid),
+                ),
+                if (transaction.change > 0)
+                  _SummaryRow(
+                    'Kembalian',
+                    CurrencyFormatter.format(transaction.change),
+                    color: AppColors.success,
+                  ),
+                if (transaction.notes != null &&
+                    transaction.notes!.isNotEmpty) ...[
+                  const SizedBox(height: 12),
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.grey.shade50,
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: AppColors.border),
+                    ),
+                    child: Row(children: [
+                      const Icon(Icons.notes_rounded,
+                        size: 16, color: AppColors.textSecondary),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          transaction.notes!,
+                          style: const TextStyle(
+                            fontSize: 12,
+                            color: AppColors.textSecondary,
+                          )),
+                      ),
+                    ]),
+                  ),
+                ],
+                const SizedBox(height: 20),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _methodLabel(String? m) {
+    switch (m) {
+      case 'tunai':    return 'Tunai';
+      case 'transfer': return 'Transfer';
+      case 'qris':     return 'QRIS';
+      case 'hutang':   return 'Hutang';
+      default:         return 'Selesai';
+    }
+  }
+
+  String _formatDate(DateTime dt) {
+    final months = [
+      'Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun',
+      'Jul', 'Ags', 'Sep', 'Okt', 'Nov', 'Des'
+    ];
+    return '${dt.day} ${months[dt.month - 1]} ${dt.year} • '
+        '${dt.hour.toString().padLeft(2, '0')}:'
+        '${dt.minute.toString().padLeft(2, '0')}';
+  }
+}
+
+// Provider untuk items per transaction
+final _txItemsProvider =
+    FutureProvider.family<List<TransactionItem>, int>((ref, txId) =>
+        ref
+            .watch(databaseProvider)
+            .transactionsDao
+            .getTransactionItems(txId));
+
+class _ItemRow extends StatelessWidget {
+  final TransactionItem item;
+  const _ItemRow({required this.item});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      child: Row(children: [
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(item.productName,
+                style: const TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                )),
+              Text(
+                '${item.quantity}x ${CurrencyFormatter.format(item.price)}',
+                style: const TextStyle(
+                  fontSize: 11,
+                  color: AppColors.textSecondary,
+                )),
+            ],
+          ),
+        ),
+        Text(CurrencyFormatter.format(item.subtotal),
+          style: const TextStyle(
+            fontSize: 13,
+            fontWeight: FontWeight.w700,
+          )),
+      ]),
+    );
+  }
+}
+
+class _SummaryRow extends StatelessWidget {
+  final String label, value;
+  final bool bold;
+  final Color? color;
+  const _SummaryRow(this.label, this.value,
+      {this.bold = false, this.color});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 3),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(label,
+            style: TextStyle(
+              fontSize: bold ? 14 : 13,
+              fontWeight:
+                  bold ? FontWeight.w700 : FontWeight.w500,
+              color: bold
+                  ? AppColors.textPrimary
+                  : AppColors.textSecondary,
+            )),
+          Text(value,
+            style: TextStyle(
+              fontSize: bold ? 14 : 13,
+              fontWeight:
+                  bold ? FontWeight.w800 : FontWeight.w600,
+              color: color ?? AppColors.textPrimary,
+            )),
+        ],
+      ),
+    );
+  }
+}
+
+// ─── Add Product Quick Sheet ──────────────────────────────────────────────────
+// Sheet sederhana redirect ke Stok screen — produk form sudah ada di sana
+
+class _AddProductQuickSheet extends ConsumerWidget {
+  const _AddProductQuickSheet();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    return Container(
+      padding: EdgeInsets.only(
+        top: 20,
+        left: 20,
+        right: 20,
+        bottom: MediaQuery.of(context).viewInsets.bottom + 20,
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 40, height: 4,
+            decoration: BoxDecoration(
+              color: Colors.grey.shade300,
+              borderRadius: BorderRadius.circular(2),
+            ),
+          ),
+          const SizedBox(height: 20),
+          const Icon(Icons.inventory_2_outlined,
+            size: 48, color: AppColors.primary),
+          const SizedBox(height: 12),
+          const Text('Tambah Produk',
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.w800,
+            )),
+          const SizedBox(height: 8),
+          const Text(
+            'Kamu sudah ada di tab Stok. '
+            'Tap tombol + di bawah layar untuk menambah produk baru.',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              color: AppColors.textSecondary,
+              fontSize: 13,
+              height: 1.5,
+            )),
+          const SizedBox(height: 24),
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton(
+              onPressed: () => Navigator.pop(context),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.primary,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(vertical: 14),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+              child: const Text('Oke, Mengerti',
+                style: TextStyle(fontWeight: FontWeight.w700)),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }
