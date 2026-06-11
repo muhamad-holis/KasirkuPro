@@ -1,712 +1,260 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:drift/drift.dart' show Value;
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/currency.dart';
-import '../../../core/constants/app_constants.dart';
-import '../../../data/database/app_database.dart';
 import '../../providers/kasir_provider.dart';
+import '../../providers/products_provider.dart';
+import '../../providers/database_provider.dart';
+import '../../../data/database/app_database.dart';
 
-// ===========================================================================
-// Layar utama Kasir / POS
-// ===========================================================================
-class KasirScreen extends ConsumerStatefulWidget {
+class KasirScreen extends ConsumerWidget {
   const KasirScreen({super.key});
 
   @override
-  ConsumerState<KasirScreen> createState() => _KasirScreenState();
-}
-
-class _KasirScreenState extends ConsumerState<KasirScreen>
-    with SingleTickerProviderStateMixin {
-  late TabController _tabController;
-  final _searchCtrl = TextEditingController();
-
-  @override
-  void initState() {
-    super.initState();
-    _tabController = TabController(length: 2, vsync: this);
-  }
-
-  @override
-  void dispose() {
-    _tabController.dispose();
-    _searchCtrl.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final kasir = ref.watch(kasirProvider);
+  Widget build(BuildContext context, WidgetRef ref) {
+    final cart = ref.watch(kasirProvider);
 
     return Scaffold(
-      backgroundColor: AppColors.bg,
-      appBar: _buildAppBar(context, kasir),
-      body: Column(
-        children: [
-          // Tab: Produk | Keranjang
-          _SearchAndTabs(
-            tabController: _tabController,
-            searchCtrl: _searchCtrl,
-            totalItems: kasir.totalItems,
-          ),
-          Expanded(
-            child: TabBarView(
-              controller: _tabController,
-              children: const [
-                _ProductGrid(),
-                _CartView(),
-              ],
+      appBar: AppBar(
+        title: const Text('Kasir',
+          style: TextStyle(fontWeight: FontWeight.w700)),
+        actions: [
+          if (!cart.isEmpty)
+            TextButton.icon(
+              icon: const Icon(Icons.delete_sweep_outlined,
+                color: Colors.white70, size: 18),
+              label: const Text('Hapus',
+                style: TextStyle(color: Colors.white70, fontSize: 13)),
+              onPressed: () => _confirmClear(context, ref),
             ),
-          ),
         ],
       ),
-      // Tombol checkout hanya muncul saat keranjang tidak kosong
-      bottomNavigationBar: kasir.cartIsEmpty
-          ? null
-          : _CheckoutBar(kasirState: kasir),
-    );
-  }
-
-  AppBar _buildAppBar(BuildContext context, KasirState kasir) {
-    return AppBar(
-      backgroundColor: AppColors.primary,
-      title: const Text(
-        'Kasir (POS)',
-        style: TextStyle(
-          color: Colors.white,
-          fontWeight: FontWeight.w700,
-          fontSize: 18,
-        ),
+      body: Column(
+        children: [
+          _SearchBar(),
+          _ProductResults(),
+          if (!cart.isEmpty) ...[
+            const Divider(height: 1),
+            _CartHeader(cart: cart),
+            Expanded(child: _CartList(cart: cart)),
+            _CheckoutPanel(cart: cart),
+          ] else
+            const Expanded(child: _EmptyCart()),
+        ],
       ),
-      actions: [
-        if (!kasir.cartIsEmpty)
-          IconButton(
-            icon: const Icon(Icons.delete_sweep_outlined,
-                color: Colors.white),
-            tooltip: 'Kosongkan keranjang',
-            onPressed: () => _confirmClear(context),
-          ),
-        IconButton(
-          icon: const Icon(Icons.person_add_alt_1_outlined,
-              color: Colors.white),
-          tooltip: 'Pilih pelanggan',
-          onPressed: () => _showCustomerDialog(context),
-        ),
-      ],
     );
   }
 
-  void _confirmClear(BuildContext context) {
+  void _confirmClear(BuildContext context, WidgetRef ref) {
     showDialog(
       context: context,
       builder: (_) => AlertDialog(
-        shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16)),
-        title: const Text('Kosongkan Keranjang?'),
-        content:
-            const Text('Semua item di keranjang akan dihapus.'),
+        title: const Text('Hapus Keranjang?'),
+        content: const Text('Semua item akan dihapus dari keranjang.'),
         actions: [
           TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Batal')),
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Batal')),
           ElevatedButton(
-            style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.danger),
             onPressed: () {
-              ref.read(kasirProvider.notifier).clearCart();
+              ref.read(kasirProvider.notifier).clear();
               Navigator.pop(context);
             },
-            child: const Text('Hapus'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _showCustomerDialog(BuildContext context) {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (_) => const _CustomerPicker(),
-    );
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Search bar + TabBar
-// ---------------------------------------------------------------------------
-class _SearchAndTabs extends ConsumerWidget {
-  final TabController tabController;
-  final TextEditingController searchCtrl;
-  final int totalItems;
-
-  const _SearchAndTabs({
-    required this.tabController,
-    required this.searchCtrl,
-    required this.totalItems,
-  });
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    return Container(
-      color: AppColors.primary,
-      padding: const EdgeInsets.fromLTRB(16, 0, 16, 0),
-      child: Column(
-        children: [
-          // Search
-          Container(
-            margin: const EdgeInsets.only(bottom: 8),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: TextField(
-              controller: searchCtrl,
-              onChanged: (v) =>
-                  ref.read(kasirProvider.notifier).setSearchQuery(v),
-              decoration: const InputDecoration(
-                hintText: 'Cari produk / scan barcode…',
-                prefixIcon:
-                    Icon(Icons.search, color: AppColors.textHint),
-                border: InputBorder.none,
-                enabledBorder: InputBorder.none,
-                focusedBorder: InputBorder.none,
-                contentPadding: EdgeInsets.symmetric(
-                    horizontal: 16, vertical: 14),
-              ),
-            ),
-          ),
-          // TabBar
-          TabBar(
-            controller: tabController,
-            indicatorColor: Colors.white,
-            indicatorWeight: 3,
-            labelColor: Colors.white,
-            unselectedLabelColor: Colors.white60,
-            labelStyle: const TextStyle(
-                fontWeight: FontWeight.w700, fontSize: 13),
-            tabs: [
-              const Tab(text: 'Produk'),
-              Tab(
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Text('Keranjang'),
-                    if (totalItems > 0) ...[
-                      const SizedBox(width: 6),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 6, vertical: 2),
-                        decoration: BoxDecoration(
-                          color: AppColors.danger,
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        child: Text(
-                          '$totalItems',
-                          style: const TextStyle(
-                              fontSize: 11,
-                              fontWeight: FontWeight.w700),
-                        ),
-                      ),
-                    ],
-                  ],
-                ),
-              ),
-            ],
-          ),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.danger),
+            child: const Text('Hapus')),
         ],
       ),
     );
   }
 }
 
-// ---------------------------------------------------------------------------
-// Grid produk
-// ---------------------------------------------------------------------------
-class _ProductGrid extends ConsumerWidget {
-  const _ProductGrid();
+// ─── Search Bar ──────────────────────────────────────────────────────────────
 
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final query = ref.watch(kasirProvider).searchQuery;
-    final productsAsync =
-        ref.watch(kasirProductSearchProvider(query));
-
-    return productsAsync.when(
-      loading: () => const Center(
-          child: CircularProgressIndicator(
-              color: AppColors.primary)),
-      error: (e, _) =>
-          Center(child: Text('Error: $e')),
-      data: (products) {
-        if (products.isEmpty) {
-          return _emptyProducts(query);
-        }
-        return GridView.builder(
-          padding: const EdgeInsets.all(12),
-          gridDelegate:
-              const SliverGridDelegateWithFixedCrossAxisCount(
-            crossAxisCount: 2,
-            mainAxisSpacing: 10,
-            crossAxisSpacing: 10,
-            childAspectRatio: 0.85,
-          ),
-          itemCount: products.length,
-          itemBuilder: (_, i) =>
-              _ProductCard(product: products[i]),
-        );
-      },
-    );
-  }
-
-  Widget _emptyProducts(String query) => Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.search_off_rounded,
-                size: 60, color: Colors.grey.shade300),
-            const SizedBox(height: 12),
-            Text(
-              query.isEmpty
-                  ? 'Belum ada produk'
-                  : 'Produk "$query" tidak ditemukan',
-              style: TextStyle(
-                  color: Colors.grey.shade400, fontSize: 14),
-            ),
-          ],
-        ),
-      );
-}
-
-// ---------------------------------------------------------------------------
-// Kartu produk
-// ---------------------------------------------------------------------------
-class _ProductCard extends ConsumerWidget {
-  final Product product;
-  const _ProductCard({required this.product});
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final cart = ref.watch(kasirProvider).cart;
-    final inCart = cart.firstWhereOrNull(
-        (i) => i.product.id == product.id);
-    final isLowStock = product.stock <= product.minStock;
-
-    return GestureDetector(
-      onTap: () {
-        if (product.stock <= 0) return;
-        ref.read(kasirProvider.notifier).addProduct(product);
-        HapticFeedback.lightImpact();
-      },
-      child: Container(
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(
-            color: inCart != null
-                ? AppColors.primary
-                : AppColors.border,
-            width: inCart != null ? 1.5 : 0.5,
-          ),
-        ),
-        child: Stack(
-          children: [
-            Padding(
-              padding: const EdgeInsets.all(12),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // Ikon produk
-                  Container(
-                    width: double.infinity,
-                    height: 64,
-                    decoration: BoxDecoration(
-                      color: AppColors.primaryLight,
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: const Icon(
-                      Icons.inventory_2_outlined,
-                      color: AppColors.primary,
-                      size: 32,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    product.name,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w700,
-                      color: AppColors.textPrimary,
-                    ),
-                  ),
-                  const Spacer(),
-                  Text(
-                    CurrencyFormatter.format(product.sellPrice),
-                    style: const TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w800,
-                      color: AppColors.primary,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Row(children: [
-                    Icon(
-                      Icons.circle,
-                      size: 8,
-                      color: isLowStock
-                          ? AppColors.warning
-                          : AppColors.success,
-                    ),
-                    const SizedBox(width: 4),
-                    Text(
-                      'Stok: ${product.stock}',
-                      style: TextStyle(
-                        fontSize: 10,
-                        color: isLowStock
-                            ? AppColors.warning
-                            : AppColors.textSecondary,
-                      ),
-                    ),
-                  ]),
-                ],
-              ),
-            ),
-            // Badge qty di keranjang
-            if (inCart != null)
-              Positioned(
-                top: 8,
-                right: 8,
-                child: Container(
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 7, vertical: 3),
-                  decoration: BoxDecoration(
-                    color: AppColors.primary,
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: Text(
-                    '${inCart.quantity}',
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 11,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                ),
-              ),
-            // Overlay stok habis
-            if (product.stock <= 0)
-              Positioned.fill(
-                child: Container(
-                  decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.75),
-                    borderRadius: BorderRadius.circular(14),
-                  ),
-                  child: const Center(
-                    child: Text(
-                      'Stok\nHabis',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        color: AppColors.danger,
-                        fontWeight: FontWeight.w800,
-                        fontSize: 13,
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Tampilan keranjang
-// ---------------------------------------------------------------------------
-class _CartView extends ConsumerWidget {
-  const _CartView();
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final kasir = ref.watch(kasirProvider);
-
-    if (kasir.cartIsEmpty) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.shopping_cart_outlined,
-                size: 72, color: Colors.grey.shade200),
-            const SizedBox(height: 12),
-            Text(
-              'Keranjang masih kosong',
-              style: TextStyle(
-                  color: Colors.grey.shade400, fontSize: 15),
-            ),
-            const SizedBox(height: 6),
-            Text(
-              'Tambah produk dari tab Produk',
-              style: TextStyle(
-                  color: Colors.grey.shade300, fontSize: 12),
-            ),
-          ],
-        ),
-      );
-    }
-
-    return Column(
-      children: [
-        // Pelanggan terpilih
-        if (kasir.selectedCustomer != null)
-          _CustomerChip(customer: kasir.selectedCustomer!),
-
-        // List item keranjang
-        Expanded(
-          child: ListView.separated(
-            padding: const EdgeInsets.all(12),
-            itemCount: kasir.cart.length,
-            separatorBuilder: (_, __) =>
-                const SizedBox(height: 8),
-            itemBuilder: (_, i) =>
-                _CartItemTile(item: kasir.cart[i]),
-          ),
-        ),
-
-        // Ringkasan harga
-        _PriceSummary(kasirState: kasir),
-      ],
-    );
-  }
-}
-
-class _CustomerChip extends ConsumerWidget {
-  final Customer customer;
-  const _CustomerChip({required this.customer});
-
+class _SearchBar extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     return Container(
-      margin: const EdgeInsets.fromLTRB(12, 8, 12, 0),
-      padding:
-          const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      decoration: BoxDecoration(
-        color: AppColors.primaryLight,
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(
-            color: AppColors.primary.withOpacity(0.3)),
-      ),
+      color: Theme.of(context).scaffoldBackgroundColor,
+      padding: const EdgeInsets.fromLTRB(12, 12, 12, 8),
       child: Row(children: [
-        const Icon(Icons.person_outline,
-            color: AppColors.primary, size: 18),
-        const SizedBox(width: 8),
         Expanded(
-          child: Text(
-            customer.name,
-            style: const TextStyle(
-              color: AppColors.primary,
-              fontWeight: FontWeight.w700,
-              fontSize: 13,
+          child: TextField(
+            onChanged: (v) =>
+                ref.read(productSearchProvider.notifier).state = v,
+            decoration: const InputDecoration(
+              hintText: 'Cari nama / barcode produk...',
+              prefixIcon: Icon(Icons.search, size: 20),
+              isDense: true,
             ),
           ),
         ),
-        GestureDetector(
-          onTap: () =>
-              ref.read(kasirProvider.notifier).setCustomer(null),
-          child: const Icon(Icons.close,
-              color: AppColors.primary, size: 16),
+        const SizedBox(width: 8),
+        Container(
+          decoration: BoxDecoration(
+            color: AppColors.primary,
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: IconButton(
+            icon: const Icon(Icons.qr_code_scanner,
+              color: Colors.white, size: 22),
+            onPressed: () {},
+            tooltip: 'Scan Barcode',
+          ),
         ),
       ]),
     );
   }
 }
 
-// ---------------------------------------------------------------------------
-// Tile item di keranjang
-// ---------------------------------------------------------------------------
-class _CartItemTile extends ConsumerWidget {
-  final CartItem item;
-  const _CartItemTile({required this.item});
+// ─── Product Search Results ───────────────────────────────────────────────────
 
+class _ProductResults extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final notifier = ref.read(kasirProvider.notifier);
+    final query = ref.watch(productSearchProvider);
+    if (query.isEmpty) return const SizedBox();
 
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(14),
-        border:
-            Border.all(color: AppColors.border, width: 0.5),
-      ),
-      child: Column(
-        children: [
-          Row(
-            children: [
-              // Ikon
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: AppColors.primaryLight,
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: const Icon(Icons.inventory_2_outlined,
-                    color: AppColors.primary, size: 18),
-              ),
-              const SizedBox(width: 10),
-              // Nama + harga
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      item.product.name,
-                      style: const TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w700,
-                        color: AppColors.textPrimary,
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    Text(
-                      CurrencyFormatter.format(
-                          item.product.sellPrice),
-                      style: const TextStyle(
-                        fontSize: 12,
-                        color: AppColors.textSecondary,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              // Hapus
-              GestureDetector(
-                onTap: () => notifier
-                    .removeProduct(item.product.id),
-                child: const Icon(Icons.delete_outline,
-                    color: AppColors.danger, size: 18),
+    final results = ref.watch(filteredProductsProvider);
+    return results.when(
+      data: (list) {
+        if (list.isEmpty) {
+          return Container(
+            color: Colors.white,
+            padding: const EdgeInsets.all(16),
+            child: Row(
+              children: [
+                Icon(Icons.search_off, color: Colors.grey.shade400, size: 18),
+                const SizedBox(width: 8),
+                Text('Produk tidak ditemukan',
+                  style: TextStyle(color: Colors.grey.shade500, fontSize: 13)),
+              ],
+            ),
+          );
+        }
+        return Container(
+          constraints: const BoxConstraints(maxHeight: 220),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.05),
+                blurRadius: 8,
+                offset: const Offset(0, 4),
               ),
             ],
           ),
-          const SizedBox(height: 8),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              // Diskon item
-              GestureDetector(
-                onTap: () =>
-                    _showItemDiscountDialog(context, ref),
-                child: Container(
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 8, vertical: 4),
+          child: ListView.separated(
+            shrinkWrap: true,
+            itemCount: list.length,
+            separatorBuilder: (_, __) => const Divider(height: 1),
+            itemBuilder: (_, i) {
+              final p = list[i];
+              final outOfStock = p.stock <= 0;
+              return ListTile(
+                dense: true,
+                leading: Container(
+                  width: 36,
+                  height: 36,
                   decoration: BoxDecoration(
-                    color: item.discount > 0
-                        ? AppColors.warning.withOpacity(0.1)
-                        : Colors.grey.shade100,
-                    borderRadius: BorderRadius.circular(6),
-                    border: Border.all(
-                      color: item.discount > 0
-                          ? AppColors.warning
-                          : AppColors.border,
-                    ),
+                    color: outOfStock
+                        ? Colors.grey.shade100
+                        : AppColors.primaryLight,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Icon(
+                    Icons.inventory_2_outlined,
+                    size: 18,
+                    color: outOfStock
+                        ? Colors.grey.shade400
+                        : AppColors.primary,
+                  ),
+                ),
+                title: Text(p.name,
+                  style: TextStyle(
+                    fontWeight: FontWeight.w600,
+                    fontSize: 13,
+                    color: outOfStock ? Colors.grey : null,
+                  )),
+                subtitle: Text(CurrencyFormatter.format(p.sellPrice),
+                  style: const TextStyle(
+                    color: AppColors.primary, fontSize: 12)),
+                trailing: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: outOfStock
+                        ? AppColors.danger.withOpacity(0.1)
+                        : p.stock <= p.minStock
+                            ? AppColors.warning.withOpacity(0.1)
+                            : AppColors.success.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(8),
                   ),
                   child: Text(
-                    item.discount > 0
-                        ? '- ${CurrencyFormatter.format(item.discount)}'
-                        : '+ Diskon',
+                    outOfStock ? 'Habis' : 'Stok: ${p.stock}',
                     style: TextStyle(
                       fontSize: 11,
-                      color: item.discount > 0
-                          ? AppColors.warning
-                          : AppColors.textSecondary,
                       fontWeight: FontWeight.w600,
+                      color: outOfStock
+                          ? AppColors.danger
+                          : p.stock <= p.minStock
+                              ? AppColors.warning
+                              : AppColors.success,
                     ),
                   ),
                 ),
-              ),
-              // Kontrol qty
-              Row(children: [
-                _QtyButton(
-                  icon: Icons.remove,
-                  onTap: () => notifier.updateQuantity(
-                      item.product.id, item.quantity - 1),
-                ),
-                Container(
-                  width: 40,
-                  alignment: Alignment.center,
-                  child: Text(
-                    '${item.quantity}',
-                    style: const TextStyle(
-                      fontWeight: FontWeight.w800,
-                      fontSize: 15,
-                    ),
-                  ),
-                ),
-                _QtyButton(
-                  icon: Icons.add,
-                  onTap: () => notifier.updateQuantity(
-                      item.product.id, item.quantity + 1),
-                ),
-              ]),
-              // Subtotal
-              Text(
-                CurrencyFormatter.format(item.subtotal),
-                style: const TextStyle(
-                  fontWeight: FontWeight.w800,
-                  fontSize: 14,
-                  color: AppColors.primary,
-                ),
-              ),
-            ],
+                onTap: () {
+                  if (!outOfStock) {
+                    ref.read(kasirProvider.notifier).addProduct(p);
+                    ref.read(productSearchProvider.notifier).state = '';
+                    HapticFeedback.lightImpact();
+                  }
+                },
+              );
+            },
           ),
-        ],
-      ),
+        );
+      },
+      loading: () => const LinearProgressIndicator(),
+      error: (_, __) => const SizedBox(),
     );
   }
+}
 
-  void _showItemDiscountDialog(
-      BuildContext context, WidgetRef ref) {
-    final ctrl = TextEditingController(
-        text: item.discount > 0
-            ? item.discount.toStringAsFixed(0)
-            : '');
-    showDialog(
-      context: context,
-      builder: (_) => AlertDialog(
-        shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16)),
-        title: const Text('Diskon Item'),
-        content: TextField(
-          controller: ctrl,
-          keyboardType: TextInputType.number,
-          inputFormatters: [
-            FilteringTextInputFormatter.digitsOnly
-          ],
-          decoration: const InputDecoration(
-            labelText: 'Nominal diskon (Rp)',
-            prefixText: 'Rp ',
+// ─── Cart Header ──────────────────────────────────────────────────────────────
+
+class _CartHeader extends StatelessWidget {
+  final KasirState cart;
+  const _CartHeader({required this.cart});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      color: AppColors.primaryLight,
+      child: Row(
+        children: [
+          Icon(Icons.shopping_cart_outlined,
+            size: 16, color: AppColors.primary),
+          const SizedBox(width: 6),
+          Text(
+            '${cart.totalItems} item',
+            style: const TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+              color: AppColors.primary,
+            ),
           ),
-        ),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Batal')),
-          ElevatedButton(
-            onPressed: () {
-              final val =
-                  double.tryParse(ctrl.text) ?? 0;
-              ref
-                  .read(kasirProvider.notifier)
-                  .updateItemDiscount(item.product.id, val);
-              Navigator.pop(context);
-            },
-            child: const Text('Simpan'),
+          const Spacer(),
+          Text(
+            'Subtotal: ${CurrencyFormatter.format(cart.subtotal)}',
+            style: const TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+              color: AppColors.primary,
+            ),
           ),
         ],
       ),
@@ -714,20 +262,163 @@ class _CartItemTile extends ConsumerWidget {
   }
 }
 
-class _QtyButton extends StatelessWidget {
+// ─── Cart List ────────────────────────────────────────────────────────────────
+
+class _CartList extends ConsumerWidget {
+  final KasirState cart;
+  const _CartList({required this.cart});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    return ListView.separated(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      itemCount: cart.items.length,
+      separatorBuilder: (_, __) => const SizedBox(height: 4),
+      itemBuilder: (_, i) {
+        final item = cart.items[i];
+        return Dismissible(
+          key: ValueKey(item.product.id),
+          direction: DismissDirection.endToStart,
+          background: Container(
+            alignment: Alignment.centerRight,
+            padding: const EdgeInsets.only(right: 16),
+            decoration: BoxDecoration(
+              color: AppColors.danger.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: const Icon(Icons.delete_outline, color: AppColors.danger),
+          ),
+          onDismissed: (_) {
+            ref.read(kasirProvider.notifier).removeProduct(item.product.id);
+            HapticFeedback.mediumImpact();
+          },
+          child: Card(
+            margin: EdgeInsets.zero,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(
+                horizontal: 12, vertical: 10),
+              child: Row(children: [
+                // Product icon
+                Container(
+                  width: 40,
+                  height: 40,
+                  decoration: BoxDecoration(
+                    color: AppColors.primaryLight,
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: const Icon(Icons.inventory_2_outlined,
+                    size: 20, color: AppColors.primary),
+                ),
+                const SizedBox(width: 10),
+                // Product info
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(item.product.name,
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w600,
+                          fontSize: 13),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis),
+                      const SizedBox(height: 2),
+                      Text(
+                        '${CurrencyFormatter.format(item.product.sellPrice)} × ${item.quantity} = ${CurrencyFormatter.format(item.subtotal)}',
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: Colors.grey.shade500),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 8),
+                // Qty controls
+                Row(children: [
+                  _QtyBtn(
+                    icon: Icons.remove,
+                    onTap: () {
+                      ref.read(kasirProvider.notifier)
+                          .updateQuantity(item.product.id, item.quantity - 1);
+                      HapticFeedback.lightImpact();
+                    },
+                  ),
+                  GestureDetector(
+                    onTap: () => _editQty(context, ref, item),
+                    child: SizedBox(
+                      width: 36,
+                      child: Text('${item.quantity}',
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w700,
+                          fontSize: 15)),
+                    ),
+                  ),
+                  _QtyBtn(
+                    icon: Icons.add,
+                    onTap: () {
+                      ref.read(kasirProvider.notifier)
+                          .updateQuantity(item.product.id, item.quantity + 1);
+                      HapticFeedback.lightImpact();
+                    },
+                  ),
+                ]),
+              ]),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  void _editQty(BuildContext context, WidgetRef ref, CartItem item) {
+    final ctrl = TextEditingController(text: '${item.quantity}');
+    showDialog(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: Text(item.product.name,
+          style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
+        content: TextField(
+          controller: ctrl,
+          keyboardType: TextInputType.number,
+          autofocus: true,
+          decoration: InputDecoration(
+            labelText: 'Jumlah',
+            suffixText: item.product.unit,
+            helperText: 'Stok tersedia: ${item.product.stock}',
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Batal')),
+          ElevatedButton(
+            onPressed: () {
+              final qty = int.tryParse(ctrl.text) ?? 1;
+              ref.read(kasirProvider.notifier)
+                  .updateQuantity(item.product.id, qty);
+              Navigator.pop(context);
+            },
+            child: const Text('OK')),
+        ],
+      ),
+    );
+  }
+}
+
+class _QtyBtn extends StatelessWidget {
   final IconData icon;
   final VoidCallback onTap;
-  const _QtyButton({required this.icon, required this.onTap});
+  const _QtyBtn({required this.icon, required this.onTap});
 
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
       onTap: onTap,
       child: Container(
-        width: 28,
-        height: 28,
+        width: 30,
+        height: 30,
         decoration: BoxDecoration(
-          color: AppColors.primaryLight,
+          color: AppColors.primary.withOpacity(0.1),
           borderRadius: BorderRadius.circular(8),
         ),
         child: Icon(icon, size: 16, color: AppColors.primary),
@@ -736,328 +427,250 @@ class _QtyButton extends StatelessWidget {
   }
 }
 
-// ---------------------------------------------------------------------------
-// Ringkasan harga di bawah keranjang
-// ---------------------------------------------------------------------------
-class _PriceSummary extends ConsumerWidget {
-  final KasirState kasirState;
-  const _PriceSummary({required this.kasirState});
+// ─── Checkout Panel ───────────────────────────────────────────────────────────
+
+class _CheckoutPanel extends ConsumerWidget {
+  final KasirState cart;
+  const _CheckoutPanel({required this.cart});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: const BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.vertical(
-            top: Radius.circular(20)),
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+      decoration: BoxDecoration(
+        color: Theme.of(context).cardColor,
         boxShadow: [
           BoxShadow(
-            color: Colors.black12,
-            blurRadius: 12,
-            offset: Offset(0, -4),
+            color: Colors.black.withOpacity(0.08),
+            blurRadius: 20,
+            offset: const Offset(0, -4),
           ),
         ],
       ),
-      child: Column(
-        children: [
-          _PriceRow('Subtotal',
-              CurrencyFormatter.format(kasirState.subtotal)),
-          if (kasirState.discountGlobal > 0) ...[
-            const SizedBox(height: 4),
-            _PriceRow(
-              'Diskon',
-              '- ${CurrencyFormatter.format(kasirState.discountGlobal)}',
-              color: AppColors.danger,
-            ),
-          ],
-          const SizedBox(height: 4),
-          // Input diskon global
-          GestureDetector(
-            onTap: () => _showGlobalDiscountDialog(context, ref),
-            child: Container(
-              padding: const EdgeInsets.symmetric(
-                  horizontal: 10, vertical: 6),
-              decoration: BoxDecoration(
-                color: kasirState.discountGlobal > 0
-                    ? AppColors.warning.withOpacity(0.08)
-                    : Colors.grey.shade50,
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(
-                  color: kasirState.discountGlobal > 0
-                      ? AppColors.warning
-                      : AppColors.border,
-                ),
+      child: SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Diskon & pajak row
+            if (cart.discountTotal > 0 || cart.taxAmount > 0) ...[
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text('Subtotal',
+                    style: TextStyle(
+                      fontSize: 12, color: Colors.grey.shade500)),
+                  Text(CurrencyFormatter.format(cart.subtotal),
+                    style: TextStyle(
+                      fontSize: 12, color: Colors.grey.shade500)),
+                ],
               ),
-              child: Row(children: [
-                Icon(
-                  Icons.discount_outlined,
-                  size: 14,
-                  color: kasirState.discountGlobal > 0
-                      ? AppColors.warning
-                      : AppColors.textSecondary,
+              if (cart.discountTotal > 0) ...[
+                const SizedBox(height: 2),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text('Diskon',
+                      style: TextStyle(
+                        fontSize: 12, color: Colors.grey.shade500)),
+                    Text('- ${CurrencyFormatter.format(cart.discountTotal)}',
+                      style: const TextStyle(
+                        fontSize: 12, color: AppColors.danger)),
+                  ],
                 ),
-                const SizedBox(width: 6),
-                Text(
-                  kasirState.discountGlobal > 0
-                      ? 'Edit diskon keseluruhan'
-                      : 'Tambah diskon keseluruhan',
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: kasirState.discountGlobal > 0
-                        ? AppColors.warning
-                        : AppColors.textSecondary,
-                  ),
+              ],
+              if (cart.taxAmount > 0) ...[
+                const SizedBox(height: 2),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text('Pajak (${cart.taxPercent.toStringAsFixed(0)}%)',
+                      style: TextStyle(
+                        fontSize: 12, color: Colors.grey.shade500)),
+                    Text('+ ${CurrencyFormatter.format(cart.taxAmount)}',
+                      style: const TextStyle(
+                        fontSize: 12, color: AppColors.warning)),
+                  ],
                 ),
-              ]),
-            ),
-          ),
-          const Divider(height: 16),
-          _PriceRow(
-            'TOTAL',
-            CurrencyFormatter.format(kasirState.total),
-            isBold: true,
-            color: AppColors.primary,
-            fontSize: 16,
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _showGlobalDiscountDialog(
-      BuildContext context, WidgetRef ref) {
-    final ctrl = TextEditingController(
-        text: kasirState.discountGlobal > 0
-            ? kasirState.discountGlobal.toStringAsFixed(0)
-            : '');
-    showDialog(
-      context: context,
-      builder: (_) => AlertDialog(
-        shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16)),
-        title: const Text('Diskon Keseluruhan'),
-        content: TextField(
-          controller: ctrl,
-          keyboardType: TextInputType.number,
-          inputFormatters: [
-            FilteringTextInputFormatter.digitsOnly
-          ],
-          decoration: const InputDecoration(
-            labelText: 'Nominal diskon (Rp)',
-            prefixText: 'Rp ',
-          ),
-        ),
-        actions: [
-          if (kasirState.discountGlobal > 0)
-            TextButton(
-              onPressed: () {
-                ref
-                    .read(kasirProvider.notifier)
-                    .setDiscountGlobal(0);
-                Navigator.pop(context);
-              },
-              child: const Text('Hapus Diskon',
-                  style: TextStyle(color: AppColors.danger)),
-            ),
-          TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Batal')),
-          ElevatedButton(
-            onPressed: () {
-              final val =
-                  double.tryParse(ctrl.text) ?? 0;
-              ref
-                  .read(kasirProvider.notifier)
-                  .setDiscountGlobal(val);
-              Navigator.pop(context);
-            },
-            child: const Text('Simpan'),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _PriceRow extends StatelessWidget {
-  final String label, value;
-  final bool isBold;
-  final Color? color;
-  final double fontSize;
-
-  const _PriceRow(
-    this.label,
-    this.value, {
-    this.isBold = false,
-    this.color,
-    this.fontSize = 13,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [
-        Text(label,
-            style: TextStyle(
-              fontSize: fontSize,
-              fontWeight:
-                  isBold ? FontWeight.w800 : FontWeight.w500,
-              color: color ?? AppColors.textSecondary,
-            )),
-        Text(value,
-            style: TextStyle(
-              fontSize: fontSize,
-              fontWeight:
-                  isBold ? FontWeight.w800 : FontWeight.w600,
-              color: color ?? AppColors.textPrimary,
-            )),
-      ],
-    );
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Bar checkout di bagian bawah
-// ---------------------------------------------------------------------------
-class _CheckoutBar extends ConsumerWidget {
-  final KasirState kasirState;
-  const _CheckoutBar({required this.kasirState});
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    return Container(
-      padding: EdgeInsets.fromLTRB(
-          16, 12, 16, MediaQuery.of(context).padding.bottom + 12),
-      decoration: const BoxDecoration(
-        color: Colors.white,
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black12,
-            blurRadius: 12,
-            offset: Offset(0, -4),
-          ),
-        ],
-      ),
-      child: Row(children: [
-        // Metode bayar
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                CurrencyFormatter.format(kasirState.total),
-                style: const TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.w800,
-                  color: AppColors.primary,
-                ),
-              ),
-              Text(
-                '${kasirState.totalItems} item',
-                style: const TextStyle(
-                  fontSize: 12,
-                  color: AppColors.textSecondary,
-                ),
-              ),
+              ],
+              const Divider(height: 12),
             ],
-          ),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('${cart.totalItems} item',
+                      style: TextStyle(
+                        fontSize: 12, color: Colors.grey.shade500)),
+                    Text(CurrencyFormatter.format(cart.total),
+                      style: const TextStyle(
+                        fontSize: 22,
+                        fontWeight: FontWeight.w800,
+                        color: AppColors.primary,
+                      )),
+                  ],
+                ),
+                Row(children: [
+                  // Discount button
+                  OutlinedButton.icon(
+                    icon: const Icon(Icons.local_offer_outlined, size: 16),
+                    label: const Text('Diskon', style: TextStyle(fontSize: 13)),
+                    onPressed: () => _showDiscount(context, ref),
+                    style: OutlinedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12, vertical: 12),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  ElevatedButton.icon(
+                    icon: const Icon(Icons.payment, size: 18),
+                    label: const Text('Bayar'),
+                    onPressed: () => _showPayment(context, ref),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.success,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 24, vertical: 14),
+                    ),
+                  ),
+                ]),
+              ],
+            ),
+            const SizedBox(height: 8),
+          ],
         ),
-        // Tombol bayar
-        ElevatedButton.icon(
-          onPressed: kasirState.isProcessing
-              ? null
-              : () => _showPaymentDialog(context, ref),
-          icon: kasirState.isProcessing
-              ? const SizedBox(
-                  width: 18,
-                  height: 18,
-                  child: CircularProgressIndicator(
-                      strokeWidth: 2, color: Colors.white),
-                )
-              : const Icon(Icons.payment_rounded),
-          label: Text(
-              kasirState.isProcessing ? 'Memproses…' : 'Bayar'),
-          style: ElevatedButton.styleFrom(
-            backgroundColor: AppColors.primary,
-            padding: const EdgeInsets.symmetric(
-                horizontal: 24, vertical: 14),
-            shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12)),
-          ),
-        ),
-      ]),
+      ),
     );
   }
 
-  void _showPaymentDialog(BuildContext context, WidgetRef ref) {
+  void _showDiscount(BuildContext context, WidgetRef ref) {
+    final cart = ref.read(kasirProvider);
+    final ctrl = TextEditingController(
+      text: cart.discountTotal > 0
+          ? cart.discountTotal.toStringAsFixed(0)
+          : '');
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (_) => _PaymentSheet(kasirState: kasirState),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (_) => Padding(
+        padding: EdgeInsets.only(
+          bottom: MediaQuery.of(context).viewInsets.bottom + 16,
+          left: 20, right: 20, top: 20,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Center(
+              child: Container(
+                width: 40, height: 4,
+                decoration: BoxDecoration(
+                  color: Colors.grey.shade300,
+                  borderRadius: BorderRadius.circular(2)),
+              ),
+            ),
+            const SizedBox(height: 16),
+            const Text('Tambah Diskon',
+              style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700)),
+            const SizedBox(height: 16),
+            TextField(
+              controller: ctrl,
+              keyboardType: TextInputType.number,
+              autofocus: true,
+              decoration: const InputDecoration(
+                labelText: 'Nominal Diskon',
+                prefixText: 'Rp ',
+              ),
+            ),
+            const SizedBox(height: 16),
+            Row(children: [
+              Expanded(
+                child: OutlinedButton(
+                  onPressed: () {
+                    ref.read(kasirProvider.notifier).setDiscount(0);
+                    Navigator.pop(context);
+                  },
+                  child: const Text('Hapus Diskon')),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: ElevatedButton(
+                  onPressed: () {
+                    final disc = double.tryParse(ctrl.text) ?? 0;
+                    ref.read(kasirProvider.notifier).setDiscount(disc);
+                    Navigator.pop(context);
+                  },
+                  child: const Text('Terapkan')),
+              ),
+            ]),
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showPayment(BuildContext context, WidgetRef ref) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (_) => ProviderScope(
+        parent: ProviderScope.containerOf(context),
+        child: const _PaymentSheet(),
+      ),
     );
   }
 }
 
-// ---------------------------------------------------------------------------
-// Bottom sheet pembayaran
-// ---------------------------------------------------------------------------
+// ─── Payment Sheet ────────────────────────────────────────────────────────────
+
 class _PaymentSheet extends ConsumerStatefulWidget {
-  final KasirState kasirState;
-  const _PaymentSheet({required this.kasirState});
+  const _PaymentSheet();
 
   @override
-  ConsumerState<_PaymentSheet> createState() =>
-      _PaymentSheetState();
+  ConsumerState<_PaymentSheet> createState() => _PaymentSheetState();
 }
 
 class _PaymentSheetState extends ConsumerState<_PaymentSheet> {
-  final _paidCtrl = TextEditingController();
-
-  @override
-  void initState() {
-    super.initState();
-    _paidCtrl.text =
-        widget.kasirState.total.toStringAsFixed(0);
-    ref
-        .read(kasirProvider.notifier)
-        .setAmountPaid(widget.kasirState.total);
-  }
+  final _amountCtrl = TextEditingController();
+  final _notesCtrl  = TextEditingController();
+  String _method = 'tunai';
+  bool _loading = false;
 
   @override
   void dispose() {
-    _paidCtrl.dispose();
+    _amountCtrl.dispose();
+    _notesCtrl.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    final kasir = ref.watch(kasirProvider);
-    final notifier = ref.read(kasirProvider.notifier);
+    final cart = ref.watch(kasirProvider);
+    final paid = double.tryParse(_amountCtrl.text) ?? 0;
+    final change = paid - cart.total;
+    final canPay = _method != 'tunai' || paid >= cart.total;
 
-    return Container(
+    return Padding(
       padding: EdgeInsets.only(
         bottom: MediaQuery.of(context).viewInsets.bottom,
+        left: 20, right: 20, top: 20,
       ),
-      decoration: const BoxDecoration(
-        color: Colors.white,
-        borderRadius:
-            BorderRadius.vertical(top: Radius.circular(24)),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(20),
+      child: SingleChildScrollView(
         child: Column(
           mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Handle
+            // Handle bar
             Center(
               child: Container(
-                width: 40,
-                height: 4,
+                width: 40, height: 4,
                 decoration: BoxDecoration(
                   color: Colors.grey.shade300,
                   borderRadius: BorderRadius.circular(2),
@@ -1065,309 +678,373 @@ class _PaymentSheetState extends ConsumerState<_PaymentSheet> {
               ),
             ),
             const SizedBox(height: 16),
-            const Text(
-              'Proses Pembayaran',
+            const Text('Pembayaran',
               style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.w800,
-                color: AppColors.textPrimary,
-              ),
-            ),
-            const SizedBox(height: 16),
+                fontSize: 18, fontWeight: FontWeight.w700)),
+            const SizedBox(height: 4),
 
             // Total
             Container(
-              padding: const EdgeInsets.all(16),
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(
+                horizontal: 16, vertical: 12),
               decoration: BoxDecoration(
-                color: AppColors.primaryLight,
-                borderRadius: BorderRadius.circular(14),
+                color: AppColors.primary,
+                borderRadius: BorderRadius.circular(12),
               ),
-              child: Row(
-                mainAxisAlignment:
-                    MainAxisAlignment.spaceBetween,
+              child: Column(
                 children: [
-                  const Text('Total Tagihan',
-                      style: TextStyle(
-                          fontSize: 14,
-                          color: AppColors.primary,
-                          fontWeight: FontWeight.w600)),
-                  Text(
-                    CurrencyFormatter.format(kasir.total),
+                  const Text('Total Pembayaran',
+                    style: TextStyle(
+                      color: Colors.white70, fontSize: 12)),
+                  const SizedBox(height: 4),
+                  Text(CurrencyFormatter.format(cart.total),
                     style: const TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.w900,
-                      color: AppColors.primary,
-                    ),
-                  ),
+                      color: Colors.white,
+                      fontSize: 28,
+                      fontWeight: FontWeight.w800,
+                    )),
+                  Text('${cart.totalItems} item',
+                    style: const TextStyle(
+                      color: Colors.white70, fontSize: 12)),
                 ],
               ),
             ),
             const SizedBox(height: 16),
 
-            // Metode pembayaran
+            // Metode bayar
             const Text('Metode Pembayaran',
-                style: TextStyle(
-                    fontWeight: FontWeight.w700, fontSize: 13)),
+              style: TextStyle(
+                fontWeight: FontWeight.w600, fontSize: 13)),
             const SizedBox(height: 8),
             Row(
-              children: AppConstants.paymentMethods
-                  .map((m) => Expanded(
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 3),
-                          child: _PayMethodChip(
-                            method: m,
-                            selected:
-                                kasir.paymentMethod == m,
-                            onTap: () => notifier
-                                .setPaymentMethod(m),
-                          ),
-                        ),
-                      ))
-                  .toList(),
+              children: [
+                _buildMethodChip('tunai', Icons.payments_outlined, 'Tunai'),
+                const SizedBox(width: 8),
+                _buildMethodChip('qris', Icons.qr_code, 'QRIS'),
+                const SizedBox(width: 8),
+                _buildMethodChip('transfer', Icons.account_balance_outlined, 'Transfer'),
+                const SizedBox(width: 8),
+                _buildMethodChip('hutang', Icons.receipt_long_outlined, 'Hutang'),
+              ],
             ),
             const SizedBox(height: 16),
 
-            // Jumlah dibayar (hanya untuk tunai)
-            if (kasir.paymentMethod == 'tunai') ...[
-              const Text('Jumlah Dibayar',
-                  style: TextStyle(
-                      fontWeight: FontWeight.w700,
-                      fontSize: 13)),
-              const SizedBox(height: 8),
+            // Input nominal (tunai saja)
+            if (_method == 'tunai') ...[
               TextField(
-                controller: _paidCtrl,
+                controller: _amountCtrl,
                 keyboardType: TextInputType.number,
-                inputFormatters: [
-                  FilteringTextInputFormatter.digitsOnly
-                ],
-                onChanged: (v) {
-                  final val = double.tryParse(v) ?? 0;
-                  notifier.setAmountPaid(val);
-                },
+                autofocus: true,
+                onChanged: (_) => setState(() {}),
                 decoration: const InputDecoration(
+                  labelText: 'Jumlah Uang Diterima',
                   prefixText: 'Rp ',
-                  hintText: '0',
+                  prefixIcon: Icon(Icons.payments_outlined),
                 ),
               ),
-              const SizedBox(height: 8),
-              // Uang kembalian
+              const SizedBox(height: 10),
+
+              // Nominal cepat
+              Wrap(
+                spacing: 8, runSpacing: 8,
+                children: _quickAmounts(cart.total)
+                    .map((v) => ActionChip(
+                      avatar: Icon(Icons.add, size: 14,
+                        color: AppColors.primary),
+                      label: Text(CurrencyFormatter.formatCompact(v),
+                        style: const TextStyle(fontSize: 12)),
+                      onPressed: () {
+                        _amountCtrl.text = v.toStringAsFixed(0);
+                        setState(() {});
+                      },
+                    ))
+                    .toList(),
+              ),
+
+              // Kembalian
+              if (change > 0) ...[
+                const SizedBox(height: 10),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16, vertical: 10),
+                  decoration: BoxDecoration(
+                    color: AppColors.success.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: AppColors.success.withOpacity(0.3)),
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Row(children: [
+                        const Icon(Icons.change_circle_outlined,
+                          color: AppColors.success, size: 18),
+                        const SizedBox(width: 8),
+                        const Text('Kembalian',
+                          style: TextStyle(fontWeight: FontWeight.w600)),
+                      ]),
+                      Text(CurrencyFormatter.format(change),
+                        style: const TextStyle(
+                          color: AppColors.success,
+                          fontWeight: FontWeight.w800,
+                          fontSize: 18,
+                        )),
+                    ],
+                  ),
+                ),
+              ] else if (_amountCtrl.text.isNotEmpty && change < 0) ...[
+                const SizedBox(height: 10),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: AppColors.danger.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Row(children: [
+                    const Icon(Icons.warning_amber_outlined,
+                      color: AppColors.danger, size: 16),
+                    const SizedBox(width: 8),
+                    Text('Kurang ${CurrencyFormatter.format(-change)}',
+                      style: const TextStyle(
+                        color: AppColors.danger,
+                        fontWeight: FontWeight.w600,
+                        fontSize: 13,
+                      )),
+                  ]),
+                ),
+              ],
+              const SizedBox(height: 16),
+            ] else ...[
+              // Non-tunai info
               Container(
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: kasir.change >= 0
-                      ? AppColors.success.withOpacity(0.08)
-                      : AppColors.danger.withOpacity(0.08),
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(
-                    color: kasir.change >= 0
-                        ? AppColors.success
-                        : AppColors.danger,
+                  color: AppColors.info.withOpacity(0.08),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Row(children: [
+                  Icon(Icons.info_outline,
+                    color: AppColors.info, size: 16),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      _method == 'hutang'
+                          ? 'Transaksi akan dicatat sebagai hutang'
+                          : 'Pastikan pembayaran sudah diterima sebelum konfirmasi',
+                      style: TextStyle(
+                        color: AppColors.info,
+                        fontSize: 12,
+                      ),
+                    ),
                   ),
-                ),
-                child: Row(
-                  mainAxisAlignment:
-                      MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(
-                      kasir.change >= 0
-                          ? 'Kembalian'
-                          : 'Kurang',
-                      style: TextStyle(
-                        color: kasir.change >= 0
-                            ? AppColors.success
-                            : AppColors.danger,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    Text(
-                      CurrencyFormatter.format(kasir.change),
-                      style: TextStyle(
-                        color: kasir.change >= 0
-                            ? AppColors.success
-                            : AppColors.danger,
-                        fontWeight: FontWeight.w800,
-                        fontSize: 16,
-                      ),
-                    ),
-                  ],
-                ),
+                ]),
               ),
-              const SizedBox(height: 8),
-              // Tombol uang pas dan kelipatan
-              Wrap(
-                spacing: 8,
-                children: _quickAmounts(kasir.total)
-                    .map(
-                      (a) => ActionChip(
-                        label: Text(
-                          CurrencyFormatter.formatCompact(a),
-                          style: const TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w700),
-                        ),
-                        onPressed: () {
-                          _paidCtrl.text =
-                              a.toStringAsFixed(0);
-                          notifier.setAmountPaid(a);
-                        },
-                        backgroundColor:
-                            AppColors.primaryLight,
-                        side: const BorderSide(
-                            color: AppColors.primary),
-                      ),
-                    )
-                    .toList(),
-              ),
+              const SizedBox(height: 16),
             ],
 
-            const SizedBox(height: 20),
-
-            // Tombol proses
-            ElevatedButton(
-              onPressed: (kasir.isProcessing ||
-                      (kasir.paymentMethod == 'tunai' &&
-                          kasir.amountPaid < kasir.total))
-                  ? null
-                  : () => _process(context),
-              style: ElevatedButton.styleFrom(
-                padding:
-                    const EdgeInsets.symmetric(vertical: 16),
+            // Catatan
+            TextField(
+              controller: _notesCtrl,
+              decoration: const InputDecoration(
+                labelText: 'Catatan (opsional)',
+                prefixIcon: Icon(Icons.note_alt_outlined),
+                isDense: true,
               ),
-              child: Text(
-                kasir.isProcessing
-                    ? 'Memproses…'
-                    : 'Proses Transaksi',
-                style: const TextStyle(fontSize: 16),
+              maxLines: 2,
+            ),
+            const SizedBox(height: 16),
+
+            // Confirm button
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                icon: _loading
+                    ? const SizedBox(
+                        width: 16, height: 16,
+                        child: CircularProgressIndicator(
+                          color: Colors.white, strokeWidth: 2))
+                    : const Icon(Icons.check_circle_outline, size: 20),
+                label: Text(_loading
+                    ? 'Memproses...'
+                    : 'Konfirmasi Pembayaran'),
+                onPressed: (_loading || !canPay) ? null : _process,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: canPay
+                      ? AppColors.success
+                      : Colors.grey.shade300,
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                ),
               ),
             ),
+            const SizedBox(height: 20),
           ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildMethodChip(String value, IconData icon, String label) {
+    final isSelected = _method == value;
+    return Expanded(
+      child: GestureDetector(
+        onTap: () => setState(() => _method = value),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 150),
+          padding: const EdgeInsets.symmetric(vertical: 8),
+          decoration: BoxDecoration(
+            color: isSelected ? AppColors.primary : Colors.grey.shade100,
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(
+              color: isSelected
+                  ? AppColors.primary
+                  : Colors.grey.shade300,
+            ),
+          ),
+          child: Column(
+            children: [
+              Icon(icon,
+                size: 18,
+                color: isSelected ? Colors.white : Colors.grey.shade600),
+              const SizedBox(height: 3),
+              Text(label,
+                style: TextStyle(
+                  fontSize: 10,
+                  fontWeight: FontWeight.w600,
+                  color: isSelected ? Colors.white : Colors.grey.shade600,
+                )),
+            ],
+          ),
         ),
       ),
     );
   }
 
   List<double> _quickAmounts(double total) {
-    final base = (total / 1000).ceil() * 1000;
-    return [
-      total,
-      base.toDouble(),
-      (base + 10000).toDouble(),
-      (base + 50000).toDouble(),
-    ].toSet().toList()
-      ..sort();
+    final base = [10000.0, 20000.0, 50000.0, 100000.0, 200000.0, 500000.0];
+    final result = <double>[total];
+    for (final v in base) {
+      if (v >= total) result.add(v);
+      if (result.length >= 4) break;
+    }
+    return result.toSet().take(4).toList()..sort();
   }
 
-  Future<void> _process(BuildContext context) async {
+  Future<void> _process() async {
+    final cart = ref.read(kasirProvider);
+
+    if (_method == 'tunai') {
+      final paid = double.tryParse(_amountCtrl.text) ?? 0;
+      if (paid < cart.total) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Uang tidak cukup!'),
+            backgroundColor: AppColors.danger));
+        return;
+      }
+    }
+
+    setState(() => _loading = true);
     try {
-      final invoice = await ref
-          .read(kasirProvider.notifier)
-          .processTransaction();
-      if (!mounted) return;
-      Navigator.pop(context); // tutup sheet pembayaran
-      _showReceiptDialog(context, invoice ?? '');
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Error: $e'),
-          backgroundColor: AppColors.danger,
-        ),
+      final db = ref.read(databaseProvider);
+      final invoiceNumber =
+          await db.transactionsDao.generateInvoiceNumber();
+      final amountPaid = _method == 'tunai'
+          ? (double.tryParse(_amountCtrl.text) ?? cart.total)
+          : cart.total;
+
+      final tx = TransactionsCompanion.insert(
+        invoiceNumber: invoiceNumber,
+        subtotal: Value(cart.subtotal),
+        discountAmount: Value(cart.discountTotal),
+        taxAmount: Value(cart.taxAmount),
+        total: Value(cart.total),
+        amountPaid: Value(amountPaid),
+        change: Value(amountPaid - cart.total),
+        paymentMethod: Value(_method),
+        notes: Value(_notesCtrl.text.isEmpty ? null : _notesCtrl.text),
       );
+
+      final items = cart.items.map((i) =>
+        TransactionItemsCompanion.insert(
+          transactionId: 0,
+          productId: i.product.id,
+          productName: i.product.name,
+          price: i.product.sellPrice,
+          quantity: i.quantity,
+          discount: Value(i.discount),
+          subtotal: i.subtotal,
+        )).toList();
+
+      await db.transactionsDao.insertTransaction(tx, items);
+      ref.read(kasirProvider.notifier).clear();
+
+      if (context.mounted) {
+        Navigator.pop(context);
+        _showSuccessDialog(context, invoiceNumber, cart, amountPaid);
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error: $e'),
+            backgroundColor: AppColors.danger));
+      }
+    } finally {
+      if (mounted) setState(() => _loading = false);
     }
   }
 
-  void _showReceiptDialog(
-      BuildContext context, String invoice) {
+  void _showSuccessDialog(
+    BuildContext context,
+    String invoiceNumber,
+    KasirState cart,
+    double amountPaid,
+  ) {
+    final change = amountPaid - cart.total;
     showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (_) => _ReceiptDialog(
-        invoice: invoice,
-        kasirState: widget.kasirState,
-      ),
-    );
-  }
-}
-
-class _PayMethodChip extends StatelessWidget {
-  final String method;
-  final bool selected;
-  final VoidCallback onTap;
-
-  const _PayMethodChip({
-    required this.method,
-    required this.selected,
-    required this.onTap,
-  });
-
-  IconData get _icon {
-    switch (method) {
-      case 'tunai':
-        return Icons.payments_outlined;
-      case 'qris':
-        return Icons.qr_code_rounded;
-      case 'transfer':
-        return Icons.account_balance_outlined;
-      case 'hutang':
-        return Icons.receipt_long_outlined;
-      default:
-        return Icons.payment;
-    }
-  }
-
-  String get _label {
-    switch (method) {
-      case 'tunai':
-        return 'Tunai';
-      case 'qris':
-        return 'QRIS';
-      case 'transfer':
-        return 'Transfer';
-      case 'hutang':
-        return 'Hutang';
-      default:
-        return method;
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 150),
-        padding: const EdgeInsets.symmetric(
-            vertical: 10, horizontal: 6),
-        decoration: BoxDecoration(
-          color: selected
-              ? AppColors.primary
-              : Colors.grey.shade50,
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(
-            color: selected
-                ? AppColors.primary
-                : AppColors.border,
-          ),
-        ),
-        child: Column(
+      builder: (_) => AlertDialog(
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20)),
+        content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(
-              _icon,
-              size: 18,
-              color:
-                  selected ? Colors.white : AppColors.textSecondary,
+            Container(
+              width: 64,
+              height: 64,
+              decoration: const BoxDecoration(
+                color: AppColors.success,
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(Icons.check_rounded,
+                color: Colors.white, size: 36),
             ),
-            const SizedBox(height: 4),
-            Text(
-              _label,
+            const SizedBox(height: 16),
+            const Text('Transaksi Berhasil!',
               style: TextStyle(
-                fontSize: 10,
-                fontWeight: FontWeight.w700,
-                color: selected
-                    ? Colors.white
-                    : AppColors.textSecondary,
+                fontSize: 18, fontWeight: FontWeight.w800)),
+            const SizedBox(height: 8),
+            Text(invoiceNumber,
+              style: TextStyle(
+                color: Colors.grey.shade500, fontSize: 13)),
+            const SizedBox(height: 16),
+            _ReceiptRow('Total', CurrencyFormatter.format(cart.total)),
+            _ReceiptRow('Bayar', CurrencyFormatter.format(amountPaid)),
+            if (change > 0)
+              _ReceiptRow('Kembalian', CurrencyFormatter.format(change),
+                highlight: true),
+            const SizedBox(height: 16),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                icon: const Icon(Icons.check, size: 18),
+                label: const Text('Selesai'),
+                onPressed: () => Navigator.pop(context),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.primary),
               ),
             ),
           ],
@@ -1377,122 +1054,11 @@ class _PayMethodChip extends StatelessWidget {
   }
 }
 
-// ---------------------------------------------------------------------------
-// Dialog struk setelah transaksi berhasil
-// ---------------------------------------------------------------------------
-class _ReceiptDialog extends ConsumerWidget {
-  final String invoice;
-  final KasirState kasirState;
-
-  const _ReceiptDialog({
-    required this.invoice,
-    required this.kasirState,
-  });
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    return AlertDialog(
-      shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(20)),
-      contentPadding: EdgeInsets.zero,
-      content: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          // Header sukses
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(24),
-            decoration: const BoxDecoration(
-              color: AppColors.success,
-              borderRadius:
-                  BorderRadius.vertical(top: Radius.circular(20)),
-            ),
-            child: Column(children: [
-              const Icon(Icons.check_circle_rounded,
-                  color: Colors.white, size: 56),
-              const SizedBox(height: 8),
-              const Text(
-                'Transaksi Berhasil!',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 18,
-                  fontWeight: FontWeight.w800,
-                ),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                invoice,
-                style: const TextStyle(
-                    color: Colors.white70, fontSize: 13),
-              ),
-            ]),
-          ),
-          // Ringkasan
-          Padding(
-            padding: const EdgeInsets.all(20),
-            child: Column(children: [
-              _ReceiptRow('Total',
-                  CurrencyFormatter.format(kasirState.total)),
-              _ReceiptRow('Dibayar',
-                  CurrencyFormatter.format(kasirState.amountPaid)),
-              if (kasirState.change > 0)
-                _ReceiptRow(
-                    'Kembalian',
-                    CurrencyFormatter.format(kasirState.change),
-                    bold: true),
-              _ReceiptRow('Metode',
-                  _payLabel(kasirState.paymentMethod)),
-              const SizedBox(height: 16),
-              Row(children: [
-                Expanded(
-                  child: OutlinedButton.icon(
-                    onPressed: () {
-                      Navigator.pop(context);
-                      ref
-                          .read(kasirProvider.notifier)
-                          .resetAfterTransaction();
-                    },
-                    icon: const Icon(Icons.close),
-                    label: const Text('Tutup'),
-                  ),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: ElevatedButton.icon(
-                    onPressed: () {
-                      Navigator.pop(context);
-                      ref
-                          .read(kasirProvider.notifier)
-                          .resetAfterTransaction();
-                    },
-                    icon: const Icon(Icons.print_outlined),
-                    label: const Text('Cetak'),
-                  ),
-                ),
-              ]),
-            ]),
-          ),
-        ],
-      ),
-    );
-  }
-
-  String _payLabel(String method) {
-    const map = {
-      'tunai': 'Tunai',
-      'qris': 'QRIS',
-      'transfer': 'Transfer Bank',
-      'hutang': 'Hutang',
-    };
-    return map[method] ?? method;
-  }
-}
-
 class _ReceiptRow extends StatelessWidget {
-  final String label, value;
-  final bool bold;
-  const _ReceiptRow(this.label, this.value,
-      {this.bold = false});
+  final String label;
+  final String value;
+  final bool highlight;
+  const _ReceiptRow(this.label, this.value, {this.highlight = false});
 
   @override
   Widget build(BuildContext context) {
@@ -1502,176 +1068,61 @@ class _ReceiptRow extends StatelessWidget {
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           Text(label,
-              style: TextStyle(
-                fontSize: 13,
-                color: AppColors.textSecondary,
-                fontWeight: bold
-                    ? FontWeight.w700
-                    : FontWeight.normal,
-              )),
+            style: TextStyle(
+              fontSize: 13,
+              color: Colors.grey.shade600)),
           Text(value,
-              style: TextStyle(
-                fontSize: 13,
-                fontWeight: bold
-                    ? FontWeight.w800
-                    : FontWeight.w600,
-                color: bold
-                    ? AppColors.success
-                    : AppColors.textPrimary,
-              )),
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: highlight ? FontWeight.w800 : FontWeight.w600,
+              color: highlight ? AppColors.success : null,
+            )),
         ],
       ),
     );
   }
 }
 
-// ---------------------------------------------------------------------------
-// Dialog pilih pelanggan
-// ---------------------------------------------------------------------------
-class _CustomerPicker extends ConsumerStatefulWidget {
-  const _CustomerPicker();
+// ─── Empty Cart ───────────────────────────────────────────────────────────────
 
-  @override
-  ConsumerState<_CustomerPicker> createState() =>
-      _CustomerPickerState();
-}
-
-class _CustomerPickerState
-    extends ConsumerState<_CustomerPicker> {
-  final _searchCtrl = TextEditingController();
-  String _query = '';
-
-  @override
-  void dispose() {
-    _searchCtrl.dispose();
-    super.dispose();
-  }
+class _EmptyCart extends StatelessWidget {
+  const _EmptyCart();
 
   @override
   Widget build(BuildContext context) {
-    final customersAsync = ref.watch(kasirCustomerListProvider);
-
-    return Container(
-      height: MediaQuery.of(context).size.height * 0.6,
-      decoration: const BoxDecoration(
-        color: Colors.white,
-        borderRadius:
-            BorderRadius.vertical(top: Radius.circular(24)),
-      ),
-      padding: const EdgeInsets.all(20),
+    return Center(
       child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          // Handle
-          Center(
-            child: Container(
-              width: 40,
-              height: 4,
-              decoration: BoxDecoration(
-                color: Colors.grey.shade300,
-                borderRadius: BorderRadius.circular(2),
-              ),
+          Container(
+            width: 100,
+            height: 100,
+            decoration: BoxDecoration(
+              color: AppColors.primaryLight,
+              shape: BoxShape.circle,
             ),
+            child: const Icon(Icons.shopping_cart_outlined,
+              size: 48, color: AppColors.primary),
           ),
-          const SizedBox(height: 16),
-          const Text(
-            'Pilih Pelanggan',
+          const SizedBox(height: 20),
+          const Text('Keranjang Kosong',
             style: TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.w800,
-            ),
-          ),
-          const SizedBox(height: 12),
-          TextField(
-            controller: _searchCtrl,
-            onChanged: (v) => setState(() => _query = v),
-            decoration: const InputDecoration(
-              hintText: 'Cari pelanggan…',
-              prefixIcon: Icon(Icons.search),
-            ),
-          ),
-          const SizedBox(height: 12),
-          // Tanpa pelanggan
-          ListTile(
-            leading: const CircleAvatar(
-              backgroundColor: AppColors.primaryLight,
-              child: Icon(Icons.person_off_outlined,
-                  color: AppColors.primary),
-            ),
-            title: const Text('Tanpa Pelanggan'),
-            onTap: () {
-              ref.read(kasirProvider.notifier).setCustomer(null);
-              Navigator.pop(context);
-            },
-          ),
-          const Divider(),
-          Expanded(
-            child: customersAsync.when(
-              loading: () => const Center(
-                  child: CircularProgressIndicator(
-                      color: AppColors.primary)),
-              error: (e, _) =>
-                  Center(child: Text('Error: $e')),
-              data: (customers) {
-                final filtered = _query.isEmpty
-                    ? customers
-                    : customers
-                        .where((c) =>
-                            c.name.toLowerCase().contains(
-                                _query.toLowerCase()) ||
-                            (c.phone?.contains(_query) ??
-                                false))
-                        .toList();
-
-                if (filtered.isEmpty) {
-                  return const Center(
-                      child: Text('Pelanggan tidak ditemukan'));
-                }
-
-                return ListView.builder(
-                  itemCount: filtered.length,
-                  itemBuilder: (_, i) {
-                    final c = filtered[i];
-                    return ListTile(
-                      leading: CircleAvatar(
-                        backgroundColor: AppColors.primaryLight,
-                        child: Text(
-                          c.name[0].toUpperCase(),
-                          style: const TextStyle(
-                              color: AppColors.primary,
-                              fontWeight: FontWeight.w700),
-                        ),
-                      ),
-                      title: Text(c.name),
-                      subtitle: c.phone != null
-                          ? Text(c.phone!)
-                          : null,
-                      onTap: () {
-                        ref
-                            .read(kasirProvider.notifier)
-                            .setCustomer(c);
-                        Navigator.pop(context);
-                      },
-                    );
-                  },
-                );
-              },
-            ),
+              color: AppColors.textPrimary,
+              fontSize: 18,
+              fontWeight: FontWeight.w700,
+            )),
+          const SizedBox(height: 8),
+          Text('Cari produk di kotak pencarian di atas',
+            style: TextStyle(
+              color: Colors.grey.shade400, fontSize: 13)),
+          const SizedBox(height: 24),
+          OutlinedButton.icon(
+            icon: const Icon(Icons.search, size: 16),
+            label: const Text('Cari Produk'),
+            onPressed: () {},
           ),
         ],
       ),
     );
   }
 }
-
-// ---------------------------------------------------------------------------
-// Extension helper
-// ---------------------------------------------------------------------------
-extension _IterableExt<T> on Iterable<T> {
-  T? firstWhereOrNull(bool Function(T) test) {
-    for (final e in this) {
-      if (test(e)) return e;
-    }
-    return null;
-  }
-}
-
