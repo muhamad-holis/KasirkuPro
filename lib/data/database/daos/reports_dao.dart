@@ -1,12 +1,12 @@
 part of '../app_database.dart';
 
-@DriftAccessor(tables: [Transactions, TransactionItems, Products, StockMovements, CashFlows])
+@DriftAccessor(tables: [Transactions, TransactionItems, Products, StockMovements, CashFlows, Categories])
 class ReportsDao extends DatabaseAccessor<AppDatabase>
     with _$ReportsDaoMixin {
   ReportsDao(super.db);
 
   Future<List<Map<String, dynamic>>> getTopProducts(
-    DateTime start, DateTime end, {int limit = 10}) async {
+      DateTime start, DateTime end, {int limit = 10}) async {
     final query = db.customSelect(
       '''
       SELECT p.id, p.name,
@@ -28,8 +28,34 @@ class ReportsDao extends DatabaseAccessor<AppDatabase>
     return query.get().then((rows) => rows.map((r) => r.data).toList());
   }
 
+  /// Penjualan per kategori produk dalam rentang tanggal
+  Future<List<Map<String, dynamic>>> getSalesByCategory(
+      DateTime start, DateTime end) async {
+    final query = db.customSelect(
+      '''
+      SELECT
+        COALESCE(c.name, 'Tanpa Kategori') as category_name,
+        SUM(ti.quantity)  as total_qty,
+        SUM(ti.subtotal)  as total_omzet
+      FROM transaction_items ti
+      JOIN products p ON ti.product_id = p.id
+      LEFT JOIN categories c ON p.category_id = c.id
+      JOIN transactions t ON ti.transaction_id = t.id
+      WHERE t.created_at BETWEEN ? AND ?
+      GROUP BY COALESCE(c.name, 'Tanpa Kategori')
+      ORDER BY total_omzet DESC
+      ''',
+      variables: [
+        Variable(start.toIso8601String()),
+        Variable(end.toIso8601String()),
+      ],
+      readsFrom: {transactionItems, products, transactions, categories},
+    );
+    return query.get().then((rows) => rows.map((r) => r.data).toList());
+  }
+
   Future<List<Map<String, dynamic>>> getDailySalesChart(
-    DateTime start, DateTime end) async {
+      DateTime start, DateTime end) async {
     final query = db.customSelect(
       '''
       SELECT DATE(created_at) as tanggal,
@@ -48,7 +74,7 @@ class ReportsDao extends DatabaseAccessor<AppDatabase>
   }
 
   Future<Map<String, double>> getCashReport(
-    DateTime start, DateTime end) async {
+      DateTime start, DateTime end) async {
     final inc = await db.customSelect(
       'SELECT COALESCE(SUM(amount),0) as total FROM cash_flows WHERE type="income" AND created_at BETWEEN ? AND ?',
       variables: [Variable(start.toIso8601String()), Variable(end.toIso8601String())],
@@ -82,8 +108,7 @@ class ReportsDao extends DatabaseAccessor<AppDatabase>
 
   Stream<List<CashFlow>> watchCashFlows(DateTime start, DateTime end) {
     return (select(cashFlows)
-          ..where((t) =>
-              t.createdAt.isBetweenValues(start, end))
+          ..where((t) => t.createdAt.isBetweenValues(start, end))
           ..orderBy([(t) => OrderingTerm.desc(t.createdAt)]))
         .watch();
   }

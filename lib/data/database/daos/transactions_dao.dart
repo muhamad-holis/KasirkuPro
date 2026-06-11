@@ -1,37 +1,73 @@
 part of '../app_database.dart';
 
-@DriftAccessor(tables: [Transactions, TransactionItems, Products])
+@DriftAccessor(tables: [Transactions, TransactionItems, Products, Customers])
 class TransactionsDao extends DatabaseAccessor<AppDatabase>
     with _$TransactionsDaoMixin {
   TransactionsDao(super.db);
 
+  /// Insert transaksi + kurangi stok + beri poin otomatis ke pelanggan.
+  /// [customerId] opsional — bisa diisi untuk semua metode pembayaran.
+  /// Poin = 1 poin per Rp 10.000 yang dibayar.
   Future<int> insertTransaction(
     TransactionsCompanion transaction,
-    List<TransactionItemsCompanion> items,
-  ) async {
+    List<TransactionItemsCompanion> items, {
+    int? customerId,
+  }) async {
     return db.transaction(() async {
-      final txId = await into(transactions).insert(transaction);
+      // Sisipkan customerId ke companion jika ada
+      final txCompanion = customerId != null
+          ? transaction.copyWith(customerId: Value(customerId))
+          : transaction;
+
+      final txId = await into(transactions).insert(txCompanion);
+
       for (final item in items) {
         await into(transactionItems).insert(
-          item.copyWith(transactionId: Value(txId))
+          item.copyWith(transactionId: Value(txId)),
         );
         final product = await (select(products)
-          ..where((t) => t.id.equals(item.productId.value)))
+              ..where((t) => t.id.equals(item.productId.value)))
             .getSingle();
         await (update(products)
-          ..where((t) => t.id.equals(item.productId.value)))
+              ..where((t) => t.id.equals(item.productId.value)))
             .write(ProductsCompanion(
-              stock: Value(product.stock - item.quantity.value)
+              stock: Value(product.stock - item.quantity.value),
             ));
       }
+
+      // Poin otomatis: 1 poin per Rp 10.000
+      if (customerId != null) {
+        final total = transaction.total.value;
+        final earnedPoints = (total / 10000).floor();
+        if (earnedPoints > 0) {
+          final customer = await (select(customers)
+                ..where((c) => c.id.equals(customerId)))
+              .getSingleOrNull();
+          if (customer != null) {
+            await (update(customers)
+                  ..where((c) => c.id.equals(customerId)))
+                .write(CustomersCompanion(
+                  points: Value(customer.points + earnedPoints),
+                ));
+          }
+        }
+      }
+
       return txId;
     });
   }
 
   Future<List<Transaction>> getTransactionsByDate(
-    DateTime start, DateTime end) =>
+      DateTime start, DateTime end) =>
       (select(transactions)
         ..where((t) => t.createdAt.isBetweenValues(start, end))
+        ..orderBy([(t) => OrderingTerm.desc(t.createdAt)]))
+          .get();
+
+  /// Riwayat transaksi per pelanggan
+  Future<List<Transaction>> getTransactionsByCustomer(int customerId) =>
+      (select(transactions)
+        ..where((t) => t.customerId.equals(customerId))
         ..orderBy([(t) => OrderingTerm.desc(t.createdAt)]))
           .get();
 
@@ -52,14 +88,14 @@ class TransactionsDao extends DatabaseAccessor<AppDatabase>
   Future<String> generateInvoiceNumber() async {
     final now = DateTime.now();
     final prefix =
-        'INV${now.year}${now.month.toString().padLeft(2,'0')}${now.day.toString().padLeft(2,'0')}';
+        'INV${now.year}${now.month.toString().padLeft(2, '0')}${now.day.toString().padLeft(2, '0')}';
     final start = DateTime(now.year, now.month, now.day);
     final result = await (selectOnly(transactions)
-      ..addColumns([transactions.id.count()])
-      ..where(transactions.createdAt.isBiggerOrEqualValue(start)))
+          ..addColumns([transactions.id.count()])
+          ..where(transactions.createdAt.isBiggerOrEqualValue(start)))
         .getSingle();
     final num = (result.read(transactions.id.count()) ?? 0) + 1;
-    return '$prefix${num.toString().padLeft(4,'0')}';
+    return '$prefix${num.toString().padLeft(4, '0')}';
   }
 
   Stream<List<Transaction>> watchTodayTransactions() {
@@ -67,8 +103,8 @@ class TransactionsDao extends DatabaseAccessor<AppDatabase>
     final start = DateTime(now.year, now.month, now.day);
     final end = start.add(const Duration(days: 1));
     return (select(transactions)
-      ..where((t) => t.createdAt.isBetweenValues(start, end))
-      ..orderBy([(t) => OrderingTerm.desc(t.createdAt)]))
+          ..where((t) => t.createdAt.isBetweenValues(start, end))
+          ..orderBy([(t) => OrderingTerm.desc(t.createdAt)]))
         .watch();
   }
 }

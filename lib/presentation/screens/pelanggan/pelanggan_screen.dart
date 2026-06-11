@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:drift/drift.dart' show Value;
+import 'package:intl/intl.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/currency.dart';
 import '../../providers/customers_provider.dart';
@@ -848,6 +849,12 @@ class _CustomerDetailSheet extends ConsumerWidget {
                 ),
                 const SizedBox(height: 20),
 
+                // ── Riwayat Transaksi ───────────────────────────────────────
+                _SectionTitle('Riwayat Transaksi'),
+                const SizedBox(height: 8),
+                _CustomerTransactionsSection(customerId: customer.id),
+                const SizedBox(height: 20),
+
                 // ── Hutang pelanggan ────────────────────────────────────────
                 _SectionTitle('Riwayat Hutang'),
                 const SizedBox(height: 8),
@@ -919,6 +926,128 @@ class _CustomerDetailSheet extends ConsumerWidget {
       SnackBar(
           content: Text('No. HP $phone disalin ke clipboard'),
           backgroundColor: AppColors.success));
+  }
+}
+
+// ─── Riwayat Transaksi per Pelanggan ─────────────────────────────────────────
+
+class _CustomerTransactionsSection extends ConsumerWidget {
+  final int customerId;
+  const _CustomerTransactionsSection({required this.customerId});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    return FutureBuilder<List<Transaction>>(
+      future: ref
+          .read(databaseProvider)
+          .transactionsDao
+          .getTransactionsByCustomer(customerId),
+      builder: (_, snap) {
+        if (!snap.hasData) {
+          return const Center(
+              child: Padding(
+                  padding: EdgeInsets.all(16),
+                  child: CircularProgressIndicator()));
+        }
+        final txList = snap.data!;
+        if (txList.isEmpty) {
+          return Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: Colors.grey.shade50,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: Colors.grey.shade200),
+            ),
+            child: Row(children: [
+              Icon(Icons.receipt_long_outlined,
+                  color: Colors.grey.shade400, size: 18),
+              const SizedBox(width: 8),
+              Text('Belum ada transaksi',
+                  style: TextStyle(color: Colors.grey.shade500)),
+            ]),
+          );
+        }
+        // Tampilkan max 5 transaksi terakhir
+        final shown = txList.take(5).toList();
+        return Column(
+          children: [
+            ...shown.map((tx) => _TxRow(tx: tx)),
+            if (txList.length > 5)
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: Text(
+                  '+ ${txList.length - 5} transaksi lainnya',
+                  style: TextStyle(
+                      fontSize: 12, color: Colors.grey.shade500),
+                ),
+              ),
+          ],
+        );
+      },
+    );
+  }
+}
+
+class _TxRow extends StatelessWidget {
+  final Transaction tx;
+  const _TxRow({required this.tx});
+
+  @override
+  Widget build(BuildContext context) {
+    final dateStr =
+        DateFormat('dd MMM yyyy, HH:mm', 'id').format(tx.createdAt);
+    final methodIcon = switch (tx.paymentMethod ?? 'tunai') {
+      'qris'     => Icons.qr_code,
+      'transfer' => Icons.account_balance_outlined,
+      'hutang'   => Icons.receipt_long_outlined,
+      _          => Icons.payments_outlined,
+    };
+    final methodColor = switch (tx.paymentMethod ?? 'tunai') {
+      'hutang' => AppColors.warning,
+      'qris'   => AppColors.info,
+      _        => AppColors.success,
+    };
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 6),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: Colors.grey.shade50,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.grey.shade200),
+      ),
+      child: Row(children: [
+        Container(
+          width: 36, height: 36,
+          decoration: BoxDecoration(
+            color: methodColor.withOpacity(0.1),
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: Icon(methodIcon, size: 16, color: methodColor),
+        ),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(tx.invoiceNumber,
+                  style: const TextStyle(
+                      fontWeight: FontWeight.w600, fontSize: 12)),
+              Text(dateStr,
+                  style: TextStyle(
+                      fontSize: 11, color: Colors.grey.shade500)),
+            ],
+          ),
+        ),
+        Text(
+          CurrencyFormatter.format(tx.total),
+          style: const TextStyle(
+              fontWeight: FontWeight.w700,
+              fontSize: 13,
+              color: AppColors.primary),
+        ),
+      ]),
+    );
   }
 }
 

@@ -747,6 +747,27 @@ class _CheckoutPanel extends ConsumerWidget {
                     ),
                   ),
                   const SizedBox(width: 8),
+                  OutlinedButton.icon(
+                    icon: const Icon(Icons.percent_outlined, size: 16),
+                    label: Text(
+                      cart.taxPercent > 0
+                          ? 'Pajak ${cart.taxPercent.toStringAsFixed(0)}%'
+                          : 'Pajak',
+                      style: const TextStyle(fontSize: 13),
+                    ),
+                    onPressed: () => _showTax(context, ref),
+                    style: OutlinedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12, vertical: 12),
+                      foregroundColor: cart.taxPercent > 0
+                          ? AppColors.warning
+                          : null,
+                      side: cart.taxPercent > 0
+                          ? const BorderSide(color: AppColors.warning)
+                          : null,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
                   ElevatedButton.icon(
                     icon: const Icon(Icons.payment, size: 18),
                     label: const Text('Bayar'),
@@ -825,6 +846,92 @@ class _CheckoutPanel extends ConsumerWidget {
                   onPressed: () {
                     final disc = double.tryParse(ctrl.text) ?? 0;
                     ref.read(kasirProvider.notifier).setDiscount(disc);
+                    Navigator.pop(context);
+                  },
+                  child: const Text('Terapkan')),
+              ),
+            ]),
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showTax(BuildContext context, WidgetRef ref) {
+    final cart = ref.read(kasirProvider);
+    final ctrl = TextEditingController(
+      text: cart.taxPercent > 0
+          ? cart.taxPercent.toStringAsFixed(0)
+          : '');
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (_) => Padding(
+        padding: EdgeInsets.only(
+          bottom: MediaQuery.of(context).viewInsets.bottom + 16,
+          left: 20, right: 20, top: 20,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Center(
+              child: Container(
+                width: 40, height: 4,
+                decoration: BoxDecoration(
+                  color: Colors.grey.shade300,
+                  borderRadius: BorderRadius.circular(2)),
+              ),
+            ),
+            const SizedBox(height: 16),
+            const Text('Atur Pajak',
+              style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700)),
+            const SizedBox(height: 4),
+            Text('Pajak dihitung dari subtotal sebelum diskon',
+              style: TextStyle(fontSize: 12, color: Colors.grey.shade500)),
+            const SizedBox(height: 16),
+            TextField(
+              controller: ctrl,
+              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              autofocus: true,
+              decoration: const InputDecoration(
+                labelText: 'Persentase Pajak (%)',
+                suffixText: '%',
+                prefixIcon: Icon(Icons.percent_outlined),
+                helperText: 'Contoh: 11 untuk PPN 11%',
+              ),
+            ),
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 8,
+              children: [1.0, 5.0, 10.0, 11.0].map((v) => ActionChip(
+                label: Text('${v.toStringAsFixed(0)}%',
+                  style: const TextStyle(fontSize: 12)),
+                onPressed: () {
+                  ctrl.text = v.toStringAsFixed(0);
+                },
+              )).toList(),
+            ),
+            const SizedBox(height: 16),
+            Row(children: [
+              Expanded(
+                child: OutlinedButton(
+                  onPressed: () {
+                    ref.read(kasirProvider.notifier).setTax(0);
+                    Navigator.pop(context);
+                  },
+                  child: const Text('Hapus Pajak')),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: ElevatedButton(
+                  onPressed: () {
+                    final tax = double.tryParse(ctrl.text) ?? 0;
+                    ref.read(kasirProvider.notifier).setTax(tax.clamp(0, 100));
                     Navigator.pop(context);
                   },
                   child: const Text('Terapkan')),
@@ -1061,56 +1168,90 @@ class _PaymentSheetState extends ConsumerState<_PaymentSheet> {
                   ),
                 ]),
               ),
-              // ── Customer picker untuk hutang ──────────────────────────────
-              if (_method == 'hutang') ...[
-                const SizedBox(height: 12),
-                GestureDetector(
-                  onTap: _pickCustomer,
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 14, vertical: 12),
-                    decoration: BoxDecoration(
-                      border: Border.all(
-                        color: _selectedCustomer != null
-                            ? AppColors.primary
-                            : Colors.grey.shade300),
-                      borderRadius: BorderRadius.circular(12),
+              // ── Customer picker — tersedia untuk semua metode ─────────────
+              const SizedBox(height: 12),
+              GestureDetector(
+                onTap: _pickCustomer,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 14, vertical: 12),
+                  decoration: BoxDecoration(
+                    border: Border.all(
                       color: _selectedCustomer != null
-                          ? AppColors.primaryLight
-                          : null,
+                          ? AppColors.primary
+                          : (_method == 'hutang'
+                              ? AppColors.warning
+                              : Colors.grey.shade300)),
+                    borderRadius: BorderRadius.circular(12),
+                    color: _selectedCustomer != null
+                        ? AppColors.primaryLight
+                        : null,
+                  ),
+                  child: Row(children: [
+                    Icon(
+                      _selectedCustomer != null
+                          ? Icons.person
+                          : Icons.person_add_alt_outlined,
+                      color: _selectedCustomer != null
+                          ? AppColors.primary
+                          : (_method == 'hutang'
+                              ? AppColors.warning
+                              : Colors.grey.shade500),
+                      size: 20,
                     ),
-                    child: Row(children: [
-                      Icon(
-                        _selectedCustomer != null
-                            ? Icons.person
-                            : Icons.person_add_alt_outlined,
-                        color: _selectedCustomer != null
-                            ? AppColors.primary
-                            : Colors.grey.shade500,
-                        size: 20,
-                      ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: Text(
-                          _selectedCustomer != null
-                              ? _selectedCustomer!.name
-                              : 'Pilih Pelanggan (wajib untuk hutang)',
-                          style: TextStyle(
-                            fontWeight: _selectedCustomer != null
-                                ? FontWeight.w600
-                                : FontWeight.normal,
-                            color: _selectedCustomer != null
-                                ? AppColors.primary
-                                : Colors.grey.shade500,
-                            fontSize: 13,
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            _selectedCustomer != null
+                                ? _selectedCustomer!.name
+                                : _method == 'hutang'
+                                    ? 'Pilih Pelanggan (wajib)'
+                                    : 'Pilih Pelanggan (opsional)',
+                            style: TextStyle(
+                              fontWeight: _selectedCustomer != null
+                                  ? FontWeight.w600
+                                  : FontWeight.normal,
+                              color: _selectedCustomer != null
+                                  ? AppColors.primary
+                                  : (_method == 'hutang'
+                                      ? AppColors.warning
+                                      : Colors.grey.shade500),
+                              fontSize: 13,
+                            ),
                           ),
-                        ),
+                          if (_selectedCustomer != null) ...[
+                            const SizedBox(height: 2),
+                            Builder(builder: (ctx) {
+                              final cart = ref.read(kasirProvider);
+                              final pts = (cart.total / 10000).floor();
+                              return Text(
+                                '+$pts poin • Total poin: ${_selectedCustomer!.points + pts}',
+                                style: const TextStyle(
+                                  fontSize: 11,
+                                  color: AppColors.warning,
+                                ),
+                              );
+                            }),
+                          ],
+                        ],
                       ),
+                    ),
+                    if (_selectedCustomer != null)
+                      GestureDetector(
+                        onTap: () => setState(() => _selectedCustomer = null),
+                        child: const Icon(Icons.close,
+                          color: AppColors.danger, size: 18),
+                      )
+                    else
                       Icon(Icons.chevron_right,
                         color: Colors.grey.shade400, size: 18),
-                    ]),
-                  ),
+                  ]),
                 ),
+              ),
+              if (_method == 'hutang') ...[
               ],
               const SizedBox(height: 16),
             ],
@@ -1348,7 +1489,10 @@ class _PaymentSheetState extends ConsumerState<_PaymentSheet> {
           subtotal: i.subtotal,
         )).toList();
 
-      final txId = await db.transactionsDao.insertTransaction(tx, items);
+      final txId = await db.transactionsDao.insertTransaction(
+        tx, items,
+        customerId: _selectedCustomer?.id,
+      );
 
       // ── Insert ke tabel Debts jika metode hutang ──────────────────────────
       if (_method == 'hutang' && _selectedCustomer != null) {

@@ -28,7 +28,7 @@ class _LaporanScreenState extends ConsumerState<LaporanScreen>
   @override
   void initState() {
     super.initState();
-    _tab = TabController(length: 3, vsync: this);
+    _tab = TabController(length: 4, vsync: this);
   }
 
   @override
@@ -86,6 +86,7 @@ class _LaporanScreenState extends ConsumerState<LaporanScreen>
             Tab(text: 'Penjualan'),
             Tab(text: 'Kas'),
             Tab(text: 'Stok'),
+            Tab(text: 'Kategori'),
           ],
         ),
       ),
@@ -115,6 +116,7 @@ class _LaporanScreenState extends ConsumerState<LaporanScreen>
                 _SalesTab(start: _start, end: DateTime.now()),
                 _CashTab(start: _start, end: DateTime.now()),
                 const _StockTab(),
+                _CategoryTab(start: _start, end: DateTime.now()),
               ],
             ),
           ),
@@ -1437,5 +1439,166 @@ class _InfoCard extends StatelessWidget {
         ]),
       ),
     );
+  }
+}
+
+// ─── Tab Penjualan Per Kategori ───────────────────────────────────────────────
+
+class _CategoryTab extends StatelessWidget {
+  final DateTime start;
+  final DateTime end;
+  const _CategoryTab({required this.start, required this.end});
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<List<Map<String, dynamic>>>(
+      future: _load(context),
+      builder: (context, snap) {
+        if (!snap.hasData) {
+          return const Center(child: CircularProgressIndicator());
+        }
+        final data = snap.data!;
+        if (data.isEmpty) {
+          return Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.category_outlined,
+                    size: 64, color: Colors.grey.shade300),
+                const SizedBox(height: 16),
+                Text('Belum ada data penjualan',
+                    style: TextStyle(color: Colors.grey.shade400)),
+              ],
+            ),
+          );
+        }
+
+        final totalOmzet = data.fold<double>(
+            0, (s, r) => s + (r['total_omzet'] as num).toDouble());
+
+        // Warna per kategori
+        final colors = [
+          AppColors.primary, AppColors.success, AppColors.warning,
+          AppColors.danger, AppColors.info,
+          const Color(0xFF8B5CF6), const Color(0xFFEC4899),
+          const Color(0xFF14B8A6), const Color(0xFFF97316),
+        ];
+
+        return ListView(
+          padding: const EdgeInsets.all(16),
+          children: [
+            // Ringkasan
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: AppColors.primaryLight,
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text('Total Omzet Semua Kategori',
+                          style: TextStyle(
+                              fontSize: 12, color: AppColors.primary)),
+                      const SizedBox(height: 4),
+                      Text(CurrencyFormatter.format(totalOmzet),
+                          style: const TextStyle(
+                              fontSize: 20,
+                              fontWeight: FontWeight.w800,
+                              color: AppColors.primary)),
+                    ],
+                  ),
+                  Text('${data.length} kategori',
+                      style: const TextStyle(
+                          color: AppColors.primary,
+                          fontWeight: FontWeight.w600)),
+                ],
+              ),
+            ),
+            const SizedBox(height: 16),
+
+            // Daftar kategori
+            ...data.asMap().entries.map((entry) {
+              final i = entry.key;
+              final row = entry.value;
+              final color = colors[i % colors.length];
+              final omzet = (row['total_omzet'] as num).toDouble();
+              final qty = (row['total_qty'] as num).toInt();
+              final pct = totalOmzet > 0 ? omzet / totalOmzet : 0.0;
+
+              return Container(
+                margin: const EdgeInsets.only(bottom: 10),
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: Theme.of(context).cardColor,
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(color: color.withOpacity(0.2)),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(children: [
+                      Container(
+                        width: 10, height: 10,
+                        decoration: BoxDecoration(
+                            color: color, shape: BoxShape.circle),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(row['category_name'] ?? '-',
+                            style: const TextStyle(
+                                fontWeight: FontWeight.w700,
+                                fontSize: 14)),
+                      ),
+                      Text(CurrencyFormatter.format(omzet),
+                          style: TextStyle(
+                              fontWeight: FontWeight.w800,
+                              color: color,
+                              fontSize: 14)),
+                    ]),
+                    const SizedBox(height: 8),
+                    // Progress bar
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(4),
+                      child: LinearProgressIndicator(
+                        value: pct,
+                        minHeight: 6,
+                        backgroundColor: color.withOpacity(0.1),
+                        valueColor: AlwaysStoppedAnimation(color),
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text('$qty item terjual',
+                            style: TextStyle(
+                                fontSize: 12,
+                                color: Colors.grey.shade500)),
+                        Text(
+                          '${(pct * 100).toStringAsFixed(1)}%',
+                          style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: color),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              );
+            }),
+          ],
+        );
+      },
+    );
+  }
+
+  Future<List<Map<String, dynamic>>> _load(BuildContext context) {
+    final db = ProviderScope.containerOf(context).read(databaseProvider);
+    return db.reportsDao.getSalesByCategory(start, end);
   }
 }

@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:drift/drift.dart' show Value;
 import 'package:excel/excel.dart' hide Border;
+import 'package:image_picker/image_picker.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:file_picker/file_picker.dart';
@@ -630,7 +631,7 @@ class _ProductCard extends ConsumerWidget {
           padding: const EdgeInsets.symmetric(
             horizontal: 14, vertical: 12),
           child: Row(children: [
-            // Icon
+            // Foto / Icon
             Container(
               width: 46,
               height: 46,
@@ -639,14 +640,21 @@ class _ProductCard extends ConsumerWidget {
                     ? Colors.grey.shade100
                     : AppColors.primaryLight,
                 borderRadius: BorderRadius.circular(12),
+                image: product.imagePath != null && product.imagePath!.isNotEmpty
+                    ? DecorationImage(
+                        image: FileImage(File(product.imagePath!)),
+                        fit: BoxFit.cover,
+                        onError: (_, __) {},
+                      )
+                    : null,
               ),
-              child: Icon(
-                Icons.inventory_2_outlined,
-                size: 22,
-                color: isOut
-                    ? Colors.grey.shade400
-                    : AppColors.primary,
-              ),
+              child: product.imagePath == null || product.imagePath!.isEmpty
+                  ? Icon(
+                      Icons.inventory_2_outlined,
+                      size: 22,
+                      color: isOut ? Colors.grey.shade400 : AppColors.primary,
+                    )
+                  : null,
             ),
             const SizedBox(width: 12),
 
@@ -763,6 +771,7 @@ class _AddProductSheetState extends ConsumerState<_AddProductSheet> {
   final _unitCtrl     = TextEditingController(text: 'pcs');
   int? _selectedCategoryId;
   bool _loading = false;
+  String? _imagePath;
 
   @override
   void dispose() {
@@ -789,6 +798,65 @@ class _AddProductSheetState extends ConsumerState<_AddProductSheet> {
           _SheetHandle(),
           const Text('Tambah Produk Baru',
             style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700)),
+          const SizedBox(height: 16),
+
+          // ── Foto produk ──────────────────────────────────────────────────
+          Center(
+            child: GestureDetector(
+              onTap: _pickImage,
+              child: Container(
+                width: 100, height: 100,
+                decoration: BoxDecoration(
+                  color: AppColors.primaryLight,
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(
+                    color: AppColors.primary.withOpacity(0.3),
+                    width: 1.5,
+                  ),
+                  image: _imagePath != null
+                      ? DecorationImage(
+                          image: FileImage(File(_imagePath!)),
+                          fit: BoxFit.cover,
+                        )
+                      : null,
+                ),
+                child: _imagePath == null
+                    ? Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          const Icon(Icons.add_a_photo_outlined,
+                            color: AppColors.primary, size: 28),
+                          const SizedBox(height: 4),
+                          Text('Foto Produk',
+                            style: TextStyle(
+                              fontSize: 11, color: AppColors.primary,
+                              fontWeight: FontWeight.w600)),
+                        ],
+                      )
+                    : Align(
+                        alignment: Alignment.topRight,
+                        child: GestureDetector(
+                          onTap: () => setState(() => _imagePath = null),
+                          child: Container(
+                            margin: const EdgeInsets.all(4),
+                            padding: const EdgeInsets.all(2),
+                            decoration: const BoxDecoration(
+                              color: AppColors.danger,
+                              shape: BoxShape.circle,
+                            ),
+                            child: const Icon(Icons.close,
+                              color: Colors.white, size: 14),
+                          ),
+                        ),
+                      ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 4),
+          Center(
+            child: Text(_imagePath != null ? 'Ketuk foto untuk ganti' : '',
+              style: TextStyle(fontSize: 11, color: Colors.grey.shade400)),
+          ),
           const SizedBox(height: 16),
 
           TextField(
@@ -912,6 +980,66 @@ class _AddProductSheetState extends ConsumerState<_AddProductSheet> {
     );
   }
 
+  Future<void> _pickImage() async {
+    final picker = ImagePicker();
+    final source = await showModalBottomSheet<ImageSource>(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (_) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const SizedBox(height: 12),
+            Container(
+              width: 40, height: 4,
+              decoration: BoxDecoration(
+                color: Colors.grey.shade300,
+                borderRadius: BorderRadius.circular(2)),
+            ),
+            const SizedBox(height: 12),
+            const Text('Pilih Sumber Foto',
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+            ListTile(
+              leading: const Icon(Icons.camera_alt_outlined,
+                color: AppColors.primary),
+              title: const Text('Kamera'),
+              onTap: () => Navigator.pop(context, ImageSource.camera),
+            ),
+            ListTile(
+              leading: const Icon(Icons.photo_library_outlined,
+                color: AppColors.primary),
+              title: const Text('Galeri'),
+              onTap: () => Navigator.pop(context, ImageSource.gallery),
+            ),
+            if (_imagePath != null)
+              ListTile(
+                leading: const Icon(Icons.delete_outline,
+                  color: AppColors.danger),
+                title: const Text('Hapus Foto',
+                  style: TextStyle(color: AppColors.danger)),
+                onTap: () {
+                  setState(() => _imagePath = null);
+                  Navigator.pop(context);
+                },
+              ),
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
+    if (source == null) return;
+    final picked = await picker.pickImage(
+      source: source,
+      maxWidth: 800,
+      maxHeight: 800,
+      imageQuality: 85,
+    );
+    if (picked != null && mounted) {
+      setState(() => _imagePath = picked.path);
+    }
+  }
+
   Future<void> _save() async {
     if (_nameCtrl.text.trim().isEmpty || _sellCtrl.text.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -936,6 +1064,7 @@ class _AddProductSheetState extends ConsumerState<_AddProductSheet> {
           stock:    Value(stock),
           minStock: Value(int.tryParse(_minStockCtrl.text) ?? 5),
           unit: Value(_unitCtrl.text.isEmpty ? 'pcs' : _unitCtrl.text),
+          imagePath: Value(_imagePath),
         ),
       );
       // Record initial stock movement
@@ -998,12 +1127,14 @@ class _EditProductSheetState extends ConsumerState<_EditProductSheet>
   int? _selectedCategoryId;
   String _adjType = 'masuk';
   bool _loading = false;
+  String? _imagePath;
 
   @override
   void initState() {
     super.initState();
     _tab = TabController(length: 2, vsync: this);
     _selectedCategoryId = widget.product.categoryId;
+    _imagePath = widget.product.imagePath;
   }
 
   @override
@@ -1102,6 +1233,60 @@ class _EditProductSheetState extends ConsumerState<_EditProductSheet>
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
+                      // ── Foto produk ──────────────────────────
+                      Center(
+                        child: GestureDetector(
+                          onTap: _pickImage,
+                          child: Container(
+                            width: 90, height: 90,
+                            decoration: BoxDecoration(
+                              color: AppColors.primaryLight,
+                              borderRadius: BorderRadius.circular(14),
+                              border: Border.all(
+                                color: AppColors.primary.withOpacity(0.3),
+                                width: 1.5,
+                              ),
+                              image: _imagePath != null && _imagePath!.isNotEmpty
+                                  ? DecorationImage(
+                                      image: FileImage(File(_imagePath!)),
+                                      fit: BoxFit.cover,
+                                      onError: (_, __) {},
+                                    )
+                                  : null,
+                            ),
+                            child: _imagePath == null || _imagePath!.isEmpty
+                                ? Column(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      const Icon(Icons.add_a_photo_outlined,
+                                        color: AppColors.primary, size: 24),
+                                      const SizedBox(height: 4),
+                                      Text('Ganti Foto',
+                                        style: TextStyle(
+                                          fontSize: 10, color: AppColors.primary,
+                                          fontWeight: FontWeight.w600)),
+                                    ],
+                                  )
+                                : Align(
+                                    alignment: Alignment.topRight,
+                                    child: GestureDetector(
+                                      onTap: () => setState(() => _imagePath = null),
+                                      child: Container(
+                                        margin: const EdgeInsets.all(4),
+                                        padding: const EdgeInsets.all(2),
+                                        decoration: const BoxDecoration(
+                                          color: AppColors.danger,
+                                          shape: BoxShape.circle,
+                                        ),
+                                        child: const Icon(Icons.close,
+                                          color: Colors.white, size: 12),
+                                      ),
+                                    ),
+                                  ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
                       TextField(
                         controller: _nameCtrl,
                         decoration: const InputDecoration(
@@ -1287,6 +1472,66 @@ class _EditProductSheetState extends ConsumerState<_EditProductSheet>
     );
   }
 
+  Future<void> _pickImage() async {
+    final picker = ImagePicker();
+    final source = await showModalBottomSheet<ImageSource>(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (_) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const SizedBox(height: 12),
+            Container(
+              width: 40, height: 4,
+              decoration: BoxDecoration(
+                color: Colors.grey.shade300,
+                borderRadius: BorderRadius.circular(2)),
+            ),
+            const SizedBox(height: 12),
+            const Text('Pilih Sumber Foto',
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+            ListTile(
+              leading: const Icon(Icons.camera_alt_outlined,
+                color: AppColors.primary),
+              title: const Text('Kamera'),
+              onTap: () => Navigator.pop(context, ImageSource.camera),
+            ),
+            ListTile(
+              leading: const Icon(Icons.photo_library_outlined,
+                color: AppColors.primary),
+              title: const Text('Galeri'),
+              onTap: () => Navigator.pop(context, ImageSource.gallery),
+            ),
+            if (_imagePath != null && _imagePath!.isNotEmpty)
+              ListTile(
+                leading: const Icon(Icons.delete_outline,
+                  color: AppColors.danger),
+                title: const Text('Hapus Foto',
+                  style: TextStyle(color: AppColors.danger)),
+                onTap: () {
+                  setState(() => _imagePath = null);
+                  Navigator.pop(context);
+                },
+              ),
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
+    if (source == null) return;
+    final picked = await picker.pickImage(
+      source: source,
+      maxWidth: 800,
+      maxHeight: 800,
+      imageQuality: 85,
+    );
+    if (picked != null && mounted) {
+      setState(() => _imagePath = picked.path);
+    }
+  }
+
   Widget _buildAdjTypeChip(
       String value, String label, IconData icon, Color color) {
     final isSelected = _adjType == value;
@@ -1332,6 +1577,7 @@ class _EditProductSheetState extends ConsumerState<_EditProductSheet>
           buyPrice:  Value(double.tryParse(_buyCtrl.text) ?? 0),
           sellPrice: Value(double.tryParse(_sellCtrl.text) ?? 0),
           minStock:  Value(int.tryParse(_minCtrl.text) ?? 5),
+          imagePath: Value(_imagePath),
         ),
       );
 

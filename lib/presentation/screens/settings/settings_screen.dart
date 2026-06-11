@@ -2,6 +2,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 import '../../../core/theme/app_theme.dart';
@@ -211,9 +212,16 @@ class SettingsScreen extends ConsumerWidget {
               onTap: () => _backupData(context, ref),
             ),
             _Tile(
+              icon: Icons.restore_outlined,
+              title: 'Restore Backup',
+              subtitle: 'Import file backup .db',
+              color: AppColors.info,
+              onTap: () => _restoreBackup(context, ref),
+            ),
+            _Tile(
               icon: Icons.delete_forever_outlined,
               title: 'Hapus Semua Data',
-              subtitle: 'Reset aplikasi ke awal',
+              subtitle: 'Hapus semua transaksi & stok',
               color: AppColors.danger,
               onTap: () => _confirmReset(context, ref),
             ),
@@ -467,13 +475,12 @@ class SettingsScreen extends ConsumerWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const Text(
-              'Semua data produk, transaksi, dan pengaturan akan dihapus permanen.',
+              'Semua transaksi, hutang, riwayat stok, dan poin pelanggan akan dihapus permanen. Produk & pengaturan tetap ada.',
               style: TextStyle(fontSize: 13),
             ),
             const SizedBox(height: 16),
             const Text('Ketik HAPUS untuk konfirmasi:',
-                style: TextStyle(
-                    fontSize: 12, fontWeight: FontWeight.w600)),
+                style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
             const SizedBox(height: 8),
             TextField(
               controller: ctrl,
@@ -498,10 +505,95 @@ class SettingsScreen extends ConsumerWidget {
       ),
     );
     if (confirm == true && context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Data berhasil dihapus. Restart aplikasi.'),
-          backgroundColor: AppColors.danger));
+      try {
+        final db = ref.read(databaseProvider);
+        await db.resetAllData();
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('✅ Semua data berhasil dihapus'),
+              backgroundColor: AppColors.success));
+        }
+      } catch (e) {
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Gagal reset: $e'),
+              backgroundColor: AppColors.danger));
+        }
+      }
+    }
+  }
+
+  // ── Restore Backup ─────────────────────────────────────────────────────────
+
+  Future<void> _restoreBackup(BuildContext context, WidgetRef ref) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('⚠️ Restore Backup?',
+            style: TextStyle(fontWeight: FontWeight.w700)),
+        content: const Text(
+          'Database saat ini akan DIGANTIKAN dengan file backup yang kamu pilih. '
+          'Semua data yang belum di-backup akan hilang.',
+          style: TextStyle(fontSize: 13),
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Batal')),
+          ElevatedButton(
+              onPressed: () => Navigator.pop(context, true),
+              style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.warning),
+              child: const Text('Lanjutkan')),
+        ],
+      ),
+    );
+    if (confirm != true) return;
+    if (!context.mounted) return;
+
+    try {
+      final result = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['db'],
+      );
+      if (result == null || result.files.single.path == null) return;
+
+      final srcPath = result.files.single.path!;
+      final dir = await getApplicationDocumentsDirectory();
+      final dbPath = '${dir.path}/kasirku.db';
+
+      // Tutup koneksi DB dulu — tidak bisa dilakukan runtime, jadi copy file
+      // dan minta user restart
+      await File(srcPath).copy(dbPath);
+
+      if (context.mounted) {
+        showDialog(
+          context: context,
+          barrierDismissible: false,
+          builder: (_) => AlertDialog(
+            title: const Text('Restore Berhasil',
+                style: TextStyle(fontWeight: FontWeight.w700)),
+            content: const Text(
+              'File backup berhasil dikopi. Tutup dan buka kembali aplikasi untuk memuat data yang dipulihkan.',
+            ),
+            actions: [
+              ElevatedButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('OK'),
+              ),
+            ],
+          ),
+        );
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Gagal restore: $e'),
+            backgroundColor: AppColors.danger));
+      }
     }
   }
 }
