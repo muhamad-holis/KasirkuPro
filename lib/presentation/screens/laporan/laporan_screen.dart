@@ -8,6 +8,7 @@ import 'package:printing/printing.dart';
 import 'package:intl/intl.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/currency.dart';
+import '../../../data/database/app_database.dart';
 import '../../providers/database_provider.dart';
 import '../../providers/settings_provider.dart';
 
@@ -683,49 +684,616 @@ class _SalesTab extends ConsumerWidget {
 
 // ─── Tab Kas ──────────────────────────────────────────────────────────────────
 
-class _CashTab extends ConsumerWidget {
+class _CashTab extends ConsumerStatefulWidget {
   final DateTime start, end;
   const _CashTab({required this.start, required this.end});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    return FutureBuilder<Map<String, double>>(
-      future: ref.read(databaseProvider)
-          .reportsDao.getCashReport(start, end),
-      builder: (_, snap) {
-        if (!snap.hasData) {
-          return const Center(child: CircularProgressIndicator());
-        }
-        final d = snap.data!;
-        final saldo = d['saldo'] ?? 0;
-        return Padding(
-          padding: const EdgeInsets.all(16),
+  ConsumerState<_CashTab> createState() => _CashTabState();
+}
+
+class _CashTabState extends ConsumerState<_CashTab> {
+  // Trigger rebuild setelah insert
+  int _refreshKey = 0;
+
+  void _refresh() => setState(() => _refreshKey++);
+
+  void _openForm({String? initialType}) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => ProviderScope(
+        parent: ProviderScope.containerOf(context),
+        child: _CashFlowForm(
+          initialType: initialType ?? 'income',
+          onSaved: _refresh,
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.transparent,
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: () => _openForm(),
+        backgroundColor: AppColors.primary,
+        icon: const Icon(Icons.add, color: Colors.white),
+        label: const Text(
+          'Tambah Kas',
+          style: TextStyle(
+            color: Colors.white,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+      ),
+      body: FutureBuilder<Map<String, double>>(
+        key: ValueKey(_refreshKey),
+        future: ref
+            .read(databaseProvider)
+            .reportsDao
+            .getCashReport(widget.start, widget.end),
+        builder: (_, snap) {
+          if (!snap.hasData) {
+            return const Center(child: CircularProgressIndicator());
+          }
+          final d = snap.data!;
+          final saldo = d['saldo'] ?? 0;
+
+          return StreamBuilder<List<CashFlow>>(
+            stream: ref
+                .read(databaseProvider)
+                .reportsDao
+                .watchCashFlows(widget.start, widget.end),
+            builder: (_, listSnap) {
+              final flows = listSnap.data ?? [];
+
+              return ListView(
+                padding: const EdgeInsets.fromLTRB(16, 16, 16, 100),
+                children: [
+                  // ── Summary cards ──
+                  Row(children: [
+                    Expanded(
+                      child: _InfoCard(
+                        title: 'Kas Masuk',
+                        value: CurrencyFormatter.format(d['income']!),
+                        icon: Icons.arrow_circle_down_rounded,
+                        color: AppColors.success,
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: _InfoCard(
+                        title: 'Kas Keluar',
+                        value: CurrencyFormatter.format(d['expense']!),
+                        icon: Icons.arrow_circle_up_rounded,
+                        color: AppColors.danger,
+                      ),
+                    ),
+                  ]),
+                  const SizedBox(height: 10),
+                  _InfoCard(
+                    title: 'Saldo Bersih',
+                    value: CurrencyFormatter.format(saldo),
+                    icon: Icons.account_balance_wallet_rounded,
+                    color: saldo >= 0 ? AppColors.primary : AppColors.danger,
+                  ),
+                  const SizedBox(height: 20),
+
+                  // ── Shortcut buttons ──
+                  Row(children: [
+                    Expanded(
+                      child: _ActionBtn(
+                        label: '+ Kas Masuk',
+                        color: AppColors.success,
+                        icon: Icons.add_circle_outline_rounded,
+                        onTap: () => _openForm(initialType: 'income'),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: _ActionBtn(
+                        label: '− Kas Keluar',
+                        color: AppColors.danger,
+                        icon: Icons.remove_circle_outline_rounded,
+                        onTap: () => _openForm(initialType: 'expense'),
+                      ),
+                    ),
+                  ]),
+                  const SizedBox(height: 20),
+
+                  // ── Riwayat ──
+                  const Text(
+                    'Riwayat',
+                    style: TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.textPrimary,
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+
+                  if (flows.isEmpty)
+                    Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 32),
+                      child: Column(
+                        children: [
+                          Icon(Icons.receipt_long_outlined,
+                              size: 48, color: Colors.grey.shade300),
+                          const SizedBox(height: 8),
+                          Text(
+                            'Belum ada catatan kas',
+                            style: TextStyle(color: Colors.grey.shade400),
+                          ),
+                        ],
+                      ),
+                    )
+                  else
+                    ...flows.map((f) => _CashFlowTile(flow: f)),
+                ],
+              );
+            },
+          );
+        },
+      ),
+    );
+  }
+}
+
+// ── Action Button ──────────────────────────────────────────────────────────────
+
+class _ActionBtn extends StatelessWidget {
+  final String label;
+  final Color color;
+  final IconData icon;
+  final VoidCallback onTap;
+  const _ActionBtn({
+    required this.label,
+    required this.color,
+    required this.icon,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 12),
+        decoration: BoxDecoration(
+          color: color.withOpacity(0.1),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: color.withOpacity(0.3)),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(icon, color: color, size: 18),
+            const SizedBox(width: 6),
+            Text(
+              label,
+              style: TextStyle(
+                color: color,
+                fontWeight: FontWeight.w700,
+                fontSize: 13,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ── Cash Flow Tile ─────────────────────────────────────────────────────────────
+
+class _CashFlowTile extends StatelessWidget {
+  final CashFlow flow;
+  const _CashFlowTile({required this.flow});
+
+  @override
+  Widget build(BuildContext context) {
+    final isIncome = flow.type == 'income';
+    final color = isIncome ? AppColors.success : AppColors.danger;
+    final sign = isIncome ? '+' : '-';
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: AppColors.border, width: 0.5),
+      ),
+      child: Row(children: [
+        Container(
+          padding: const EdgeInsets.all(10),
+          decoration: BoxDecoration(
+            color: color.withOpacity(0.1),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Icon(
+            isIncome
+                ? Icons.arrow_circle_down_rounded
+                : Icons.arrow_circle_up_rounded,
+            color: color,
+            size: 20,
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
           child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              _InfoCard(
-                title: 'Kas Masuk',
-                value: CurrencyFormatter.format(d['income']!),
-                icon: Icons.arrow_circle_down_rounded,
-                color: AppColors.success,
+              Text(
+                flow.category,
+                style: const TextStyle(
+                  fontWeight: FontWeight.w700,
+                  fontSize: 13,
+                ),
               ),
-              const SizedBox(height: 10),
-              _InfoCard(
-                title: 'Kas Keluar',
-                value: CurrencyFormatter.format(d['expense']!),
-                icon: Icons.arrow_circle_up_rounded,
-                color: AppColors.danger,
-              ),
-              const SizedBox(height: 10),
-              _InfoCard(
-                title: 'Saldo Bersih',
-                value: CurrencyFormatter.format(saldo),
-                icon: Icons.account_balance_wallet_rounded,
-                color: saldo >= 0 ? AppColors.primary : AppColors.danger,
-              ),
+              if (flow.description != null && flow.description!.isNotEmpty)
+                Text(
+                  flow.description!,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontSize: 11,
+                    color: AppColors.textSecondary,
+                  ),
+                ),
             ],
           ),
-        );
-      },
+        ),
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.end,
+          children: [
+            Text(
+              '$sign${CurrencyFormatter.format(flow.amount)}',
+              style: TextStyle(
+                fontWeight: FontWeight.w700,
+                fontSize: 14,
+                color: color,
+              ),
+            ),
+            Text(
+              _formatDate(flow.createdAt),
+              style: const TextStyle(
+                fontSize: 10,
+                color: AppColors.textSecondary,
+              ),
+            ),
+          ],
+        ),
+      ]),
+    );
+  }
+
+  String _formatDate(DateTime dt) {
+    final months = [
+      'Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun',
+      'Jul', 'Ags', 'Sep', 'Okt', 'Nov', 'Des'
+    ];
+    return '${dt.day} ${months[dt.month - 1]} • '
+        '${dt.hour.toString().padLeft(2, '0')}:'
+        '${dt.minute.toString().padLeft(2, '0')}';
+  }
+}
+
+// ── Form Tambah Kas ────────────────────────────────────────────────────────────
+
+class _CashFlowForm extends ConsumerStatefulWidget {
+  final String initialType;
+  final VoidCallback onSaved;
+  const _CashFlowForm({required this.initialType, required this.onSaved});
+
+  @override
+  ConsumerState<_CashFlowForm> createState() => _CashFlowFormState();
+}
+
+class _CashFlowFormState extends ConsumerState<_CashFlowForm> {
+  late String _type;
+  final _amountCtrl = TextEditingController();
+  final _descCtrl = TextEditingController();
+  String _category = '';
+  bool _saving = false;
+
+  static const _incomeCategories = [
+    'Penjualan', 'Modal Awal', 'Pinjaman', 'Lainnya',
+  ];
+  static const _expenseCategories = [
+    'Pembelian Stok', 'Biaya Operasional', 'Gaji', 'Utilitas', 'Lainnya',
+  ];
+
+  List<String> get _categories =>
+      _type == 'income' ? _incomeCategories : _expenseCategories;
+
+  @override
+  void initState() {
+    super.initState();
+    _type = widget.initialType;
+    _category = _categories.first;
+  }
+
+  @override
+  void dispose() {
+    _amountCtrl.dispose();
+    _descCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _save() async {
+    final raw = _amountCtrl.text.replaceAll(RegExp(r'[^0-9]'), '');
+    if (raw.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Masukkan jumlah kas')));
+      return;
+    }
+    setState(() => _saving = true);
+    try {
+      await ref.read(databaseProvider).reportsDao.addCashFlow(
+        type: _type,
+        category: _category,
+        amount: double.parse(raw),
+        description: _descCtrl.text.trim().isEmpty
+            ? null
+            : _descCtrl.text.trim(),
+      );
+      if (mounted) {
+        Navigator.pop(context);
+        widget.onSaved();
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Gagal menyimpan: $e')));
+      }
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isIncome = _type == 'income';
+    final accentColor = isIncome ? AppColors.success : AppColors.danger;
+
+    return Container(
+      padding: EdgeInsets.only(
+        top: 20,
+        left: 20,
+        right: 20,
+        bottom: MediaQuery.of(context).viewInsets.bottom + 24,
+      ),
+      decoration: const BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Handle
+          Center(
+            child: Container(
+              width: 40, height: 4,
+              decoration: BoxDecoration(
+                color: Colors.grey.shade300,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+
+          const Text(
+            'Tambah Catatan Kas',
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.w800,
+              color: AppColors.textPrimary,
+            ),
+          ),
+          const SizedBox(height: 16),
+
+          // Toggle Masuk / Keluar
+          Row(children: [
+            Expanded(
+              child: GestureDetector(
+                onTap: () => setState(() {
+                  _type = 'income';
+                  _category = _incomeCategories.first;
+                }),
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 200),
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  decoration: BoxDecoration(
+                    color: _type == 'income'
+                        ? AppColors.success
+                        : Colors.grey.shade100,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Text(
+                    '↓ Kas Masuk',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontWeight: FontWeight.w700,
+                      color: _type == 'income'
+                          ? Colors.white
+                          : AppColors.textSecondary,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: GestureDetector(
+                onTap: () => setState(() {
+                  _type = 'expense';
+                  _category = _expenseCategories.first;
+                }),
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 200),
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  decoration: BoxDecoration(
+                    color: _type == 'expense'
+                        ? AppColors.danger
+                        : Colors.grey.shade100,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Text(
+                    '↑ Kas Keluar',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontWeight: FontWeight.w700,
+                      color: _type == 'expense'
+                          ? Colors.white
+                          : AppColors.textSecondary,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ]),
+          const SizedBox(height: 16),
+
+          // Kategori
+          const Text(
+            'Kategori',
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+              color: AppColors.textSecondary,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: _categories.map((cat) {
+              final sel = cat == _category;
+              return GestureDetector(
+                onTap: () => setState(() => _category = cat),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 14, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: sel
+                        ? accentColor.withOpacity(0.1)
+                        : Colors.grey.shade100,
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(
+                      color: sel ? accentColor : Colors.transparent),
+                  ),
+                  child: Text(
+                    cat,
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: sel ? accentColor : AppColors.textSecondary,
+                    ),
+                  ),
+                ),
+              );
+            }).toList(),
+          ),
+          const SizedBox(height: 16),
+
+          // Jumlah
+          const Text(
+            'Jumlah',
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+              color: AppColors.textSecondary,
+            ),
+          ),
+          const SizedBox(height: 8),
+          TextField(
+            controller: _amountCtrl,
+            keyboardType: TextInputType.number,
+            style: const TextStyle(
+              fontWeight: FontWeight.w700,
+              fontSize: 16,
+            ),
+            decoration: InputDecoration(
+              prefixText: 'Rp ',
+              hintText: '0',
+              filled: true,
+              fillColor: Colors.grey.shade50,
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: BorderSide(color: Colors.grey.shade200),
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: BorderSide(color: Colors.grey.shade200),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: BorderSide(color: accentColor, width: 1.5),
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
+
+          // Keterangan (opsional)
+          TextField(
+            controller: _descCtrl,
+            decoration: InputDecoration(
+              hintText: 'Keterangan (opsional)',
+              filled: true,
+              fillColor: Colors.grey.shade50,
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: BorderSide(color: Colors.grey.shade200),
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: BorderSide(color: Colors.grey.shade200),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide:
+                    BorderSide(color: accentColor, width: 1.5),
+              ),
+            ),
+          ),
+          const SizedBox(height: 20),
+
+          // Tombol simpan
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton(
+              onPressed: _saving ? null : _save,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: accentColor,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(vertical: 16),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(14),
+                ),
+              ),
+              child: _saving
+                  ? const SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(
+                        color: Colors.white, strokeWidth: 2),
+                    )
+                  : Text(
+                      isIncome ? 'Simpan Kas Masuk' : 'Simpan Kas Keluar',
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w700,
+                        fontSize: 15,
+                      ),
+                    ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
