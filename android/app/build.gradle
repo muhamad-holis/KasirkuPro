@@ -6,8 +6,8 @@ plugins {
 
 android {
     namespace "com.kasirku.app"
-    compileSdk flutter.compileSdkVersion
-    ndkVersion flutter.ndkVersion
+    compileSdk 34
+    ndkVersion "26.1.10909125"
 
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_17
@@ -21,18 +21,27 @@ android {
     defaultConfig {
         applicationId "com.kasirku.app"
         minSdk 23
-        targetSdk flutter.targetSdkVersion
-        versionCode flutter.versionCode
-        versionName flutter.versionName
+        targetSdk 34
+        versionCode 1
+        versionName "1.0.0"
+        multiDexEnabled true
     }
 
     buildTypes {
         release {
             signingConfig signingConfigs.debug
+            minifyEnabled false
+        }
+        debug {
+            applicationIdSuffix ""
         }
     }
 }
 
 flutter {
     source '../..'
+}
+
+dependencies {
+    implementation 'androidx.multidex:multidex:2.0.1'
 }
