@@ -5,6 +5,7 @@ import '../screens/kasir/kasir_screen.dart';
 import '../screens/stok/stok_screen.dart';
 import '../screens/laporan/laporan_screen.dart';
 import '../screens/settings/settings_screen.dart';
+import '../screens/pelanggan/pelanggan_screen.dart';
 import '../../core/theme/app_theme.dart';
 
 final currentNavIndexProvider = StateProvider<int>((ref) => 0);
@@ -12,12 +13,15 @@ final currentNavIndexProvider = StateProvider<int>((ref) => 0);
 class MainNavigation extends ConsumerWidget {
   const MainNavigation({super.key});
 
-  static const _screens = [
-    DashboardScreen(),
-    KasirScreen(),
-    StokScreen(),
-    LaporanScreen(),
-    SettingsScreen(),
+  // ✅ FIX 1: Hapus "const" → pakai "final List<Widget>"
+  // "static const" tidak valid karena PelangganScreen bergantung pada provider
+  static final List<Widget> _screens = [
+    const DashboardScreen(),
+    const KasirScreen(),
+    const StokScreen(),
+    const PelangganScreen(),
+    const LaporanScreen(),
+    const SettingsScreen(),
   ];
 
   @override
@@ -30,7 +34,8 @@ class MainNavigation extends ConsumerWidget {
           color: Colors.white,
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.06),
+              // ✅ FIX 2: withOpacity deprecated → withValues
+              color: Colors.black.withValues(alpha: 0.06),
               blurRadius: 20,
               offset: const Offset(0, -4),
             ),
@@ -38,8 +43,7 @@ class MainNavigation extends ConsumerWidget {
         ),
         child: SafeArea(
           child: Padding(
-            padding: const EdgeInsets.symmetric(
-              horizontal: 8, vertical: 8),
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceAround,
               children: [
@@ -56,7 +60,7 @@ class MainNavigation extends ConsumerWidget {
                   current: idx,
                   icon: Icons.point_of_sale_outlined,
                   activeIcon: Icons.point_of_sale_rounded,
-                  label: 'Kasir (POS)',
+                  label: 'Kasir',
                   ref: ref,
                 ),
                 _NavItem(
@@ -64,11 +68,19 @@ class MainNavigation extends ConsumerWidget {
                   current: idx,
                   icon: Icons.inventory_2_outlined,
                   activeIcon: Icons.inventory_2_rounded,
-                  label: 'Stok Barang',
+                  label: 'Stok',
                   ref: ref,
                 ),
                 _NavItem(
                   index: 3,
+                  current: idx,
+                  icon: Icons.people_outline,
+                  activeIcon: Icons.people_rounded,
+                  label: 'Pelanggan',
+                  ref: ref,
+                ),
+                _NavItem(
+                  index: 4,
                   current: idx,
                   icon: Icons.insert_chart_outlined,
                   activeIcon: Icons.insert_chart_rounded,
@@ -76,7 +88,7 @@ class MainNavigation extends ConsumerWidget {
                   ref: ref,
                 ),
                 _NavItem(
-                  index: 4,
+                  index: 5,
                   current: idx,
                   icon: Icons.menu_rounded,
                   activeIcon: Icons.menu_rounded,
@@ -110,19 +122,16 @@ class _NavItem extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isActive = index == current;
-    final colors = Theme.of(context).colorScheme;
+    // ✅ FIX 3: Hapus "final colors = ..." yang tidak terpakai
     return GestureDetector(
       onTap: () =>
           ref.read(currentNavIndexProvider.notifier).state = index,
       behavior: HitTestBehavior.opaque,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
-        padding: const EdgeInsets.symmetric(
-          horizontal: 12, vertical: 6),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
         decoration: BoxDecoration(
-          color: isActive
-              ? AppColors.primaryLight
-              : Colors.transparent,
+          color: isActive ? AppColors.primaryLight : Colors.transparent,
           borderRadius: BorderRadius.circular(12),
         ),
         child: Column(
@@ -136,16 +145,17 @@ class _NavItem extends StatelessWidget {
               size: 22,
             ),
             const SizedBox(height: 3),
-            Text(label,
+            Text(
+              label,
               style: TextStyle(
                 fontSize: 10,
-                fontWeight: isActive
-                    ? FontWeight.w700
-                    : FontWeight.w500,
+                fontWeight:
+                    isActive ? FontWeight.w700 : FontWeight.w500,
                 color: isActive
                     ? AppColors.primary
                     : AppColors.textSecondary,
-              )),
+              ),
+            ),
           ],
         ),
       ),
