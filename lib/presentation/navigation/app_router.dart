@@ -5,7 +5,6 @@ import '../screens/kasir/kasir_screen.dart';
 import '../screens/stok/stok_screen.dart';
 import '../screens/laporan/laporan_screen.dart';
 import '../screens/settings/settings_screen.dart';
-import '../screens/pelanggan/pelanggan_screen.dart';
 import '../../core/theme/app_theme.dart';
 
 final currentNavIndexProvider = StateProvider<int>((ref) => 0);
@@ -17,7 +16,6 @@ class MainNavigation extends ConsumerWidget {
     DashboardScreen(),
     KasirScreen(),
     StokScreen(),
-    PelangganScreen(),
     LaporanScreen(),
     SettingsScreen(),
   ];
@@ -58,7 +56,7 @@ class MainNavigation extends ConsumerWidget {
                   current: idx,
                   icon: Icons.point_of_sale_outlined,
                   activeIcon: Icons.point_of_sale_rounded,
-                  label: 'Kasir',
+                  label: 'Kasir (POS)',
                   ref: ref,
                 ),
                 _NavItem(
@@ -66,19 +64,11 @@ class MainNavigation extends ConsumerWidget {
                   current: idx,
                   icon: Icons.inventory_2_outlined,
                   activeIcon: Icons.inventory_2_rounded,
-                  label: 'Stok',
+                  label: 'Stok Barang',
                   ref: ref,
                 ),
                 _NavItem(
                   index: 3,
-                  current: idx,
-                  icon: Icons.people_outline,
-                  activeIcon: Icons.people_rounded,
-                  label: 'Pelanggan',
-                  ref: ref,
-                ),
-                _NavItem(
-                  index: 4,
                   current: idx,
                   icon: Icons.insert_chart_outlined,
                   activeIcon: Icons.insert_chart_rounded,
@@ -86,7 +76,7 @@ class MainNavigation extends ConsumerWidget {
                   ref: ref,
                 ),
                 _NavItem(
-                  index: 5,
+                  index: 4,
                   current: idx,
                   icon: Icons.menu_rounded,
                   activeIcon: Icons.menu_rounded,
@@ -128,7 +118,7 @@ class _NavItem extends StatelessWidget {
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
         padding: const EdgeInsets.symmetric(
-          horizontal: 8, vertical: 6),
+          horizontal: 12, vertical: 6),
         decoration: BoxDecoration(
           color: isActive
               ? AppColors.primaryLight
