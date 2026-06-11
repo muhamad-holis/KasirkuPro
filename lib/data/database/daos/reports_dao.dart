@@ -63,4 +63,28 @@ class ReportsDao extends DatabaseAccessor<AppDatabase>
     final e = (exp.data['total'] as num).toDouble();
     return {'income': i, 'expense': e, 'saldo': i - e};
   }
+
+  Future<int> addCashFlow({
+    required String type,
+    required String category,
+    required double amount,
+    String? description,
+  }) {
+    return into(cashFlows).insert(
+      CashFlowsCompanion.insert(
+        type: type,
+        category: category,
+        amount: amount,
+        description: Value(description),
+      ),
+    );
+  }
+
+  Stream<List<CashFlow>> watchCashFlows(DateTime start, DateTime end) {
+    return (select(cashFlows)
+          ..where((t) =>
+              t.createdAt.isBetweenValues(start, end))
+          ..orderBy([(t) => OrderingTerm.desc(t.createdAt)]))
+        .watch();
+  }
 }
