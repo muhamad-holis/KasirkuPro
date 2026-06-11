@@ -524,13 +524,13 @@ class _PaymentSheetState extends ConsumerState<_PaymentSheet> {
 
       final items = cart.items.map((i) =>
         TransactionItemsCompanion.insert(
-          transactionId: const Value(0),
-          productId: Value(i.product.id),
+          transactionId: 0,
+          productId: i.product.id,
           productName: i.product.name,
-          price: Value(i.product.sellPrice),
-          quantity: Value(i.quantity),
+          price: i.product.sellPrice,
+          quantity: i.quantity,
           discount: Value(i.discount),
-          subtotal: Value(i.subtotal),
+          subtotal: i.subtotal,
         )).toList();
 
       await db.transactionsDao.insertTransaction(tx, items);

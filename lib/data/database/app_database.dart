@@ -31,7 +31,10 @@ LazyDatabase _openConnection() {
     final dbFolder = await getApplicationDocumentsDirectory();
     final file = File(p.join(dbFolder.path, 'database', 'kasirku.db'));
     await file.parent.create(recursive: true);
-    return driftDatabase(path: file.path);
+    return driftDatabase(
+      name: 'kasirku',
+      native: true,
+    );
   });
 }
 
