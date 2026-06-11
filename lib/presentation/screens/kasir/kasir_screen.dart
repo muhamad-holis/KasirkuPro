@@ -104,9 +104,31 @@ class _SearchBarState extends ConsumerState<_SearchBar> {
       builder: (_) => ProviderScope(
         parent: ProviderScope.containerOf(context),
         child: _BarcodeScannerSheet(
-          onDetected: (code) {
-            _ctrl.text = code;
-            ref.read(productSearchProvider.notifier).state = code;
+          onDetected: (code) async {
+            // Lookup produk by barcode → langsung masuk keranjang
+            final db = ref.read(databaseProvider);
+            final product = await db.productsDao.getByBarcode(code);
+            if (!mounted) return;
+            if (product != null) {
+              ref.read(kasirProvider.notifier).addProduct(product);
+              HapticFeedback.mediumImpact();
+            } else {
+              // Barcode tidak ditemukan → fallback ke search
+              _ctrl.text = code;
+              ref.read(productSearchProvider.notifier).state = code;
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Row(children: [
+                    const Icon(Icons.warning_amber_rounded,
+                        color: Colors.white, size: 18),
+                    const SizedBox(width: 8),
+                    Text('Barcode "$code" tidak ditemukan di produk'),
+                  ]),
+                  backgroundColor: AppColors.warning,
+                  duration: const Duration(seconds: 2),
+                ),
+              );
+            }
           },
         ),
       ),
@@ -152,7 +174,7 @@ class _SearchBarState extends ConsumerState<_SearchBar> {
 // ─── Barcode Scanner Sheet ────────────────────────────────────────────────────
 
 class _BarcodeScannerSheet extends ConsumerStatefulWidget {
-  final void Function(String code) onDetected;
+  final Future<void> Function(String code) onDetected;
   const _BarcodeScannerSheet({required this.onDetected});
 
   @override
@@ -168,8 +190,16 @@ class _BarcodeScannerSheetState
     torchEnabled: false,
   );
 
-  bool _scanned = false;
+  bool _processing = false;
   bool _torchOn = false;
+
+  // Riwayat scan dalam sesi ini: barcode -> jumlah scan
+  final Map<String, int> _scanLog = {};
+  // Nama produk terakhir yang berhasil discan
+  String? _lastProductName;
+  // Kode terakhir (untuk debounce)
+  String? _lastCode;
+  DateTime? _lastScanTime;
 
   @override
   void dispose() {
@@ -177,16 +207,35 @@ class _BarcodeScannerSheetState
     super.dispose();
   }
 
-  void _onDetect(BarcodeCapture capture) {
-    if (_scanned) return;
+  void _onDetect(BarcodeCapture capture) async {
+    if (_processing) return;
     final barcode = capture.barcodes.firstOrNull;
     final code = barcode?.rawValue;
     if (code == null || code.isEmpty) return;
 
-    _scanned = true;
+    // Debounce: abaikan scan yang sama dalam 1.5 detik
+    final now = DateTime.now();
+    if (_lastCode == code &&
+        _lastScanTime != null &&
+        now.difference(_lastScanTime!).inMilliseconds < 1500) return;
+
+    _lastCode = code;
+    _lastScanTime = now;
+    _processing = true;
+
     HapticFeedback.mediumImpact();
-    Navigator.pop(context);
-    widget.onDetected(code);
+
+    // Panggil callback (lookup + addProduct di parent)
+    await widget.onDetected(code);
+
+    if (mounted) {
+      setState(() {
+        _scanLog[code] = (_scanLog[code] ?? 0) + 1;
+        _processing = false;
+      });
+    } else {
+      _processing = false;
+    }
   }
 
   @override
@@ -301,7 +350,99 @@ class _BarcodeScannerSheetState
               ),
             ),
           ),
-          const SizedBox(height: 20),
+
+          // ── Live Scan Counter Panel ───────────────────────────────────
+          if (_scanLog.isNotEmpty)
+            Container(
+              margin: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+              padding: const EdgeInsets.symmetric(
+                  horizontal: 14, vertical: 10),
+              decoration: BoxDecoration(
+                color: Colors.white12,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.white24),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(children: [
+                    const Icon(Icons.shopping_cart_outlined,
+                        color: Colors.white70, size: 14),
+                    const SizedBox(width: 6),
+                    Text(
+                      'Sudah masuk keranjang (${_scanLog.values.fold(0, (a, b) => a + b)} item)',
+                      style: const TextStyle(
+                          color: Colors.white70,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600),
+                    ),
+                  ]),
+                  const SizedBox(height: 6),
+                  ..._scanLog.entries.map((e) => Padding(
+                        padding:
+                            const EdgeInsets.symmetric(vertical: 2),
+                        child: Row(
+                            mainAxisAlignment:
+                                MainAxisAlignment.spaceBetween,
+                            children: [
+                              Text(
+                                e.key.length > 22
+                                    ? '${e.key.substring(0, 22)}…'
+                                    : e.key,
+                                style: const TextStyle(
+                                    color: Colors.white54,
+                                    fontSize: 11),
+                              ),
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 8, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: AppColors.primary
+                                      .withOpacity(0.8),
+                                  borderRadius:
+                                      BorderRadius.circular(20),
+                                ),
+                                child: Text(
+                                  'x${e.value}',
+                                  style: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w700),
+                                ),
+                              ),
+                            ]),
+                      )),
+                ],
+              ),
+            ),
+
+          // Tombol selesai scan
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 10, 16, 16),
+            child: SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                icon: const Icon(Icons.check_circle_outline,
+                    size: 18),
+                label: Text(_scanLog.isEmpty
+                    ? 'Scan Barcode untuk mulai'
+                    : 'Selesai – ${_scanLog.values.fold(0, (a, b) => a + b)} item ditambahkan'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: _scanLog.isEmpty
+                      ? Colors.white24
+                      : AppColors.primary,
+                  foregroundColor: Colors.white,
+                  padding:
+                      const EdgeInsets.symmetric(vertical: 13),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12)),
+                ),
+                onPressed: _scanLog.isEmpty
+                    ? null
+                    : () => Navigator.pop(context),
+              ),
+            ),
+          ),
         ],
       ),
     );
