@@ -1,12 +1,20 @@
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:drift/drift.dart' show Value;
+import 'package:pdf/pdf.dart';
+import 'package:pdf/widgets.dart' as pw;
+import 'package:printing/printing.dart';
+import 'package:print_bluetooth_thermal/print_bluetooth_thermal.dart';
+import 'package:esc_pos_utils_plus/esc_pos_utils_plus.dart';
+import 'package:intl/intl.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/currency.dart';
 import '../../providers/kasir_provider.dart';
 import '../../providers/products_provider.dart';
 import '../../providers/database_provider.dart';
+import '../../providers/settings_provider.dart';
 import '../../../data/database/app_database.dart';
 
 class KasirScreen extends ConsumerWidget {
@@ -298,7 +306,6 @@ class _CartList extends ConsumerWidget {
               padding: const EdgeInsets.symmetric(
                 horizontal: 12, vertical: 10),
               child: Row(children: [
-                // Product icon
                 Container(
                   width: 40,
                   height: 40,
@@ -310,7 +317,6 @@ class _CartList extends ConsumerWidget {
                     size: 20, color: AppColors.primary),
                 ),
                 const SizedBox(width: 10),
-                // Product info
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -332,7 +338,6 @@ class _CartList extends ConsumerWidget {
                   ),
                 ),
                 const SizedBox(width: 8),
-                // Qty controls
                 Row(children: [
                   _QtyBtn(
                     icon: Icons.remove,
@@ -451,7 +456,6 @@ class _CheckoutPanel extends ConsumerWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            // Diskon & pajak row
             if (cart.discountTotal > 0 || cart.taxAmount > 0) ...[
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -512,7 +516,6 @@ class _CheckoutPanel extends ConsumerWidget {
                   ],
                 ),
                 Row(children: [
-                  // Discount button
                   OutlinedButton.icon(
                     icon: const Icon(Icons.local_offer_outlined, size: 16),
                     label: const Text('Diskon', style: TextStyle(fontSize: 13)),
@@ -667,7 +670,6 @@ class _PaymentSheetState extends ConsumerState<_PaymentSheet> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Handle bar
             Center(
               child: Container(
                 width: 40, height: 4,
@@ -683,7 +685,6 @@ class _PaymentSheetState extends ConsumerState<_PaymentSheet> {
                 fontSize: 18, fontWeight: FontWeight.w700)),
             const SizedBox(height: 4),
 
-            // Total
             Container(
               width: double.infinity,
               padding: const EdgeInsets.symmetric(
@@ -712,7 +713,6 @@ class _PaymentSheetState extends ConsumerState<_PaymentSheet> {
             ),
             const SizedBox(height: 16),
 
-            // Metode bayar
             const Text('Metode Pembayaran',
               style: TextStyle(
                 fontWeight: FontWeight.w600, fontSize: 13)),
@@ -730,7 +730,6 @@ class _PaymentSheetState extends ConsumerState<_PaymentSheet> {
             ),
             const SizedBox(height: 16),
 
-            // Input nominal (tunai saja)
             if (_method == 'tunai') ...[
               TextField(
                 controller: _amountCtrl,
@@ -745,7 +744,6 @@ class _PaymentSheetState extends ConsumerState<_PaymentSheet> {
               ),
               const SizedBox(height: 10),
 
-              // Nominal cepat
               Wrap(
                 spacing: 8, runSpacing: 8,
                 children: _quickAmounts(cart.total)
@@ -762,7 +760,6 @@ class _PaymentSheetState extends ConsumerState<_PaymentSheet> {
                     .toList(),
               ),
 
-              // Kembalian
               if (change > 0) ...[
                 const SizedBox(height: 10),
                 Container(
@@ -817,7 +814,6 @@ class _PaymentSheetState extends ConsumerState<_PaymentSheet> {
               ],
               const SizedBox(height: 16),
             ] else ...[
-              // Non-tunai info
               Container(
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
@@ -844,7 +840,6 @@ class _PaymentSheetState extends ConsumerState<_PaymentSheet> {
               const SizedBox(height: 16),
             ],
 
-            // Catatan
             TextField(
               controller: _notesCtrl,
               decoration: const InputDecoration(
@@ -856,7 +851,6 @@ class _PaymentSheetState extends ConsumerState<_PaymentSheet> {
             ),
             const SizedBox(height: 16),
 
-            // Confirm button
             SizedBox(
               width: double.infinity,
               child: ElevatedButton.icon(
@@ -1006,53 +1000,646 @@ class _PaymentSheetState extends ConsumerState<_PaymentSheet> {
     showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (_) => AlertDialog(
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(20)),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              width: 64,
-              height: 64,
-              decoration: const BoxDecoration(
-                color: AppColors.success,
-                shape: BoxShape.circle,
-              ),
-              child: const Icon(Icons.check_rounded,
-                color: Colors.white, size: 36),
-            ),
-            const SizedBox(height: 16),
-            const Text('Transaksi Berhasil!',
-              style: TextStyle(
-                fontSize: 18, fontWeight: FontWeight.w800)),
-            const SizedBox(height: 8),
-            Text(invoiceNumber,
-              style: TextStyle(
-                color: Colors.grey.shade500, fontSize: 13)),
-            const SizedBox(height: 16),
-            _ReceiptRow('Total', CurrencyFormatter.format(cart.total)),
-            _ReceiptRow('Bayar', CurrencyFormatter.format(amountPaid)),
-            if (change > 0)
-              _ReceiptRow('Kembalian', CurrencyFormatter.format(change),
-                highlight: true),
-            const SizedBox(height: 16),
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton.icon(
-                icon: const Icon(Icons.check, size: 18),
-                label: const Text('Selesai'),
-                onPressed: () => Navigator.pop(context),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.primary),
-              ),
-            ),
-          ],
+      builder: (_) => ProviderScope(
+        parent: ProviderScope.containerOf(context),
+        child: _SuccessDialog(
+          invoiceNumber: invoiceNumber,
+          cart: cart,
+          amountPaid: amountPaid,
+          change: change,
+          paymentMethod: _method,
         ),
       ),
     );
   }
 }
+
+// ─── Success Dialog dengan opsi cetak ────────────────────────────────────────
+
+class _SuccessDialog extends ConsumerStatefulWidget {
+  final String invoiceNumber;
+  final KasirState cart;
+  final double amountPaid;
+  final double change;
+  final String paymentMethod;
+
+  const _SuccessDialog({
+    required this.invoiceNumber,
+    required this.cart,
+    required this.amountPaid,
+    required this.change,
+    required this.paymentMethod,
+  });
+
+  @override
+  ConsumerState<_SuccessDialog> createState() => _SuccessDialogState();
+}
+
+class _SuccessDialogState extends ConsumerState<_SuccessDialog> {
+  bool _printing = false;
+  bool _savingPdf = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(20)),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 64,
+            height: 64,
+            decoration: const BoxDecoration(
+              color: AppColors.success,
+              shape: BoxShape.circle,
+            ),
+            child: const Icon(Icons.check_rounded,
+              color: Colors.white, size: 36),
+          ),
+          const SizedBox(height: 16),
+          const Text('Transaksi Berhasil!',
+            style: TextStyle(
+              fontSize: 18, fontWeight: FontWeight.w800)),
+          const SizedBox(height: 8),
+          Text(widget.invoiceNumber,
+            style: TextStyle(
+              color: Colors.grey.shade500, fontSize: 13)),
+          const SizedBox(height: 16),
+          _ReceiptRow('Total', CurrencyFormatter.format(widget.cart.total)),
+          _ReceiptRow('Bayar', CurrencyFormatter.format(widget.amountPaid)),
+          if (widget.change > 0)
+            _ReceiptRow('Kembalian', CurrencyFormatter.format(widget.change),
+              highlight: true),
+          const SizedBox(height: 20),
+
+          // Tombol cetak Bluetooth
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton.icon(
+              icon: _printing
+                  ? const SizedBox(
+                      width: 16, height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2))
+                  : const Icon(Icons.print_outlined, size: 18),
+              label: Text(_printing ? 'Mencetak...' : 'Cetak Struk (Bluetooth)'),
+              onPressed: _printing ? null : _cetakBluetooth,
+              style: OutlinedButton.styleFrom(
+                padding: const EdgeInsets.symmetric(vertical: 12)),
+            ),
+          ),
+          const SizedBox(height: 8),
+
+          // Tombol simpan / share PDF
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton.icon(
+              icon: _savingPdf
+                  ? const SizedBox(
+                      width: 16, height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2))
+                  : const Icon(Icons.picture_as_pdf_outlined, size: 18),
+              label: Text(_savingPdf ? 'Membuat PDF...' : 'Simpan / Share PDF'),
+              onPressed: _savingPdf ? null : _sharePdf,
+              style: OutlinedButton.styleFrom(
+                padding: const EdgeInsets.symmetric(vertical: 12)),
+            ),
+          ),
+          const SizedBox(height: 8),
+
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton.icon(
+              icon: const Icon(Icons.check, size: 18),
+              label: const Text('Selesai'),
+              onPressed: () => Navigator.pop(context),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.primary,
+                padding: const EdgeInsets.symmetric(vertical: 12)),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ─── Cetak Bluetooth Thermal ──────────────────────────────────────────────
+
+  Future<void> _cetakBluetooth() async {
+    setState(() => _printing = true);
+    try {
+      // Cek apakah Bluetooth tersedia
+      final bool connected = await PrintBluetoothThermal.connectionStatus;
+      if (!connected) {
+        // Tampilkan dialog pilih printer
+        if (context.mounted) {
+          await _showBluetoothPrinterDialog();
+        }
+        return;
+      }
+      await _doPrint();
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Gagal cetak: $e'),
+            backgroundColor: AppColors.danger));
+      }
+    } finally {
+      if (mounted) setState(() => _printing = false);
+    }
+  }
+
+  Future<void> _showBluetoothPrinterDialog() async {
+    final List<PrinterBluetooth> devices =
+        await PrintBluetoothThermal.pairedBluetooths;
+
+    if (!context.mounted) return;
+
+    if (devices.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Tidak ada printer Bluetooth yang dipasangkan'),
+          backgroundColor: AppColors.warning));
+      return;
+    }
+
+    await showDialog(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('Pilih Printer',
+          style: TextStyle(fontWeight: FontWeight.w700)),
+        content: SizedBox(
+          width: double.maxFinite,
+          child: ListView.builder(
+            shrinkWrap: true,
+            itemCount: devices.length,
+            itemBuilder: (_, i) {
+              final d = devices[i];
+              return ListTile(
+                leading: const Icon(Icons.print_outlined,
+                  color: AppColors.primary),
+                title: Text(d.name ?? 'Printer ${i + 1}',
+                  style: const TextStyle(fontWeight: FontWeight.w600)),
+                subtitle: Text(d.macAdress ?? '',
+                  style: TextStyle(
+                    fontSize: 12, color: Colors.grey.shade500)),
+                onTap: () async {
+                  Navigator.pop(context);
+                  final bool result = await PrintBluetoothThermal.connect(
+                    macPrinterAddress: d.macAdress ?? '');
+                  if (result) {
+                    await _doPrint();
+                  } else {
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('Gagal terhubung ke printer'),
+                          backgroundColor: AppColors.danger));
+                    }
+                  }
+                },
+              );
+            },
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Batal')),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _doPrint() async {
+    final settings = ref.read(storeSettingsProvider);
+    final storeName = settings.maybeWhen(
+      data: (s) => s.storeName,
+      orElse: () => 'KasirKu',
+    );
+    final storeAddress = settings.maybeWhen(
+      data: (s) => s.storeAddress ?? '',
+      orElse: () => '',
+    );
+
+    final profile = await CapabilityProfile.load();
+    final generator = Generator(PaperSize.mm58, profile);
+    final List<int> bytes = [];
+
+    final now = DateTime.now();
+    final dateStr = DateFormat('dd/MM/yyyy HH:mm').format(now);
+
+    // Header
+    bytes += generator.text(storeName,
+      styles: const PosStyles(
+        align: PosAlign.center,
+        bold: true,
+        height: PosTextSize.size2,
+        width: PosTextSize.size2,
+      ));
+    if (storeAddress.isNotEmpty) {
+      bytes += generator.text(storeAddress,
+        styles: const PosStyles(align: PosAlign.center));
+    }
+    bytes += generator.hr();
+    bytes += generator.text('No: ${widget.invoiceNumber}',
+      styles: const PosStyles(align: PosAlign.center));
+    bytes += generator.text(dateStr,
+      styles: const PosStyles(align: PosAlign.center));
+    bytes += generator.hr();
+
+    // Items
+    for (final item in widget.cart.items) {
+      bytes += generator.text(item.product.name,
+        styles: const PosStyles(bold: true));
+      bytes += generator.row([
+        PosColumn(
+          text: '  ${item.quantity} x ${CurrencyFormatter.format(item.product.sellPrice)}',
+          width: 8,
+          styles: const PosStyles(align: PosAlign.left)),
+        PosColumn(
+          text: CurrencyFormatter.format(item.subtotal),
+          width: 4,
+          styles: const PosStyles(align: PosAlign.right)),
+      ]);
+    }
+    bytes += generator.hr();
+
+    // Summary
+    if (widget.cart.discountTotal > 0) {
+      bytes += generator.row([
+        PosColumn(text: 'Diskon', width: 6,
+          styles: const PosStyles(align: PosAlign.left)),
+        PosColumn(
+          text: '- ${CurrencyFormatter.format(widget.cart.discountTotal)}',
+          width: 6,
+          styles: const PosStyles(align: PosAlign.right)),
+      ]);
+    }
+    bytes += generator.row([
+      PosColumn(text: 'TOTAL', width: 6,
+        styles: const PosStyles(bold: true, align: PosAlign.left)),
+      PosColumn(
+        text: CurrencyFormatter.format(widget.cart.total),
+        width: 6,
+        styles: const PosStyles(bold: true, align: PosAlign.right)),
+    ]);
+    bytes += generator.row([
+      PosColumn(text: 'Bayar', width: 6,
+        styles: const PosStyles(align: PosAlign.left)),
+      PosColumn(
+        text: CurrencyFormatter.format(widget.amountPaid),
+        width: 6,
+        styles: const PosStyles(align: PosAlign.right)),
+    ]);
+    if (widget.change > 0) {
+      bytes += generator.row([
+        PosColumn(text: 'Kembali', width: 6,
+          styles: const PosStyles(align: PosAlign.left)),
+        PosColumn(
+          text: CurrencyFormatter.format(widget.change),
+          width: 6,
+          styles: const PosStyles(align: PosAlign.right)),
+      ]);
+    }
+    bytes += generator.hr();
+
+    // Footer
+    bytes += generator.text('Terima kasih!',
+      styles: const PosStyles(align: PosAlign.center, bold: true));
+    bytes += generator.text('Simpan struk ini sebagai bukti pembelian',
+      styles: const PosStyles(align: PosAlign.center));
+    bytes += generator.feed(3);
+    bytes += generator.cut();
+
+    await PrintBluetoothThermal.writeBytes(bytes);
+
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Struk berhasil dicetak!'),
+          backgroundColor: AppColors.success));
+    }
+  }
+
+  // ─── Share PDF ─────────────────────────────────────────────────────────────
+
+  Future<void> _sharePdf() async {
+    setState(() => _savingPdf = true);
+    try {
+      final settings = ref.read(storeSettingsProvider);
+      final storeName = settings.maybeWhen(
+        data: (s) => s.storeName,
+        orElse: () => 'KasirKu',
+      );
+      final storeAddress = settings.maybeWhen(
+        data: (s) => s.storeAddress ?? '',
+        orElse: () => '',
+      );
+
+      final pdfBytes = await _buildPdf(storeName, storeAddress);
+      await Printing.sharePdf(
+        bytes: pdfBytes,
+        filename: '${widget.invoiceNumber}.pdf',
+      );
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Gagal buat PDF: $e'),
+            backgroundColor: AppColors.danger));
+      }
+    } finally {
+      if (mounted) setState(() => _savingPdf = false);
+    }
+  }
+
+  Future<Uint8List> _buildPdf(String storeName, String storeAddress) async {
+    final doc = pw.Document();
+    final now = DateTime.now();
+    final dateStr = DateFormat('dd MMMM yyyy, HH:mm', 'id').format(now);
+
+    // Warna tema
+    const primaryColor = PdfColor.fromInt(0xFF0D9488);
+    const successColor = PdfColor.fromInt(0xFF10B981);
+    const dangerColor  = PdfColor.fromInt(0xFFEF4444);
+    const greyColor    = PdfColor.fromInt(0xFF6B7280);
+    const lightGrey    = PdfColor.fromInt(0xFFF3F4F6);
+
+    doc.addPage(pw.Page(
+      pageFormat: PdfPageFormat.roll57,
+      margin: const pw.EdgeInsets.all(8),
+      build: (pw.Context ctx) {
+        return pw.Column(
+          crossAxisAlignment: pw.CrossAxisAlignment.stretch,
+          children: [
+            // Header toko
+            pw.Container(
+              padding: const pw.EdgeInsets.symmetric(vertical: 10),
+              decoration: const pw.BoxDecoration(
+                color: primaryColor,
+                borderRadius: pw.BorderRadius.all(pw.Radius.circular(8)),
+              ),
+              child: pw.Column(children: [
+                pw.Text(storeName,
+                  style: pw.TextStyle(
+                    fontSize: 14,
+                    fontWeight: pw.FontWeight.bold,
+                    color: PdfColors.white,
+                  ),
+                  textAlign: pw.TextAlign.center),
+                if (storeAddress.isNotEmpty) ...[
+                  pw.SizedBox(height: 2),
+                  pw.Text(storeAddress,
+                    style: const pw.TextStyle(
+                      fontSize: 8, color: PdfColors.white70),
+                    textAlign: pw.TextAlign.center),
+                ],
+              ]),
+            ),
+            pw.SizedBox(height: 8),
+
+            // Info invoice
+            pw.Container(
+              padding: const pw.EdgeInsets.all(8),
+              decoration: pw.BoxDecoration(
+                color: lightGrey,
+                borderRadius: const pw.BorderRadius.all(pw.Radius.circular(6)),
+              ),
+              child: pw.Column(children: [
+                pw.Row(
+                  mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                  children: [
+                    pw.Text('No. Invoice',
+                      style: const pw.TextStyle(
+                        fontSize: 8, color: greyColor)),
+                    pw.Text(widget.invoiceNumber,
+                      style: pw.TextStyle(
+                        fontSize: 8, fontWeight: pw.FontWeight.bold)),
+                  ],
+                ),
+                pw.SizedBox(height: 3),
+                pw.Row(
+                  mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                  children: [
+                    pw.Text('Tanggal',
+                      style: const pw.TextStyle(
+                        fontSize: 8, color: greyColor)),
+                    pw.Text(dateStr,
+                      style: const pw.TextStyle(fontSize: 8)),
+                  ],
+                ),
+                pw.SizedBox(height: 3),
+                pw.Row(
+                  mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                  children: [
+                    pw.Text('Metode',
+                      style: const pw.TextStyle(
+                        fontSize: 8, color: greyColor)),
+                    pw.Text(_methodLabel(widget.paymentMethod),
+                      style: pw.TextStyle(
+                        fontSize: 8, fontWeight: pw.FontWeight.bold)),
+                  ],
+                ),
+              ]),
+            ),
+            pw.SizedBox(height: 8),
+
+            // Header kolom item
+            pw.Container(
+              padding: const pw.EdgeInsets.symmetric(
+                horizontal: 6, vertical: 4),
+              decoration: const pw.BoxDecoration(color: primaryColor),
+              child: pw.Row(children: [
+                pw.Expanded(
+                  flex: 5,
+                  child: pw.Text('Produk',
+                    style: pw.TextStyle(
+                      fontSize: 8,
+                      fontWeight: pw.FontWeight.bold,
+                      color: PdfColors.white))),
+                pw.Expanded(
+                  flex: 2,
+                  child: pw.Text('Qty',
+                    style: pw.TextStyle(
+                      fontSize: 8,
+                      fontWeight: pw.FontWeight.bold,
+                      color: PdfColors.white),
+                    textAlign: pw.TextAlign.center)),
+                pw.Expanded(
+                  flex: 3,
+                  child: pw.Text('Subtotal',
+                    style: pw.TextStyle(
+                      fontSize: 8,
+                      fontWeight: pw.FontWeight.bold,
+                      color: PdfColors.white),
+                    textAlign: pw.TextAlign.right)),
+              ]),
+            ),
+
+            // Item rows
+            ...widget.cart.items.asMap().entries.map((entry) {
+              final idx = entry.key;
+              final item = entry.value;
+              final bg = idx.isOdd ? PdfColors.white : lightGrey;
+              return pw.Container(
+                padding: const pw.EdgeInsets.symmetric(
+                  horizontal: 6, vertical: 4),
+                color: bg,
+                child: pw.Column(
+                  crossAxisAlignment: pw.CrossAxisAlignment.start,
+                  children: [
+                    pw.Row(children: [
+                      pw.Expanded(
+                        flex: 5,
+                        child: pw.Text(item.product.name,
+                          style: pw.TextStyle(
+                            fontSize: 8,
+                            fontWeight: pw.FontWeight.bold))),
+                      pw.Expanded(
+                        flex: 2,
+                        child: pw.Text('${item.quantity}',
+                          style: const pw.TextStyle(fontSize: 8),
+                          textAlign: pw.TextAlign.center)),
+                      pw.Expanded(
+                        flex: 3,
+                        child: pw.Text(
+                          CurrencyFormatter.format(item.subtotal),
+                          style: const pw.TextStyle(fontSize: 8),
+                          textAlign: pw.TextAlign.right)),
+                    ]),
+                    pw.Text(
+                      '@ ${CurrencyFormatter.format(item.product.sellPrice)}',
+                      style: const pw.TextStyle(
+                        fontSize: 7, color: greyColor)),
+                  ],
+                ),
+              );
+            }),
+
+            pw.Divider(thickness: 0.5),
+
+            // Summary
+            pw.Padding(
+              padding: const pw.EdgeInsets.symmetric(horizontal: 6),
+              child: pw.Column(children: [
+                if (widget.cart.discountTotal > 0) ...[
+                  pw.Row(
+                    mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                    children: [
+                      pw.Text('Diskon',
+                        style: const pw.TextStyle(
+                          fontSize: 8, color: dangerColor)),
+                      pw.Text(
+                        '- ${CurrencyFormatter.format(widget.cart.discountTotal)}',
+                        style: const pw.TextStyle(
+                          fontSize: 8, color: dangerColor)),
+                    ],
+                  ),
+                  pw.SizedBox(height: 3),
+                ],
+                if (widget.cart.taxAmount > 0) ...[
+                  pw.Row(
+                    mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                    children: [
+                      pw.Text(
+                        'Pajak (${widget.cart.taxPercent.toStringAsFixed(0)}%)',
+                        style: const pw.TextStyle(fontSize: 8, color: greyColor)),
+                      pw.Text(
+                        '+ ${CurrencyFormatter.format(widget.cart.taxAmount)}',
+                        style: const pw.TextStyle(fontSize: 8)),
+                    ],
+                  ),
+                  pw.SizedBox(height: 3),
+                ],
+                // Total besar
+                pw.Container(
+                  padding: const pw.EdgeInsets.symmetric(
+                    vertical: 6, horizontal: 8),
+                  decoration: const pw.BoxDecoration(
+                    color: primaryColor,
+                    borderRadius:
+                        pw.BorderRadius.all(pw.Radius.circular(6))),
+                  child: pw.Row(
+                    mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                    children: [
+                      pw.Text('TOTAL',
+                        style: pw.TextStyle(
+                          fontSize: 10,
+                          fontWeight: pw.FontWeight.bold,
+                          color: PdfColors.white)),
+                      pw.Text(
+                        CurrencyFormatter.format(widget.cart.total),
+                        style: pw.TextStyle(
+                          fontSize: 10,
+                          fontWeight: pw.FontWeight.bold,
+                          color: PdfColors.white)),
+                    ],
+                  ),
+                ),
+                pw.SizedBox(height: 4),
+                pw.Row(
+                  mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                  children: [
+                    pw.Text('Dibayar',
+                      style: const pw.TextStyle(fontSize: 8, color: greyColor)),
+                    pw.Text(CurrencyFormatter.format(widget.amountPaid),
+                      style: const pw.TextStyle(fontSize: 8)),
+                  ],
+                ),
+                if (widget.change > 0) ...[
+                  pw.SizedBox(height: 2),
+                  pw.Row(
+                    mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                    children: [
+                      pw.Text('Kembali',
+                        style: const pw.TextStyle(
+                          fontSize: 8, color: successColor)),
+                      pw.Text(CurrencyFormatter.format(widget.change),
+                        style: pw.TextStyle(
+                          fontSize: 8,
+                          fontWeight: pw.FontWeight.bold,
+                          color: successColor)),
+                    ],
+                  ),
+                ],
+              ]),
+            ),
+
+            pw.SizedBox(height: 10),
+            pw.Divider(thickness: 0.5, borderStyle: pw.BorderStyle.dashed),
+            pw.SizedBox(height: 6),
+
+            // Footer
+            pw.Text('Terima kasih telah berbelanja!',
+              style: pw.TextStyle(
+                fontSize: 9,
+                fontWeight: pw.FontWeight.bold,
+                color: primaryColor),
+              textAlign: pw.TextAlign.center),
+            pw.Text('Simpan struk ini sebagai bukti pembelian',
+              style: const pw.TextStyle(
+                fontSize: 7, color: greyColor),
+              textAlign: pw.TextAlign.center),
+          ],
+        );
+      },
+    ));
+
+    return doc.save();
+  }
+
+  String _methodLabel(String method) {
+    switch (method) {
+      case 'tunai':    return 'Tunai';
+      case 'qris':     return 'QRIS';
+      case 'transfer': return 'Transfer Bank';
+      case 'hutang':   return 'Hutang';
+      default:         return method;
+    }
+  }
+}
+
+// ─── Receipt Row ──────────────────────────────────────────────────────────────
 
 class _ReceiptRow extends StatelessWidget {
   final String label;
