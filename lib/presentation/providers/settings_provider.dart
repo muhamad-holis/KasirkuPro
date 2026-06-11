@@ -1,8 +1,12 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'database_provider.dart';
+
+// ─── Theme ────────────────────────────────────────────────────────────────────
 
 final themeModeProvider =
-    StateNotifierProvider<ThemeModeNotifier, bool>((ref) => ThemeModeNotifier());
+    StateNotifierProvider<ThemeModeNotifier, bool>(
+        (ref) => ThemeModeNotifier());
 
 class ThemeModeNotifier extends StateNotifier<bool> {
   ThemeModeNotifier() : super(false) { _load(); }
@@ -18,3 +22,152 @@ class ThemeModeNotifier extends StateNotifier<bool> {
     await prefs.setBool('dark_mode', state);
   }
 }
+
+// ─── Store Settings ───────────────────────────────────────────────────────────
+
+class StoreSettings {
+  final String storeName;
+  final String storeAddress;
+  final String storePhone;
+  final String storeNote;
+  final String receiptSize;   // '58mm' | '80mm'
+  final String currency;
+  final bool showLogo;
+  final bool printAfterTransaction;
+
+  const StoreSettings({
+    this.storeName            = 'KasirKu',
+    this.storeAddress         = '',
+    this.storePhone           = '',
+    this.storeNote            = 'Terima kasih telah berbelanja!',
+    this.receiptSize          = '58mm',
+    this.currency             = 'Rp',
+    this.showLogo             = true,
+    this.printAfterTransaction = false,
+  });
+
+  StoreSettings copyWith({
+    String? storeName,
+    String? storeAddress,
+    String? storePhone,
+    String? storeNote,
+    String? receiptSize,
+    String? currency,
+    bool? showLogo,
+    bool? printAfterTransaction,
+  }) => StoreSettings(
+    storeName:             storeName             ?? this.storeName,
+    storeAddress:          storeAddress          ?? this.storeAddress,
+    storePhone:            storePhone            ?? this.storePhone,
+    storeNote:             storeNote             ?? this.storeNote,
+    receiptSize:           receiptSize           ?? this.receiptSize,
+    currency:              currency              ?? this.currency,
+    showLogo:              showLogo              ?? this.showLogo,
+    printAfterTransaction: printAfterTransaction ?? this.printAfterTransaction,
+  );
+}
+
+class StoreSettingsNotifier extends StateNotifier<StoreSettings> {
+  StoreSettingsNotifier(this._ref) : super(const StoreSettings()) {
+    _load();
+  }
+
+  final Ref _ref;
+
+  Future<void> _load() async {
+    final db = _ref.read(databaseProvider);
+    final all = await db.settingsDao.getAllSettings();
+    final map = {for (final s in all) s.key: s.value ?? ''};
+    state = StoreSettings(
+      storeName:             map['toko_nama']            ?? 'KasirKu',
+      storeAddress:          map['toko_alamat']          ?? '',
+      storePhone:            map['toko_telepon']         ?? '',
+      storeNote:             map['struk_catatan']        ?? 'Terima kasih telah berbelanja!',
+      receiptSize:           map['struk_ukuran']         ?? '58mm',
+      currency:              map['mata_uang']            ?? 'Rp',
+      showLogo:              map['struk_logo']           != 'false',
+      printAfterTransaction: map['cetak_otomatis']       == 'true',
+    );
+  }
+
+  Future<void> save(StoreSettings s) async {
+    state = s;
+    final db = _ref.read(databaseProvider);
+    final entries = {
+      'toko_nama':      s.storeName,
+      'toko_alamat':    s.storeAddress,
+      'toko_telepon':   s.storePhone,
+      'struk_catatan':  s.storeNote,
+      'struk_ukuran':   s.receiptSize,
+      'mata_uang':      s.currency,
+      'struk_logo':     s.showLogo.toString(),
+      'cetak_otomatis': s.printAfterTransaction.toString(),
+    };
+    for (final e in entries.entries) {
+      await db.settingsDao.setSetting(e.key, e.value);
+    }
+  }
+
+  Future<void> update(StoreSettings Function(StoreSettings) fn) =>
+      save(fn(state));
+}
+
+final storeSettingsProvider =
+    StateNotifierProvider<StoreSettingsNotifier, StoreSettings>(
+        (ref) => StoreSettingsNotifier(ref));
+
+// ─── Printer Settings ─────────────────────────────────────────────────────────
+
+class PrinterSettings {
+  final String? deviceName;
+  final String? deviceAddress;
+  final bool isConnected;
+
+  const PrinterSettings({
+    this.deviceName,
+    this.deviceAddress,
+    this.isConnected = false,
+  });
+
+  PrinterSettings copyWith({
+    String? deviceName,
+    String? deviceAddress,
+    bool? isConnected,
+  }) => PrinterSettings(
+    deviceName:    deviceName    ?? this.deviceName,
+    deviceAddress: deviceAddress ?? this.deviceAddress,
+    isConnected:   isConnected   ?? this.isConnected,
+  );
+}
+
+class PrinterSettingsNotifier extends StateNotifier<PrinterSettings> {
+  PrinterSettingsNotifier() : super(const PrinterSettings()) { _load(); }
+
+  Future<void> _load() async {
+    final prefs = await SharedPreferences.getInstance();
+    state = PrinterSettings(
+      deviceName:    prefs.getString('printer_name'),
+      deviceAddress: prefs.getString('printer_address'),
+      isConnected:   false,
+    );
+  }
+
+  Future<void> setPrinter(String name, String address) async {
+    state = state.copyWith(
+        deviceName: name, deviceAddress: address);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('printer_name', name);
+    await prefs.setString('printer_address', address);
+  }
+
+  Future<void> clearPrinter() async {
+    state = const PrinterSettings();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove('printer_name');
+    await prefs.remove('printer_address');
+  }
+}
+
+final printerSettingsProvider =
+    StateNotifierProvider<PrinterSettingsNotifier, PrinterSettings>(
+        (ref) => PrinterSettingsNotifier());

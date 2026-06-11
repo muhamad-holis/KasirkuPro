@@ -24,6 +24,7 @@ part 'daos/debts_dao.dart';
 part 'daos/reports_dao.dart';
 part 'daos/sync_dao.dart';
 part 'daos/stock_movements_dao.dart';
+part 'daos/settings_dao.dart';
 
 part 'app_database.g.dart';
 
@@ -44,7 +45,7 @@ LazyDatabase _openConnection() {
   daos: [
     ProductsDao, CategoriesDao, TransactionsDao,
     CustomersDao, DebtsDao, ReportsDao, SyncDao,
-    StockMovementsDao,
+    StockMovementsDao, SettingsDao,
   ],
 )
 class AppDatabase extends _$AppDatabase {
