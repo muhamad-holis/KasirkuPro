@@ -10,6 +10,7 @@ import 'package:print_bluetooth_thermal/print_bluetooth_thermal.dart';
 import 'package:esc_pos_utils_plus/esc_pos_utils_plus.dart';
 import 'package:intl/intl.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
+import '../../../core/utils/sound_service.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/currency.dart';
 import '../../providers/kasir_provider.dart';
@@ -112,10 +113,12 @@ class _SearchBarState extends ConsumerState<_SearchBar> {
             if (product != null) {
               ref.read(kasirProvider.notifier).addProduct(product);
               HapticFeedback.mediumImpact();
+              await SoundService.instance.beepScan(); // ✅ beep sukses
             } else {
               // Barcode tidak ditemukan → fallback ke search
               _ctrl.text = code;
               ref.read(productSearchProvider.notifier).state = code;
+              await SoundService.instance.beepError(); // ❌ beep error
               ScaffoldMessenger.of(context).showSnackBar(
                 SnackBar(
                   content: Row(children: [
