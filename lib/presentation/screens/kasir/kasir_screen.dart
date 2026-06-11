@@ -9,6 +9,7 @@ import 'package:printing/printing.dart';
 import 'package:print_bluetooth_thermal/print_bluetooth_thermal.dart';
 import 'package:esc_pos_utils_plus/esc_pos_utils_plus.dart';
 import 'package:intl/intl.dart';
+import 'package:mobile_scanner/mobile_scanner.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/currency.dart';
 import '../../providers/kasir_provider.dart';
@@ -81,15 +82,46 @@ class KasirScreen extends ConsumerWidget {
 
 // ─── Search Bar ──────────────────────────────────────────────────────────────
 
-class _SearchBar extends ConsumerWidget {
+class _SearchBar extends ConsumerStatefulWidget {
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<_SearchBar> createState() => _SearchBarState();
+}
+
+class _SearchBarState extends ConsumerState<_SearchBar> {
+  final _ctrl = TextEditingController();
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  void _openScanner() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => ProviderScope(
+        parent: ProviderScope.containerOf(context),
+        child: _BarcodeScannerSheet(
+          onDetected: (code) {
+            _ctrl.text = code;
+            ref.read(productSearchProvider.notifier).state = code;
+          },
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
     return Container(
       color: Theme.of(context).scaffoldBackgroundColor,
       padding: const EdgeInsets.fromLTRB(12, 12, 12, 8),
       child: Row(children: [
         Expanded(
           child: TextField(
+            controller: _ctrl,
             onChanged: (v) =>
                 ref.read(productSearchProvider.notifier).state = v,
             decoration: const InputDecoration(
@@ -108,11 +140,200 @@ class _SearchBar extends ConsumerWidget {
           child: IconButton(
             icon: const Icon(Icons.qr_code_scanner,
               color: Colors.white, size: 22),
-            onPressed: () {},
+            onPressed: _openScanner,
             tooltip: 'Scan Barcode',
           ),
         ),
       ]),
+    );
+  }
+}
+
+// ─── Barcode Scanner Sheet ────────────────────────────────────────────────────
+
+class _BarcodeScannerSheet extends ConsumerStatefulWidget {
+  final void Function(String code) onDetected;
+  const _BarcodeScannerSheet({required this.onDetected});
+
+  @override
+  ConsumerState<_BarcodeScannerSheet> createState() =>
+      _BarcodeScannerSheetState();
+}
+
+class _BarcodeScannerSheetState
+    extends ConsumerState<_BarcodeScannerSheet> {
+  final MobileScannerController _scannerCtrl = MobileScannerController(
+    detectionSpeed: DetectionSpeed.noDuplicates,
+    facing: CameraFacing.back,
+    torchEnabled: false,
+  );
+
+  bool _scanned = false;
+  bool _torchOn = false;
+
+  @override
+  void dispose() {
+    _scannerCtrl.dispose();
+    super.dispose();
+  }
+
+  void _onDetect(BarcodeCapture capture) {
+    if (_scanned) return;
+    final barcode = capture.barcodes.firstOrNull;
+    final code = barcode?.rawValue;
+    if (code == null || code.isEmpty) return;
+
+    _scanned = true;
+    HapticFeedback.mediumImpact();
+    Navigator.pop(context);
+    widget.onDetected(code);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final h = MediaQuery.of(context).size.height * 0.72;
+    return Container(
+      height: h,
+      decoration: const BoxDecoration(
+        color: Colors.black,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      child: Column(
+        children: [
+          // Handle bar
+          Container(
+            margin: const EdgeInsets.only(top: 12),
+            width: 40,
+            height: 4,
+            decoration: BoxDecoration(
+              color: Colors.white38,
+              borderRadius: BorderRadius.circular(2),
+            ),
+          ),
+          // Title row
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 12, 8, 8),
+            child: Row(children: [
+              const Expanded(
+                child: Text('Scan Barcode',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w700,
+                  )),
+              ),
+              // Torch toggle
+              IconButton(
+                icon: Icon(
+                  _torchOn
+                      ? Icons.flashlight_on
+                      : Icons.flashlight_off_outlined,
+                  color: _torchOn ? Colors.yellow : Colors.white70,
+                ),
+                onPressed: () {
+                  _scannerCtrl.toggleTorch();
+                  setState(() => _torchOn = !_torchOn);
+                },
+              ),
+              IconButton(
+                icon: const Icon(Icons.close, color: Colors.white70),
+                onPressed: () => Navigator.pop(context),
+              ),
+            ]),
+          ),
+
+          // Camera view
+          Expanded(
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(16),
+              child: Stack(
+                children: [
+                  // Scanner
+                  MobileScanner(
+                    controller: _scannerCtrl,
+                    onDetect: _onDetect,
+                  ),
+                  // Overlay viewfinder
+                  Center(
+                    child: Container(
+                      width: 240,
+                      height: 240,
+                      decoration: BoxDecoration(
+                        border: Border.all(
+                          color: AppColors.primary,
+                          width: 3,
+                        ),
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                      child: Stack(children: [
+                        // Corner decorators
+                        _Corner(Alignment.topLeft),
+                        _Corner(Alignment.topRight),
+                        _Corner(Alignment.bottomLeft),
+                        _Corner(Alignment.bottomRight),
+                      ]),
+                    ),
+                  ),
+                  // Hint text
+                  Positioned(
+                    bottom: 24,
+                    left: 0,
+                    right: 0,
+                    child: Center(
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 20, vertical: 8),
+                        decoration: BoxDecoration(
+                          color: Colors.black54,
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: const Text(
+                          'Arahkan kamera ke barcode produk',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 20),
+        ],
+      ),
+    );
+  }
+}
+
+// Corner decorator untuk viewfinder
+class _Corner extends StatelessWidget {
+  final Alignment alignment;
+  const _Corner(this.alignment);
+
+  @override
+  Widget build(BuildContext context) {
+    final isTop    = alignment == Alignment.topLeft || alignment == Alignment.topRight;
+    final isLeft   = alignment == Alignment.topLeft || alignment == Alignment.bottomLeft;
+    return Positioned(
+      top:    isTop    ? -1 : null,
+      bottom: !isTop   ? -1 : null,
+      left:   isLeft   ? -1 : null,
+      right:  !isLeft  ? -1 : null,
+      child: Container(
+        width: 24,
+        height: 24,
+        decoration: BoxDecoration(
+          border: Border(
+            top:    isTop    ? const BorderSide(color: Colors.white, width: 3) : BorderSide.none,
+            bottom: !isTop   ? const BorderSide(color: Colors.white, width: 3) : BorderSide.none,
+            left:   isLeft   ? const BorderSide(color: Colors.white, width: 3) : BorderSide.none,
+            right:  !isLeft  ? const BorderSide(color: Colors.white, width: 3) : BorderSide.none,
+          ),
+        ),
+      ),
     );
   }
 }
