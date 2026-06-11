@@ -1150,7 +1150,7 @@ class _SuccessDialogState extends ConsumerState<_SuccessDialog> {
   }
 
   Future<void> _showBluetoothPrinterDialog() async {
-    final List<PrinterBluetooth> devices =
+    final List<dynamic> devices =
         await PrintBluetoothThermal.pairedBluetooths;
 
     if (!context.mounted) return;
@@ -1213,18 +1213,12 @@ class _SuccessDialogState extends ConsumerState<_SuccessDialog> {
 
   Future<void> _doPrint() async {
     final settings = ref.read(storeSettingsProvider);
-    final storeName = settings.maybeWhen(
-      data: (s) => s.storeName,
-      orElse: () => 'KasirKu',
-    );
-    final storeAddress = settings.maybeWhen(
-      data: (s) => s.storeAddress ?? '',
-      orElse: () => '',
-    );
+    final storeName    = settings.storeName;
+    final storeAddress = settings.storeAddress ?? '';
 
     final profile = await CapabilityProfile.load();
     final generator = Generator(PaperSize.mm58, profile);
-    final List<int> bytes = [];
+    var bytes = <int>[];
 
     final now = DateTime.now();
     final dateStr = DateFormat('dd/MM/yyyy HH:mm').format(now);
@@ -1327,15 +1321,9 @@ class _SuccessDialogState extends ConsumerState<_SuccessDialog> {
   Future<void> _sharePdf() async {
     setState(() => _savingPdf = true);
     try {
-      final settings = ref.read(storeSettingsProvider);
-      final storeName = settings.maybeWhen(
-        data: (s) => s.storeName,
-        orElse: () => 'KasirKu',
-      );
-      final storeAddress = settings.maybeWhen(
-        data: (s) => s.storeAddress ?? '',
-        orElse: () => '',
-      );
+      final settings    = ref.read(storeSettingsProvider);
+      final storeName   = settings.storeName;
+      final storeAddress = settings.storeAddress ?? '';
 
       final pdfBytes = await _buildPdf(storeName, storeAddress);
       await Printing.sharePdf(
@@ -1390,8 +1378,9 @@ class _SuccessDialogState extends ConsumerState<_SuccessDialog> {
                 if (storeAddress.isNotEmpty) ...[
                   pw.SizedBox(height: 2),
                   pw.Text(storeAddress,
-                    style: const pw.TextStyle(
-                      fontSize: 8, color: PdfColors.white70),
+                    style: pw.TextStyle(
+                      fontSize: 8,
+                      color: const PdfColor(1, 1, 1, 0.7)),
                     textAlign: pw.TextAlign.center),
                 ],
               ]),
