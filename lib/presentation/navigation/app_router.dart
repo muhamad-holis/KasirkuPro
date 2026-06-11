@@ -13,8 +13,6 @@ final currentNavIndexProvider = StateProvider<int>((ref) => 0);
 class MainNavigation extends ConsumerWidget {
   const MainNavigation({super.key});
 
-  // ✅ FIX 1: Hapus "const" → pakai "final List<Widget>"
-  // "static const" tidak valid karena PelangganScreen bergantung pada provider
   static final List<Widget> _screens = [
     const DashboardScreen(),
     const KasirScreen(),
@@ -34,8 +32,7 @@ class MainNavigation extends ConsumerWidget {
           color: Colors.white,
           boxShadow: [
             BoxShadow(
-              // ✅ FIX 2: withOpacity deprecated → withValues
-              color: Colors.black.withValues(alpha: 0.06),
+              color: Colors.black.withOpacity(0.06),
               blurRadius: 20,
               offset: const Offset(0, -4),
             ),
@@ -122,7 +119,6 @@ class _NavItem extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isActive = index == current;
-    // ✅ FIX 3: Hapus "final colors = ..." yang tidak terpakai
     return GestureDetector(
       onTap: () =>
           ref.read(currentNavIndexProvider.notifier).state = index,
