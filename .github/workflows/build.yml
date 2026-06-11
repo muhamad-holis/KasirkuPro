@@ -28,12 +28,14 @@ jobs:
 
       - name: Create local.properties
         run: |
-          echo "flutter.sdk=$(which flutter | sed 's|/bin/flutter||')" > android/local.properties
-          echo "sdk.dir=$ANDROID_HOME" >> android/local.properties
+          FLUTTER_SDK=$(flutter --version --machine 2>/dev/null | python3 -c "import sys,json; print(json.load(sys.stdin).get('flutterRoot',''))" 2>/dev/null || dirname $(dirname $(which flutter)))
+          echo "flutter.sdk=$FLUTTER_SDK" > android/local.properties
+          echo "sdk.dir=$ANDROID_SDK_ROOT" >> android/local.properties
+          echo "--- local.properties content ---"
           cat android/local.properties
-
-      - name: Flutter doctor
-        run: flutter doctor -v
+          echo "--- Flutter location ---"
+          which flutter
+          flutter --version
 
       - name: Install dependencies
         run: flutter pub get
