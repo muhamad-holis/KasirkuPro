@@ -14,9 +14,11 @@ class SettingsScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final isDark = ref.watch(themeModeProvider);
-    final store  = ref.watch(storeSettingsProvider);
-    final printer = ref.watch(printerSettingsProvider);
+    final isDark   = ref.watch(themeModeProvider);
+    final store    = ref.watch(storeSettingsProvider);
+    final printer  = ref.watch(printerSettingsProvider);
+    final pinValue = ref.watch(pinProvider);
+    final pinActive = pinValue != null && pinValue.isNotEmpty;
 
     return Scaffold(
       appBar: AppBar(
@@ -181,10 +183,15 @@ class SettingsScreen extends ConsumerWidget {
           // ── Keamanan ──────────────────────────────────────
           _Section('Keamanan', [
             _Tile(
-              icon: Icons.lock_outline,
+              icon: pinActive
+                  ? Icons.lock_rounded
+                  : Icons.lock_outline,
               title: 'PIN Aplikasi',
-              subtitle: 'Belum diaktifkan',
-              onTap: () => _showPinSetup(context),
+              subtitle: pinActive
+                  ? 'Aktif — ketuk untuk ubah atau nonaktifkan'
+                  : 'Belum diaktifkan',
+              color: pinActive ? AppColors.success : null,
+              onTap: () => _showPinSetup(context, ref, isPinActive: pinActive),
             ),
             _Tile(
               icon: Icons.fingerprint_outlined,
@@ -403,13 +410,17 @@ class SettingsScreen extends ConsumerWidget {
 
   // ── PIN setup ──────────────────────────────────────────────────────────────
 
-  void _showPinSetup(BuildContext context) {
+  void _showPinSetup(BuildContext context, WidgetRef ref,
+      {required bool isPinActive}) {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       shape: const RoundedRectangleBorder(
           borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
-      builder: (_) => const _PinSetupSheet(),
+      builder: (_) => ProviderScope(
+        parent: ProviderScope.containerOf(context),
+        child: _PinSetupSheet(isPinActive: isPinActive),
+      ),
     );
   }
 
@@ -726,22 +737,78 @@ class _BluetoothScanSheetState
 
 // ─── PIN Setup Sheet ──────────────────────────────────────────────────────────
 
-class _PinSetupSheet extends StatefulWidget {
-  const _PinSetupSheet();
+class _PinSetupSheet extends ConsumerStatefulWidget {
+  final bool isPinActive;
+  const _PinSetupSheet({required this.isPinActive});
 
   @override
-  State<_PinSetupSheet> createState() => _PinSetupSheetState();
+  ConsumerState<_PinSetupSheet> createState() => _PinSetupSheetState();
 }
 
-class _PinSetupSheetState extends State<_PinSetupSheet> {
+class _PinSetupSheetState extends ConsumerState<_PinSetupSheet> {
   final _pin1 = TextEditingController();
   final _pin2 = TextEditingController();
+  bool _saving = false;
 
   @override
   void dispose() {
     _pin1.dispose();
     _pin2.dispose();
     super.dispose();
+  }
+
+  Future<void> _savePin() async {
+    if (_pin1.text.length < 4) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('PIN minimal 4 digit')));
+      return;
+    }
+    if (_pin1.text != _pin2.text) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('PIN tidak cocok'),
+          backgroundColor: AppColors.danger));
+      return;
+    }
+    setState(() => _saving = true);
+    final ok = await ref.read(pinProvider.notifier).setPin(_pin1.text);
+    if (!mounted) return;
+    setState(() => _saving = false);
+    Navigator.pop(context);
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(ok ? '✅ PIN berhasil disimpan' : 'Gagal menyimpan PIN'),
+        backgroundColor: ok ? AppColors.success : AppColors.danger));
+  }
+
+  Future<void> _clearPin() async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('Nonaktifkan PIN?',
+            style: TextStyle(fontWeight: FontWeight.w700)),
+        content: const Text(
+            'Aplikasi tidak akan meminta PIN saat dibuka.'),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Batal')),
+          ElevatedButton(
+              onPressed: () => Navigator.pop(context, true),
+              style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.danger),
+              child: const Text('Nonaktifkan')),
+        ],
+      ),
+    );
+    if (confirm == true) {
+      await ref.read(pinProvider.notifier).clearPin();
+      if (mounted) {
+        Navigator.pop(context);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('PIN dinonaktifkan')));
+      }
+    }
   }
 
   @override
@@ -755,9 +822,10 @@ class _PinSetupSheetState extends State<_PinSetupSheet> {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text('Set PIN Aplikasi',
-              style: TextStyle(
-                  fontWeight: FontWeight.w700, fontSize: 16)),
+          Text(
+            widget.isPinActive ? 'Ubah PIN Aplikasi' : 'Set PIN Aplikasi',
+            style: const TextStyle(
+                fontWeight: FontWeight.w700, fontSize: 16)),
           const SizedBox(height: 6),
           Text('PIN digunakan untuk membuka aplikasi',
               style: TextStyle(
@@ -770,9 +838,11 @@ class _PinSetupSheetState extends State<_PinSetupSheet> {
             maxLength: 6,
             inputFormatters: [FilteringTextInputFormatter.digitsOnly],
             autofocus: true,
-            decoration: const InputDecoration(
-              labelText: 'PIN Baru (4-6 digit)',
-              prefixIcon: Icon(Icons.lock_outline),
+            decoration: InputDecoration(
+              labelText: widget.isPinActive
+                  ? 'PIN Baru (4-6 digit)'
+                  : 'PIN Baru (4-6 digit)',
+              prefixIcon: const Icon(Icons.lock_outline),
             ),
           ),
           const SizedBox(height: 10),
@@ -791,30 +861,29 @@ class _PinSetupSheetState extends State<_PinSetupSheet> {
           SizedBox(
             width: double.infinity,
             child: ElevatedButton.icon(
-              icon: const Icon(Icons.save_outlined, size: 18),
-              label: const Text('Simpan PIN'),
-              onPressed: () {
-                if (_pin1.text.length < 4) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('PIN minimal 4 digit')));
-                  return;
-                }
-                if (_pin1.text != _pin2.text) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('PIN tidak cocok'),
-                      backgroundColor: AppColors.danger));
-                  return;
-                }
-                Navigator.pop(context);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('PIN berhasil disimpan'),
-                    backgroundColor: AppColors.success));
-              },
+              icon: _saving
+                  ? const SizedBox(
+                      width: 18, height: 18,
+                      child: CircularProgressIndicator(
+                          color: Colors.white, strokeWidth: 2))
+                  : const Icon(Icons.save_outlined, size: 18),
+              label: Text(_saving ? 'Menyimpan...' : 'Simpan PIN'),
+              onPressed: _saving ? null : _savePin,
             ),
           ),
+          if (widget.isPinActive) ...[
+            const SizedBox(height: 10),
+            SizedBox(
+              width: double.infinity,
+              child: TextButton.icon(
+                icon: const Icon(Icons.lock_open_outlined,
+                    size: 18, color: AppColors.danger),
+                label: const Text('Nonaktifkan PIN',
+                    style: TextStyle(color: AppColors.danger)),
+                onPressed: _clearPin,
+              ),
+            ),
+          ],
         ],
       ),
     );
