@@ -9,6 +9,78 @@ import '../../providers/settings_provider.dart';
 import '../../navigation/app_router.dart';
 import '../../../data/database/app_database.dart';
 
+// ─── Model ────────────────────────────────────────────────────────────────────
+// Jika DashboardStats sudah didefinisikan di dashboard_provider.dart,
+// hapus class ini dan pastikan export-nya benar di provider tersebut.
+
+class DashboardStats {
+  final double omzetToday;
+  final double omzetChange;
+  final int txToday;
+  final double txChange;
+  final double avgToday;
+  final double avgChange;
+  final int productsSold;
+
+  const DashboardStats({
+    this.omzetToday = 0,
+    this.omzetChange = 0,
+    this.txToday = 0,
+    this.txChange = 0,
+    this.avgToday = 0,
+    this.avgChange = 0,
+    this.productsSold = 0,
+  });
+}
+
+// Provider untuk DashboardStats — override di dashboard_provider.dart jika sudah ada
+final dashboardStatsProvider =
+    FutureProvider<DashboardStats>((ref) async {
+  // Ambil data dari database melalui databaseProvider
+  final db = ref.watch(databaseProvider);
+
+  // Data hari ini
+  final now = DateTime.now();
+  final startOfToday = DateTime(now.year, now.month, now.day);
+  final startOfYesterday =
+      startOfToday.subtract(const Duration(days: 1));
+
+  final todayTx = await db.transactionsDao
+      .getTransactionsByDateRange(startOfToday, now);
+  final yesterdayTx = await db.transactionsDao
+      .getTransactionsByDateRange(startOfYesterday, startOfToday);
+
+  final omzetToday =
+      todayTx.fold<double>(0, (sum, t) => sum + t.total);
+  final omzetYesterday =
+      yesterdayTx.fold<double>(0, (sum, t) => sum + t.total);
+
+  double pctChange(double today, double yesterday) {
+    if (yesterday == 0) return today > 0 ? 100.0 : 0.0;
+    return ((today - yesterday) / yesterday) * 100;
+  }
+
+  final txToday = todayTx.length;
+  final txYesterday = yesterdayTx.length;
+
+  final avgToday = txToday > 0 ? omzetToday / txToday : 0.0;
+  final avgYesterday =
+      txYesterday > 0 ? omzetYesterday / txYesterday : 0.0;
+
+  final productsSold =
+      todayTx.fold<int>(0, (sum, t) => sum + (t.itemCount ?? 0));
+
+  return DashboardStats(
+    omzetToday: omzetToday,
+    omzetChange: pctChange(omzetToday, omzetYesterday),
+    txToday: txToday,
+    txChange: pctChange(txToday.toDouble(), txYesterday.toDouble()),
+    avgToday: avgToday,
+    avgChange: pctChange(avgToday, avgYesterday),
+    productsSold: productsSold,
+  );
+});
+
 class DashboardScreen extends ConsumerWidget {
   const DashboardScreen({super.key});
 
