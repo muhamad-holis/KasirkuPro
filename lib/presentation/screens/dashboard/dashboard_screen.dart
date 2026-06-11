@@ -9,9 +9,7 @@ import '../../providers/settings_provider.dart';
 import '../../navigation/app_router.dart';
 import '../../../data/database/app_database.dart';
 
-// ─── Model ────────────────────────────────────────────────────────────────────
-// Jika DashboardStats sudah didefinisikan di dashboard_provider.dart,
-// hapus class ini dan pastikan export-nya benar di provider tersebut.
+// ─── DashboardStats Model ─────────────────────────────────────────────────────
 
 class DashboardStats {
   final double omzetToday;
@@ -33,19 +31,17 @@ class DashboardStats {
   });
 }
 
-// Provider untuk DashboardStats
-final dashboardStatsProvider =
-    FutureProvider<DashboardStats>((ref) async {
-  final db = ref.watch(databaseProvider);
+// ─── DashboardStats Provider ──────────────────────────────────────────────────
 
+final dashboardStatsProvider = FutureProvider<DashboardStats>((ref) async {
+  final db = ref.watch(databaseProvider);
   final now = DateTime.now();
   final startOfToday = DateTime(now.year, now.month, now.day);
   final endOfToday = startOfToday.add(const Duration(days: 1));
   final startOfYesterday = startOfToday.subtract(const Duration(days: 1));
 
-  // Gunakan method yang benar: getTransactionsByDate(start, end)
-  final todayTx = await db.transactionsDao
-      .getTransactionsByDate(startOfToday, endOfToday);
+  final todayTx =
+      await db.transactionsDao.getTransactionsByDate(startOfToday, endOfToday);
   final yesterdayTx = await db.transactionsDao
       .getTransactionsByDate(startOfYesterday, startOfToday);
 
@@ -61,12 +57,10 @@ final dashboardStatsProvider =
 
   final txToday = todayTx.length;
   final txYesterday = yesterdayTx.length;
-
   final avgToday = txToday > 0 ? omzetToday / txToday : 0.0;
   final avgYesterday =
       txYesterday > 0 ? omzetYesterday / txYesterday : 0.0;
 
-  // Hitung total item terjual dari transactionItems hari ini
   int productsSold = 0;
   for (final tx in todayTx) {
     final items = await db.transactionsDao.getTransactionItems(tx.id);
@@ -84,49 +78,60 @@ final dashboardStatsProvider =
   );
 });
 
+// ─── Provider items per transaction ──────────────────────────────────────────
+
+final _txItemsProvider =
+    FutureProvider.family<List<TransactionItem>, int>((ref, txId) =>
+        ref
+            .watch(databaseProvider)
+            .transactionsDao
+            .getTransactionItems(txId));
+
+// ─── DashboardScreen ──────────────────────────────────────────────────────────
+
 class DashboardScreen extends ConsumerWidget {
   const DashboardScreen({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final stats    = ref.watch(dashboardStatsProvider);
+    final stats = ref.watch(dashboardStatsProvider);
     final lowStock = ref.watch(lowStockProvider);
-    final todayTx  = ref.watch(todayTransactionsProvider);
+    final todayTx = ref.watch(todayTransactionsProvider);
 
     return Scaffold(
       backgroundColor: AppColors.bg,
       body: CustomScrollView(
         slivers: [
+          // ─ Header hijau teal ─
           SliverToBoxAdapter(child: _Header()),
 
           SliverPadding(
-            padding: const EdgeInsets.all(16),
+            padding: const EdgeInsets.fromLTRB(16, 20, 16, 0),
             sliver: SliverList(
               delegate: SliverChildListDelegate([
-
-                // Ringkasan hari ini
+                // Ringkasan Hari Ini
                 _SectionTitle(
                   'Ringkasan Hari Ini',
                   action: 'Lihat semua',
                   onAction: () => ref
                       .read(currentNavIndexProvider.notifier)
-                      .state = 4, // tab Laporan
+                      .state = 1, // tab Laporan (index 1)
                 ),
-                const SizedBox(height: 10),
+                const SizedBox(height: 12),
                 stats.when(
                   data: (s) => _SummaryGrid(stats: s),
-                  loading: () => _shimmer(),
-                  error: (e, _) => Text('$e'),
+                  loading: () => _shimmerGrid(),
+                  error: (e, _) => _errorWidget('$e'),
                 ),
-                const SizedBox(height: 20),
+                const SizedBox(height: 24),
 
                 // Aksi Cepat
                 _SectionTitle('Aksi Cepat'),
-                const SizedBox(height: 10),
+                const SizedBox(height: 12),
                 _QuickActions(),
-                const SizedBox(height: 20),
+                const SizedBox(height: 24),
 
-                // Low stock banner
+                // Low Stock Banner (jika ada)
                 lowStock.when(
                   data: (list) => list.isEmpty
                       ? const SizedBox()
@@ -134,29 +139,29 @@ class DashboardScreen extends ConsumerWidget {
                           products: list,
                           onLihatStok: () => ref
                               .read(currentNavIndexProvider.notifier)
-                              .state = 2, // tab Stok
+                              .state = 3, // tab Stock (index 3)
                         ),
                   loading: () => const SizedBox(),
                   error: (_, __) => const SizedBox(),
                 ),
 
-                // Transaksi terakhir
+                // Transaksi Terakhir
                 _SectionTitle(
                   'Transaksi Terakhir',
                   action: 'Lihat semua',
                   onAction: () => ref
                       .read(currentNavIndexProvider.notifier)
-                      .state = 4, // tab Laporan
+                      .state = 1, // tab Laporan
                 ),
-                const SizedBox(height: 10),
+                const SizedBox(height: 12),
                 todayTx.when(
                   data: (list) => list.isEmpty
                       ? _emptyTx()
                       : _TxList(transactions: list.take(5).toList()),
-                  loading: () => _shimmer(),
-                  error: (e, _) => Text('$e'),
+                  loading: () => _shimmerList(),
+                  error: (e, _) => _errorWidget('$e'),
                 ),
-                const SizedBox(height: 80),
+                const SizedBox(height: 100),
               ]),
             ),
           ),
@@ -165,29 +170,46 @@ class DashboardScreen extends ConsumerWidget {
     );
   }
 
-  Widget _shimmer() => Container(
-    height: 120,
-    decoration: BoxDecoration(
-      color: Colors.grey.shade100,
-      borderRadius: BorderRadius.circular(16),
-    ),
-  );
+  Widget _shimmerGrid() => Container(
+        height: 180,
+        decoration: BoxDecoration(
+          color: Colors.grey.shade100,
+          borderRadius: BorderRadius.circular(16),
+        ),
+      );
 
-  Widget _emptyTx() => Center(
-    child: Padding(
-      padding: const EdgeInsets.all(24),
-      child: Column(children: [
-        Icon(Icons.receipt_long_outlined,
-          size: 48, color: Colors.grey.shade300),
-        const SizedBox(height: 8),
-        Text('Belum ada transaksi hari ini',
-          style: TextStyle(color: Colors.grey.shade400)),
-      ]),
-    ),
-  );
+  Widget _shimmerList() => Container(
+        height: 80,
+        decoration: BoxDecoration(
+          color: Colors.grey.shade100,
+          borderRadius: BorderRadius.circular(14),
+        ),
+      );
+
+  Widget _errorWidget(String msg) => Padding(
+        padding: const EdgeInsets.all(8),
+        child: Text(msg,
+            style: const TextStyle(
+                color: AppColors.danger, fontSize: 12)),
+      );
+
+  Widget _emptyTx() => Container(
+        padding: const EdgeInsets.symmetric(vertical: 32),
+        alignment: Alignment.center,
+        child: Column(children: [
+          Icon(Icons.receipt_long_outlined,
+              size: 48, color: Colors.grey.shade300),
+          const SizedBox(height: 8),
+          Text(
+            'Belum ada transaksi hari ini',
+            style: TextStyle(
+                color: Colors.grey.shade400, fontSize: 13),
+          ),
+        ]),
+      );
 }
 
-// ─── Header ──────────────────────────────────────────────────────────────────
+// ─── Header ───────────────────────────────────────────────────────────────────
 
 class _Header extends ConsumerWidget {
   @override
@@ -203,49 +225,94 @@ class _Header extends ConsumerWidget {
         ),
       ),
       padding: EdgeInsets.only(
-        top: MediaQuery.of(context).padding.top + 12,
-        left: 20, right: 20, bottom: 20,
+        top: MediaQuery.of(context).padding.top + 16,
+        left: 20,
+        right: 20,
+        bottom: 20,
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // Row: Greeting + Icons (Bell + Settings)
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text('Halo, Kasir 👋',
+                children: const [
+                  Text(
+                    'Halo, Kasir 👋',
                     style: TextStyle(
                       color: Colors.white,
                       fontSize: 20,
-                      fontWeight: FontWeight.w700,
-                    )),
-                  const SizedBox(height: 2),
-                  const Text('Selamat datang kembali',
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: -0.3,
+                    ),
+                  ),
+                  SizedBox(height: 2),
+                  Text(
+                    'Selamat datang kembali',
                     style: TextStyle(
                       color: Colors.white70,
                       fontSize: 13,
-                    )),
+                    ),
+                  ),
                 ],
               ),
-              // Bell icon — dekoratif, belum ada sistem notifikasi
-              Container(
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.2),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: const Icon(Icons.notifications_outlined,
-                  color: Colors.white, size: 22),
+              Row(
+                children: [
+                  // Bell dengan dot merah
+                  Stack(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.15),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: const Icon(
+                          Icons.notifications_outlined,
+                          color: Colors.white,
+                          size: 22,
+                        ),
+                      ),
+                      Positioned(
+                        top: 6,
+                        right: 6,
+                        child: Container(
+                          width: 8,
+                          height: 8,
+                          decoration: const BoxDecoration(
+                            color: Color(0xFFEF4444),
+                            shape: BoxShape.circle,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(width: 8),
+                  // Settings icon
+                  Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.15),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: const Icon(
+                      Icons.settings_outlined,
+                      color: Colors.white,
+                      size: 22,
+                    ),
+                  ),
+                ],
               ),
             ],
           ),
-          const SizedBox(height: 14),
-          // Nama toko dari storeSettingsProvider
+          const SizedBox(height: 16),
+          // Kartu nama toko
           Container(
             padding: const EdgeInsets.symmetric(
-              horizontal: 14, vertical: 12),
+                horizontal: 14, vertical: 12),
             decoration: BoxDecoration(
               color: Colors.white,
               borderRadius: BorderRadius.circular(14),
@@ -257,8 +324,11 @@ class _Header extends ConsumerWidget {
                   color: AppColors.primaryLight,
                   borderRadius: BorderRadius.circular(10),
                 ),
-                child: const Icon(Icons.storefront_outlined,
-                  color: AppColors.primary, size: 22),
+                child: const Icon(
+                  Icons.storefront_outlined,
+                  color: AppColors.primary,
+                  size: 22,
+                ),
               ),
               const SizedBox(width: 12),
               Expanded(
@@ -273,7 +343,8 @@ class _Header extends ConsumerWidget {
                         fontWeight: FontWeight.w700,
                         fontSize: 14,
                         color: AppColors.textPrimary,
-                      )),
+                      ),
+                    ),
                     Text(
                       settings.storeAddress.isNotEmpty
                           ? settings.storeAddress
@@ -283,12 +354,16 @@ class _Header extends ConsumerWidget {
                       style: const TextStyle(
                         fontSize: 12,
                         color: AppColors.textSecondary,
-                      )),
+                      ),
+                    ),
                   ],
                 ),
               ),
-              const Icon(Icons.keyboard_arrow_down_rounded,
-                color: AppColors.textSecondary),
+              const Icon(
+                Icons.chevron_right,
+                color: AppColors.textSecondary,
+                size: 20,
+              ),
             ]),
           ),
         ],
@@ -303,6 +378,7 @@ class _SectionTitle extends StatelessWidget {
   final String title;
   final String? action;
   final VoidCallback? onAction;
+
   const _SectionTitle(this.title, {this.action, this.onAction});
 
   @override
@@ -310,24 +386,28 @@ class _SectionTitle extends StatelessWidget {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        Text(title,
+        Text(
+          title,
           style: const TextStyle(
-            fontSize: 15,
-            fontWeight: FontWeight.w700,
+            fontSize: 16,
+            fontWeight: FontWeight.w800,
             color: AppColors.textPrimary,
-          )),
+          ),
+        ),
         if (action != null)
           GestureDetector(
             onTap: onAction,
             child: Row(children: [
-              Text(action!,
+              Text(
+                action!,
                 style: const TextStyle(
-                  fontSize: 12,
+                  fontSize: 13,
                   color: AppColors.primary,
                   fontWeight: FontWeight.w600,
-                )),
+                ),
+              ),
               const Icon(Icons.chevron_right,
-                size: 16, color: AppColors.primary),
+                  size: 16, color: AppColors.primary),
             ]),
           ),
       ],
@@ -335,13 +415,14 @@ class _SectionTitle extends StatelessWidget {
   }
 }
 
-// ─── Summary Grid ─────────────────────────────────────────────────────────────
+// ─── Summary Grid (2x2) ───────────────────────────────────────────────────────
 
 class _SummaryGrid extends StatelessWidget {
   final DashboardStats stats;
   const _SummaryGrid({required this.stats});
 
-  String _badge(double pct) {
+  String _badge(double pct, {bool isProductSold = false}) {
+    if (isProductSold) return 'hari ini';
     if (pct == 0) return '= sama seperti kemarin';
     final sign = pct > 0 ? '+' : '';
     return '$sign${pct.toStringAsFixed(1)}% dari kemarin';
@@ -351,46 +432,57 @@ class _SummaryGrid extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return GridView.count(
-      crossAxisCount: 2,
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      mainAxisSpacing: 10,
-      crossAxisSpacing: 10,
-      childAspectRatio: 1.5,
+    return Column(
       children: [
-        _StatCard(
-          title: 'Total Penjualan',
-          value: CurrencyFormatter.format(stats.omzetToday),
-          badge: _badge(stats.omzetChange),
-          isUp: _isUp(stats.omzetChange),
-          icon: Icons.shopping_bag_outlined,
-          color: AppColors.primary,
-        ),
-        _StatCard(
-          title: 'Transaksi',
-          value: '${stats.txToday}',
-          badge: _badge(stats.txChange),
-          isUp: _isUp(stats.txChange),
-          icon: Icons.receipt_long_outlined,
-          color: AppColors.info,
-        ),
-        _StatCard(
-          title: 'Rata-rata Transaksi',
-          value: CurrencyFormatter.format(stats.avgToday),
-          badge: _badge(stats.avgChange),
-          isUp: _isUp(stats.avgChange),
-          icon: Icons.bar_chart_rounded,
-          color: AppColors.success,
-        ),
-        _StatCard(
-          title: 'Produk Terjual',
-          value: '${stats.productsSold}',
-          badge: 'hari ini',
-          isUp: true,
-          icon: Icons.inventory_2_outlined,
-          color: AppColors.warning,
-        ),
+        // Row 1
+        Row(children: [
+          Expanded(
+            child: _StatCard(
+              title: 'Total Penjualan',
+              value: CurrencyFormatter.format(stats.omzetToday),
+              badge: _badge(stats.omzetChange),
+              isUp: _isUp(stats.omzetChange),
+              icon: Icons.shopping_bag_outlined,
+              color: AppColors.primary,
+            ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: _StatCard(
+              title: 'Transaksi',
+              value: '${stats.txToday}',
+              badge: _badge(stats.txChange),
+              isUp: _isUp(stats.txChange),
+              icon: Icons.receipt_long_outlined,
+              color: AppColors.info,
+            ),
+          ),
+        ]),
+        const SizedBox(height: 10),
+        // Row 2
+        Row(children: [
+          Expanded(
+            child: _StatCard(
+              title: 'Rata-rata Transaksi',
+              value: CurrencyFormatter.format(stats.avgToday),
+              badge: _badge(stats.avgChange),
+              isUp: _isUp(stats.avgChange),
+              icon: Icons.bar_chart_rounded,
+              color: AppColors.success,
+            ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: _StatCard(
+              title: 'Produk Terjual',
+              value: '${stats.productsSold}',
+              badge: _badge(0, isProductSold: true),
+              isUp: true,
+              icon: Icons.inventory_2_outlined,
+              color: AppColors.warning,
+            ),
+          ),
+        ]),
       ],
     );
   }
@@ -414,9 +506,8 @@ class _StatCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final badgeColor = isUp ? AppColors.success : AppColors.danger;
-    final badgeIcon = isUp
-        ? Icons.arrow_upward_rounded
-        : Icons.arrow_downward_rounded;
+    final badgeIcon =
+        isUp ? Icons.arrow_upward_rounded : Icons.arrow_downward_rounded;
 
     return Container(
       padding: const EdgeInsets.all(14),
@@ -429,39 +520,46 @@ class _StatCard extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Container(
-            padding: const EdgeInsets.all(7),
+            padding: const EdgeInsets.all(8),
             decoration: BoxDecoration(
-              color: color.withOpacity(0.1),
+              color: color.withOpacity(0.12),
               borderRadius: BorderRadius.circular(10),
             ),
-            child: Icon(icon, color: color, size: 18),
+            child: Icon(icon, color: color, size: 20),
           ),
-          const Spacer(),
-          Text(value,
+          const SizedBox(height: 10),
+          Text(
+            value,
             style: TextStyle(
-              fontSize: 16,
+              fontSize: 17,
               fontWeight: FontWeight.w800,
               color: color,
-            )),
-          Text(title,
+            ),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            title,
             style: const TextStyle(
-              fontSize: 10,
+              fontSize: 11,
               color: AppColors.textSecondary,
               fontWeight: FontWeight.w500,
-            )),
-          const SizedBox(height: 2),
+            ),
+          ),
+          const SizedBox(height: 4),
           Row(children: [
             Icon(badgeIcon, size: 10, color: badgeColor),
             const SizedBox(width: 2),
             Flexible(
-              child: Text(badge,
+              child: Text(
+                badge,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(
-                  fontSize: 9,
+                  fontSize: 10,
                   color: badgeColor,
                   fontWeight: FontWeight.w600,
-                )),
+                ),
+              ),
             ),
           ]),
         ],
@@ -470,28 +568,25 @@ class _StatCard extends StatelessWidget {
   }
 }
 
-// ─── Quick Actions ────────────────────────────────────────────────────────────
+// ─── Quick Actions (4 tombol) ─────────────────────────────────────────────────
 
 class _QuickActions extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final actions = [
-      _QuickAction(
+      _QA(
         icon: Icons.shopping_cart_outlined,
-        label: 'Mulai\nKasir',
+        label: 'Mulai Kasir',
         color: AppColors.primary,
-        onTap: () => ref
-            .read(currentNavIndexProvider.notifier)
-            .state = 1, // tab Kasir
+        onTap: () =>
+            ref.read(currentNavIndexProvider.notifier).state = 2, // Kasir
       ),
-      _QuickAction(
+      _QA(
         icon: Icons.add_box_outlined,
-        label: 'Tambah\nProduk',
+        label: 'Tambah Produk',
         color: AppColors.success,
         onTap: () {
-          // Navigasi ke Stok dulu, lalu buka sheet tambah produk
-          ref.read(currentNavIndexProvider.notifier).state = 2;
-          // Kecil delay agar screen sudah mount
+          ref.read(currentNavIndexProvider.notifier).state = 3; // Stock
           Future.delayed(const Duration(milliseconds: 300), () {
             if (context.mounted) {
               showModalBottomSheet(
@@ -503,28 +598,26 @@ class _QuickActions extends ConsumerWidget {
                 ),
                 builder: (_) => ProviderScope(
                   parent: ProviderScope.containerOf(context),
-                  child: const _AddProductQuickSheet(),
+                  child: const _AddProductSheet(),
                 ),
               );
             }
           });
         },
       ),
-      _QuickAction(
+      _QA(
         icon: Icons.history_rounded,
-        label: 'Riwayat\nTransaksi',
+        label: 'Riwayat Transaksi',
         color: AppColors.info,
-        onTap: () => ref
-            .read(currentNavIndexProvider.notifier)
-            .state = 4, // tab Laporan
+        onTap: () =>
+            ref.read(currentNavIndexProvider.notifier).state = 1, // Laporan
       ),
-      _QuickAction(
+      _QA(
         icon: Icons.insert_chart_outlined_rounded,
-        label: 'Laporan\nHari Ini',
+        label: 'Laporan Hari Ini',
         color: AppColors.warning,
-        onTap: () => ref
-            .read(currentNavIndexProvider.notifier)
-            .state = 4, // tab Laporan
+        onTap: () =>
+            ref.read(currentNavIndexProvider.notifier).state = 1, // Laporan
       ),
     ];
 
@@ -533,7 +626,7 @@ class _QuickActions extends ConsumerWidget {
           .map((a) => Expanded(
                 child: Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 4),
-                  child: _QuickActionCard(action: a),
+                  child: _QACard(qa: a),
                 ),
               ))
           .toList(),
@@ -541,12 +634,12 @@ class _QuickActions extends ConsumerWidget {
   }
 }
 
-class _QuickAction {
+class _QA {
   final IconData icon;
   final String label;
   final Color color;
   final VoidCallback onTap;
-  const _QuickAction({
+  const _QA({
     required this.icon,
     required this.label,
     required this.color,
@@ -554,16 +647,16 @@ class _QuickAction {
   });
 }
 
-class _QuickActionCard extends StatelessWidget {
-  final _QuickAction action;
-  const _QuickActionCard({required this.action});
+class _QACard extends StatelessWidget {
+  final _QA qa;
+  const _QACard({required this.qa});
 
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
-      onTap: action.onTap,
+      onTap: qa.onTap,
       child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 8),
+        padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 6),
         decoration: BoxDecoration(
           color: Colors.white,
           borderRadius: BorderRadius.circular(14),
@@ -575,20 +668,23 @@ class _QuickActionCard extends StatelessWidget {
             Container(
               padding: const EdgeInsets.all(10),
               decoration: BoxDecoration(
-                color: action.color.withOpacity(0.1),
+                color: qa.color.withOpacity(0.12),
                 borderRadius: BorderRadius.circular(12),
               ),
-              child: Icon(action.icon, color: action.color, size: 22),
+              child: Icon(qa.icon, color: qa.color, size: 22),
             ),
             const SizedBox(height: 8),
-            Text(action.label,
+            Text(
+              qa.label,
               textAlign: TextAlign.center,
+              maxLines: 2,
               style: const TextStyle(
                 fontSize: 11,
                 fontWeight: FontWeight.w600,
                 color: AppColors.textPrimary,
                 height: 1.3,
-              )),
+              ),
+            ),
           ],
         ),
       ),
@@ -601,21 +697,19 @@ class _QuickActionCard extends StatelessWidget {
 class _LowStockBanner extends StatelessWidget {
   final List products;
   final VoidCallback onLihatStok;
-  const _LowStockBanner({
-    required this.products,
-    required this.onLihatStok,
-  });
+  const _LowStockBanner(
+      {required this.products, required this.onLihatStok});
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      margin: const EdgeInsets.only(bottom: 20),
+      margin: const EdgeInsets.only(bottom: 24),
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: const Color(0xFFFFF7ED),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: AppColors.warning.withOpacity(0.3)),
+        border:
+            Border.all(color: AppColors.warning.withOpacity(0.3)),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -626,14 +720,16 @@ class _LowStockBanner extends StatelessWidget {
               children: [
                 Row(children: [
                   const Icon(Icons.warning_amber_rounded,
-                    size: 16, color: AppColors.warning),
+                      size: 16, color: AppColors.warning),
                   const SizedBox(width: 6),
-                  const Text('Stok Hampir Habis',
+                  const Text(
+                    'Stok Hampir Habis',
                     style: TextStyle(
                       color: AppColors.warning,
                       fontWeight: FontWeight.w700,
                       fontSize: 14,
-                    )),
+                    ),
+                  ),
                 ]),
                 const SizedBox(height: 4),
                 Text(
@@ -643,23 +739,26 @@ class _LowStockBanner extends StatelessWidget {
                     fontSize: 12,
                     color: AppColors.textSecondary,
                     height: 1.4,
-                  )),
+                  ),
+                ),
                 const SizedBox(height: 10),
                 GestureDetector(
                   onTap: onLihatStok,
                   child: Container(
                     padding: const EdgeInsets.symmetric(
-                      horizontal: 16, vertical: 8),
+                        horizontal: 16, vertical: 8),
                     decoration: BoxDecoration(
                       color: AppColors.warning,
                       borderRadius: BorderRadius.circular(8),
                     ),
-                    child: const Text('Lihat Stok',
+                    child: const Text(
+                      'Lihat Stok',
                       style: TextStyle(
                         color: Colors.white,
                         fontSize: 12,
                         fontWeight: FontWeight.w700,
-                      )),
+                      ),
+                    ),
                   ),
                 ),
               ],
@@ -667,8 +766,7 @@ class _LowStockBanner extends StatelessWidget {
           ),
           const SizedBox(width: 12),
           Icon(Icons.inventory_2_outlined,
-            size: 56,
-            color: AppColors.warning.withOpacity(0.3)),
+              size: 52, color: AppColors.warning.withOpacity(0.3)),
         ],
       ),
     );
@@ -686,15 +784,15 @@ class _TxList extends ConsumerWidget {
     return Column(
       children: transactions
           .map((tx) => GestureDetector(
-                onTap: () => _showTxDetail(context, ref, tx),
+                onTap: () => _showDetail(context, ref, tx),
                 child: Container(
                   margin: const EdgeInsets.only(bottom: 8),
                   padding: const EdgeInsets.all(14),
                   decoration: BoxDecoration(
                     color: Colors.white,
                     borderRadius: BorderRadius.circular(14),
-                    border: Border.all(
-                        color: AppColors.border, width: 0.5),
+                    border:
+                        Border.all(color: AppColors.border, width: 0.5),
                   ),
                   child: Row(children: [
                     Container(
@@ -704,40 +802,47 @@ class _TxList extends ConsumerWidget {
                         borderRadius: BorderRadius.circular(12),
                       ),
                       child: const Icon(Icons.shopping_bag_outlined,
-                        color: AppColors.primary, size: 20),
+                          color: AppColors.primary, size: 20),
                     ),
                     const SizedBox(width: 12),
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(tx.invoiceNumber,
+                          Text(
+                            tx.invoiceNumber,
                             style: const TextStyle(
                               fontWeight: FontWeight.w700,
                               fontSize: 13,
-                            )),
+                              color: AppColors.textPrimary,
+                            ),
+                          ),
+                          const SizedBox(height: 2),
                           Text(
                             _formatDate(tx.createdAt),
                             style: const TextStyle(
                               fontSize: 11,
                               color: AppColors.textSecondary,
-                            )),
+                            ),
+                          ),
                         ],
                       ),
                     ),
                     Column(
                       crossAxisAlignment: CrossAxisAlignment.end,
                       children: [
-                        Text(CurrencyFormatter.format(tx.total),
+                        Text(
+                          CurrencyFormatter.format(tx.total),
                           style: const TextStyle(
                             fontWeight: FontWeight.w700,
                             fontSize: 14,
                             color: AppColors.textPrimary,
-                          )),
+                          ),
+                        ),
+                        const SizedBox(height: 4),
                         Container(
-                          margin: const EdgeInsets.only(top: 3),
                           padding: const EdgeInsets.symmetric(
-                            horizontal: 8, vertical: 2),
+                              horizontal: 8, vertical: 2),
                           decoration: BoxDecoration(
                             color: AppColors.success.withOpacity(0.1),
                             borderRadius: BorderRadius.circular(20),
@@ -748,13 +853,11 @@ class _TxList extends ConsumerWidget {
                               fontSize: 10,
                               color: AppColors.success,
                               fontWeight: FontWeight.w600,
-                            )),
+                            ),
+                          ),
                         ),
                       ],
                     ),
-                    const SizedBox(width: 4),
-                    const Icon(Icons.chevron_right,
-                      size: 16, color: AppColors.textSecondary),
                   ]),
                 ),
               ))
@@ -762,7 +865,7 @@ class _TxList extends ConsumerWidget {
     );
   }
 
-  void _showTxDetail(
+  void _showDetail(
       BuildContext context, WidgetRef ref, Transaction tx) {
     showModalBottomSheet(
       context: context,
@@ -777,20 +880,25 @@ class _TxList extends ConsumerWidget {
     );
   }
 
-  String _methodLabel(String? method) {
-    switch (method) {
-      case 'tunai':    return 'Tunai';
-      case 'transfer': return 'Transfer';
-      case 'qris':     return 'QRIS';
-      case 'hutang':   return 'Hutang';
-      default:         return 'Selesai';
+  String _methodLabel(String? m) {
+    switch (m) {
+      case 'tunai':
+        return 'Tunai';
+      case 'transfer':
+        return 'Transfer';
+      case 'qris':
+        return 'QRIS';
+      case 'hutang':
+        return 'Hutang';
+      default:
+        return 'Selesai';
     }
   }
 
   String _formatDate(DateTime dt) {
-    final months = [
+    const months = [
       'Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun',
-      'Jul', 'Ags', 'Sep', 'Okt', 'Nov', 'Des'
+      'Jul', 'Ags', 'Sep', 'Okt', 'Nov', 'Des',
     ];
     return '${dt.day} ${months[dt.month - 1]} ${dt.year} • '
         '${dt.hour.toString().padLeft(2, '0')}:'
@@ -806,9 +914,7 @@ class _TxDetailSheet extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final itemsFuture = ref.watch(
-      _txItemsProvider(transaction.id),
-    );
+    final itemsFuture = ref.watch(_txItemsProvider(transaction.id));
 
     return DraggableScrollableSheet(
       expand: false,
@@ -816,36 +922,39 @@ class _TxDetailSheet extends ConsumerWidget {
       maxChildSize: 0.92,
       builder: (_, controller) => Column(
         children: [
-          // Handle
           Container(
             margin: const EdgeInsets.only(top: 12, bottom: 8),
-            width: 40, height: 4,
+            width: 40,
+            height: 4,
             decoration: BoxDecoration(
               color: Colors.grey.shade300,
               borderRadius: BorderRadius.circular(2),
             ),
           ),
           Padding(
-            padding:
-                const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
+            padding: const EdgeInsets.symmetric(
+                horizontal: 20, vertical: 4),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(transaction.invoiceNumber,
+                    Text(
+                      transaction.invoiceNumber,
                       style: const TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.w800,
                         color: AppColors.textPrimary,
-                      )),
+                      ),
+                    ),
                     Text(
                       _formatDate(transaction.createdAt),
                       style: const TextStyle(
                         fontSize: 12,
                         color: AppColors.textSecondary,
-                      )),
+                      ),
+                    ),
                   ],
                 ),
                 Container(
@@ -861,7 +970,8 @@ class _TxDetailSheet extends ConsumerWidget {
                       fontSize: 12,
                       color: AppColors.success,
                       fontWeight: FontWeight.w700,
-                    )),
+                    ),
+                  ),
                 ),
               ],
             ),
@@ -872,19 +982,20 @@ class _TxDetailSheet extends ConsumerWidget {
               controller: controller,
               padding: const EdgeInsets.all(20),
               children: [
-                // Item produk
-                const Text('Item Produk',
+                const Text(
+                  'Item Produk',
                   style: TextStyle(
                     fontSize: 13,
                     fontWeight: FontWeight.w700,
                     color: AppColors.textSecondary,
-                  )),
+                  ),
+                ),
                 const SizedBox(height: 8),
                 itemsFuture.when(
                   data: (items) => items.isEmpty
                       ? const Text('Tidak ada item',
-                          style: TextStyle(
-                              color: AppColors.textSecondary))
+                          style:
+                              TextStyle(color: AppColors.textSecondary))
                       : Column(
                           children: items
                               .map((item) => _ItemRow(item: item))
@@ -893,20 +1004,24 @@ class _TxDetailSheet extends ConsumerWidget {
                     child: Padding(
                       padding: EdgeInsets.all(16),
                       child: CircularProgressIndicator(),
-                    )),
-                  error: (e, _) => Text('Error: $e'),
+                    ),
+                  ),
+                  error: (e, _) =>
+                      Text('Error: $e',
+                          style: const TextStyle(
+                              color: AppColors.danger)),
                 ),
                 const Divider(height: 24),
-                // Ringkasan bayar
-                _SummaryRow('Subtotal',
-                  CurrencyFormatter.format(transaction.subtotal)),
-                if ((transaction.discountAmount) > 0)
+                _SummaryRow(
+                    'Subtotal',
+                    CurrencyFormatter.format(transaction.subtotal)),
+                if (transaction.discountAmount > 0)
                   _SummaryRow(
                     'Diskon',
                     '- ${CurrencyFormatter.format(transaction.discountAmount)}',
                     color: AppColors.danger,
                   ),
-                if ((transaction.taxAmount) > 0)
+                if (transaction.taxAmount > 0)
                   _SummaryRow(
                     'Pajak',
                     CurrencyFormatter.format(transaction.taxAmount),
@@ -940,7 +1055,7 @@ class _TxDetailSheet extends ConsumerWidget {
                     ),
                     child: Row(children: [
                       const Icon(Icons.notes_rounded,
-                        size: 16, color: AppColors.textSecondary),
+                          size: 16, color: AppColors.textSecondary),
                       const SizedBox(width: 8),
                       Expanded(
                         child: Text(
@@ -948,7 +1063,8 @@ class _TxDetailSheet extends ConsumerWidget {
                           style: const TextStyle(
                             fontSize: 12,
                             color: AppColors.textSecondary,
-                          )),
+                          ),
+                        ),
                       ),
                     ]),
                   ),
@@ -964,32 +1080,29 @@ class _TxDetailSheet extends ConsumerWidget {
 
   String _methodLabel(String? m) {
     switch (m) {
-      case 'tunai':    return 'Tunai';
-      case 'transfer': return 'Transfer';
-      case 'qris':     return 'QRIS';
-      case 'hutang':   return 'Hutang';
-      default:         return 'Selesai';
+      case 'tunai':
+        return 'Tunai';
+      case 'transfer':
+        return 'Transfer';
+      case 'qris':
+        return 'QRIS';
+      case 'hutang':
+        return 'Hutang';
+      default:
+        return 'Selesai';
     }
   }
 
   String _formatDate(DateTime dt) {
-    final months = [
+    const months = [
       'Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun',
-      'Jul', 'Ags', 'Sep', 'Okt', 'Nov', 'Des'
+      'Jul', 'Ags', 'Sep', 'Okt', 'Nov', 'Des',
     ];
     return '${dt.day} ${months[dt.month - 1]} ${dt.year} • '
         '${dt.hour.toString().padLeft(2, '0')}:'
         '${dt.minute.toString().padLeft(2, '0')}';
   }
 }
-
-// Provider untuk items per transaction
-final _txItemsProvider =
-    FutureProvider.family<List<TransactionItem>, int>((ref, txId) =>
-        ref
-            .watch(databaseProvider)
-            .transactionsDao
-            .getTransactionItems(txId));
 
 class _ItemRow extends StatelessWidget {
   final TransactionItem item;
@@ -1004,25 +1117,30 @@ class _ItemRow extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(item.productName,
+              Text(
+                item.productName,
                 style: const TextStyle(
                   fontSize: 13,
                   fontWeight: FontWeight.w600,
-                )),
+                ),
+              ),
               Text(
                 '${item.quantity}x ${CurrencyFormatter.format(item.price)}',
                 style: const TextStyle(
                   fontSize: 11,
                   color: AppColors.textSecondary,
-                )),
+                ),
+              ),
             ],
           ),
         ),
-        Text(CurrencyFormatter.format(item.subtotal),
+        Text(
+          CurrencyFormatter.format(item.subtotal),
           style: const TextStyle(
             fontSize: 13,
             fontWeight: FontWeight.w700,
-          )),
+          ),
+        ),
       ]),
     );
   }
@@ -1042,22 +1160,24 @@ class _SummaryRow extends StatelessWidget {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(label,
+          Text(
+            label,
             style: TextStyle(
               fontSize: bold ? 14 : 13,
-              fontWeight:
-                  bold ? FontWeight.w700 : FontWeight.w500,
+              fontWeight: bold ? FontWeight.w700 : FontWeight.w500,
               color: bold
                   ? AppColors.textPrimary
                   : AppColors.textSecondary,
-            )),
-          Text(value,
+            ),
+          ),
+          Text(
+            value,
             style: TextStyle(
               fontSize: bold ? 14 : 13,
-              fontWeight:
-                  bold ? FontWeight.w800 : FontWeight.w600,
+              fontWeight: bold ? FontWeight.w800 : FontWeight.w600,
               color: color ?? AppColors.textPrimary,
-            )),
+            ),
+          ),
         ],
       ),
     );
@@ -1065,10 +1185,9 @@ class _SummaryRow extends StatelessWidget {
 }
 
 // ─── Add Product Quick Sheet ──────────────────────────────────────────────────
-// Sheet sederhana redirect ke Stok screen — produk form sudah ada di sana
 
-class _AddProductQuickSheet extends ConsumerWidget {
-  const _AddProductQuickSheet();
+class _AddProductSheet extends ConsumerWidget {
+  const _AddProductSheet();
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -1083,7 +1202,8 @@ class _AddProductQuickSheet extends ConsumerWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           Container(
-            width: 40, height: 4,
+            width: 40,
+            height: 4,
             decoration: BoxDecoration(
               color: Colors.grey.shade300,
               borderRadius: BorderRadius.circular(2),
@@ -1091,23 +1211,23 @@ class _AddProductQuickSheet extends ConsumerWidget {
           ),
           const SizedBox(height: 20),
           const Icon(Icons.inventory_2_outlined,
-            size: 48, color: AppColors.primary),
+              size: 48, color: AppColors.primary),
           const SizedBox(height: 12),
-          const Text('Tambah Produk',
-            style: TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.w800,
-            )),
+          const Text(
+            'Tambah Produk',
+            style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
+          ),
           const SizedBox(height: 8),
           const Text(
-            'Kamu sudah ada di tab Stok. '
+            'Kamu sudah ada di tab Stock. '
             'Tap tombol + di bawah layar untuk menambah produk baru.',
             textAlign: TextAlign.center,
             style: TextStyle(
               color: AppColors.textSecondary,
               fontSize: 13,
               height: 1.5,
-            )),
+            ),
+          ),
           const SizedBox(height: 24),
           SizedBox(
             width: double.infinity,
@@ -1122,7 +1242,7 @@ class _AddProductQuickSheet extends ConsumerWidget {
                 ),
               ),
               child: const Text('Oke, Mengerti',
-                style: TextStyle(fontWeight: FontWeight.w700)),
+                  style: TextStyle(fontWeight: FontWeight.w700)),
             ),
           ),
         ],
