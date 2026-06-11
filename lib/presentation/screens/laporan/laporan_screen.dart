@@ -134,15 +134,9 @@ class _LaporanScreenState extends ConsumerState<LaporanScreen>
       final salesData = await db.reportsDao.getDailySalesChart(_start, end);
       final cashData  = await db.reportsDao.getCashReport(_start, end);
       final lowStock  = await db.productsDao.getLowStockProducts();
-      final settings  = ref.read(storeSettingsProvider);
-      final storeName = settings.maybeWhen(
-        data: (s) => s.storeName,
-        orElse: () => 'KasirKu',
-      );
-      final storeAddress = settings.maybeWhen(
-        data: (s) => s.storeAddress ?? '',
-        orElse: () => '',
-      );
+      final settings     = ref.read(storeSettingsProvider);
+      final storeName    = settings.storeName;
+      final storeAddress = settings.storeAddress ?? '';
 
       final pdfBytes = await _buildLaporanPdf(
         storeName: storeName,
@@ -226,8 +220,9 @@ class _LaporanScreenState extends ConsumerState<LaporanScreen>
                         color: PdfColors.white)),
                     if (storeAddress.isNotEmpty)
                       pw.Text(storeAddress,
-                        style: const pw.TextStyle(
-                          fontSize: 10, color: PdfColors.white70)),
+                        style: pw.TextStyle(
+                          fontSize: 10,
+                          color: const PdfColor(1, 1, 1, 0.7))),
                   ],
                 ),
                 pw.Column(
@@ -239,11 +234,13 @@ class _LaporanScreenState extends ConsumerState<LaporanScreen>
                         fontWeight: pw.FontWeight.bold,
                         color: PdfColors.white)),
                     pw.Text(periodLabel,
-                      style: const pw.TextStyle(
-                        fontSize: 10, color: PdfColors.white70)),
+                      style: pw.TextStyle(
+                        fontSize: 10,
+                        color: const PdfColor(1, 1, 1, 0.7))),
                     pw.Text('Dicetak: $printDate',
-                      style: const pw.TextStyle(
-                        fontSize: 8, color: PdfColors.white60)),
+                      style: pw.TextStyle(
+                        fontSize: 8,
+                        color: const PdfColor(1, 1, 1, 0.6))),
                   ],
                 ),
               ],
