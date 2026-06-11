@@ -13,93 +13,167 @@ final currentNavIndexProvider = StateProvider<int>((ref) => 0);
 class MainNavigation extends ConsumerWidget {
   const MainNavigation({super.key});
 
+  // Urutan tab: 0=Dashboard, 1=Laporan, 2=Kasir(FAB), 3=Stock, 4=Pelanggan
+  // Settings diakses lewat header Dashboard
   static final List<Widget> _screens = [
-    const DashboardScreen(),
-    const KasirScreen(),
-    const StokScreen(),
-    const PelangganScreen(),
-    const LaporanScreen(),
-    const SettingsScreen(),
+    const DashboardScreen(),  // 0 Dashboard
+    const LaporanScreen(),    // 1 Laporan
+    const KasirScreen(),      // 2 Kasir
+    const StokScreen(),       // 3 Stock
+    const PelangganScreen(),  // 4 Pelanggan
   ];
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final idx = ref.watch(currentNavIndexProvider);
+
     return Scaffold(
       body: IndexedStack(index: idx, children: _screens),
-      bottomNavigationBar: Container(
-        decoration: BoxDecoration(
-          color: Colors.white,
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.06),
-              blurRadius: 20,
-              offset: const Offset(0, -4),
-            ),
-          ],
-        ),
-        child: SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceAround,
-              children: [
-                _NavItem(
-                  index: 0,
-                  current: idx,
-                  icon: Icons.home_outlined,
-                  activeIcon: Icons.home_rounded,
-                  label: 'Dashboard',
-                  ref: ref,
-                ),
-                _NavItem(
-                  index: 1,
-                  current: idx,
-                  icon: Icons.point_of_sale_outlined,
-                  activeIcon: Icons.point_of_sale_rounded,
-                  label: 'Kasir',
-                  ref: ref,
-                ),
-                _NavItem(
-                  index: 2,
-                  current: idx,
-                  icon: Icons.inventory_2_outlined,
-                  activeIcon: Icons.inventory_2_rounded,
-                  label: 'Stok',
-                  ref: ref,
-                ),
-                _NavItem(
-                  index: 3,
-                  current: idx,
-                  icon: Icons.people_outline,
-                  activeIcon: Icons.people_rounded,
-                  label: 'Pelanggan',
-                  ref: ref,
-                ),
-                _NavItem(
-                  index: 4,
-                  current: idx,
-                  icon: Icons.insert_chart_outlined,
-                  activeIcon: Icons.insert_chart_rounded,
-                  label: 'Laporan',
-                  ref: ref,
-                ),
-                _NavItem(
-                  index: 5,
-                  current: idx,
-                  icon: Icons.menu_rounded,
-                  activeIcon: Icons.menu_rounded,
-                  label: 'Menu',
-                  ref: ref,
-                ),
-              ],
-            ),
+      bottomNavigationBar: _BottomNavBar(currentIndex: idx, ref: ref),
+    );
+  }
+}
+
+// ─── Custom Bottom Nav Bar ────────────────────────────────────────────────────
+
+class _BottomNavBar extends StatelessWidget {
+  final int currentIndex;
+  final WidgetRef ref;
+
+  const _BottomNavBar({
+    required this.currentIndex,
+    required this.ref,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.07),
+            blurRadius: 24,
+            offset: const Offset(0, -4),
+          ),
+        ],
+      ),
+      child: SafeArea(
+        top: false,
+        child: SizedBox(
+          height: 64,
+          child: Row(
+            children: [
+              // 0 – Dashboard
+              _NavItem(
+                index: 0,
+                current: currentIndex,
+                icon: Icons.home_outlined,
+                activeIcon: Icons.home_rounded,
+                label: 'Dashboard',
+                ref: ref,
+              ),
+              // 1 – Laporan
+              _NavItem(
+                index: 1,
+                current: currentIndex,
+                icon: Icons.insert_chart_outlined,
+                activeIcon: Icons.insert_chart_rounded,
+                label: 'Laporan',
+                ref: ref,
+              ),
+              // 2 – Kasir (FAB tengah)
+              _KasirFABItem(
+                isActive: currentIndex == 2,
+                onTap: () =>
+                    ref.read(currentNavIndexProvider.notifier).state = 2,
+              ),
+              // 3 – Stock
+              _NavItem(
+                index: 3,
+                current: currentIndex,
+                icon: Icons.inventory_2_outlined,
+                activeIcon: Icons.inventory_2_rounded,
+                label: 'Stock',
+                ref: ref,
+              ),
+              // 4 – Pelanggan
+              _NavItem(
+                index: 4,
+                current: currentIndex,
+                icon: Icons.people_outline_rounded,
+                activeIcon: Icons.people_rounded,
+                label: 'Pelanggan',
+                ref: ref,
+              ),
+            ],
           ),
         ),
       ),
     );
   }
 }
+
+// ─── Kasir FAB di tengah ──────────────────────────────────────────────────────
+
+class _KasirFABItem extends StatelessWidget {
+  final bool isActive;
+  final VoidCallback onTap;
+
+  const _KasirFABItem({
+    required this.isActive,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Expanded(
+      child: GestureDetector(
+        onTap: onTap,
+        behavior: HitTestBehavior.opaque,
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            // Lingkaran besar teal
+            Container(
+              width: 54,
+              height: 54,
+              decoration: BoxDecoration(
+                color: AppColors.primary,
+                shape: BoxShape.circle,
+                boxShadow: [
+                  BoxShadow(
+                    color: AppColors.primary.withOpacity(0.35),
+                    blurRadius: 12,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
+              ),
+              child: const Icon(
+                Icons.point_of_sale_rounded,
+                color: Colors.white,
+                size: 26,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'Kasir',
+              style: TextStyle(
+                fontSize: 10,
+                fontWeight: FontWeight.w700,
+                color: isActive
+                    ? AppColors.primary
+                    : AppColors.textSecondary,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ─── Nav Item biasa ───────────────────────────────────────────────────────────
 
 class _NavItem extends StatelessWidget {
   final int index, current;
@@ -119,26 +193,32 @@ class _NavItem extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isActive = index == current;
-    return GestureDetector(
-      onTap: () =>
-          ref.read(currentNavIndexProvider.notifier).state = index,
-      behavior: HitTestBehavior.opaque,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-        decoration: BoxDecoration(
-          color: isActive ? AppColors.primaryLight : Colors.transparent,
-          borderRadius: BorderRadius.circular(12),
-        ),
+
+    return Expanded(
+      child: GestureDetector(
+        onTap: () =>
+            ref.read(currentNavIndexProvider.notifier).state = index,
+        behavior: HitTestBehavior.opaque,
         child: Column(
-          mainAxisSize: MainAxisSize.min,
+          mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(
-              isActive ? activeIcon : icon,
-              color: isActive
-                  ? AppColors.primary
-                  : AppColors.textSecondary,
-              size: 22,
+            AnimatedContainer(
+              duration: const Duration(milliseconds: 180),
+              padding: const EdgeInsets.symmetric(
+                  horizontal: 14, vertical: 5),
+              decoration: BoxDecoration(
+                color: isActive
+                    ? AppColors.primaryLight
+                    : Colors.transparent,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Icon(
+                isActive ? activeIcon : icon,
+                color: isActive
+                    ? AppColors.primary
+                    : AppColors.textSecondary,
+                size: 22,
+              ),
             ),
             const SizedBox(height: 3),
             Text(
