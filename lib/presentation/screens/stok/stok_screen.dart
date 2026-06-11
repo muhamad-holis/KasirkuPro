@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:drift/drift.dart' show Value;
-import 'package:excel/excel.dart';
+import 'package:excel/excel.dart' hide Border;
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:file_picker/file_picker.dart';
@@ -85,7 +85,7 @@ class _StokScreenState extends ConsumerState<StokScreen>
     );
   }
 
-  // ─── Import Excel ──────────────────────────────────────────────────────────
+  // ─── Import Excel ────────────────────────────────────────────────────────[...]
 
   Future<void> _importExcel(BuildContext context, WidgetRef ref) async {
     try {
@@ -150,7 +150,7 @@ class _StokScreenState extends ConsumerState<StokScreen>
     }
   }
 
-  // ─── Export Excel ──────────────────────────────────────────────────────────
+  // ─── Export Excel ─────────────────────────────────────────────────────────[...]
 
   Future<void> _exportExcel(BuildContext context, WidgetRef ref) async {
     try {
@@ -237,7 +237,7 @@ class _StokScreenState extends ConsumerState<StokScreen>
   }
 }
 
-// ─── Tab: Semua Produk ────────────────────────────────────────────────────────
+// ─── Tab: Semua Produk ────────────────────────────────────────────────────────[...]
 
 class _ProductListTab extends ConsumerWidget {
   @override
@@ -347,7 +347,7 @@ class _ProductListTab extends ConsumerWidget {
   }
 }
 
-// ─── Tab: Hampir Habis ────────────────────────────────────────────────────────
+// ─── Tab: Hampir Habis ────────────────────────────────────────────────────────[...]
 
 class _LowStockTab extends ConsumerWidget {
   @override
@@ -413,7 +413,7 @@ class _LowStockTab extends ConsumerWidget {
   }
 }
 
-// ─── Tab: Kategori ────────────────────────────────────────────────────────────
+// ─── Tab: Kategori ────────────────────────────────────────────────────────[...]
 
 class _CategoryTab extends ConsumerWidget {
   @override
@@ -541,7 +541,7 @@ class _CategoryCard extends ConsumerWidget {
   }
 }
 
-// ─── Stats Bar ────────────────────────────────────────────────────────────────
+// ─── Stats Bar ─────────────────────────────────────────────────────────–[...]
 
 class _StatsBar extends StatelessWidget {
   final List<Product> products;
@@ -610,7 +610,7 @@ class _StatChip extends StatelessWidget {
   }
 }
 
-// ─── Product Card ─────────────────────────────────────────────────────────────
+// ─── Product Card ────────────────────────────────────────────────────────–[...]
 
 class _ProductCard extends ConsumerWidget {
   final Product product;
@@ -743,7 +743,7 @@ class _ProductCard extends ConsumerWidget {
   }
 }
 
-// ─── Add Product Sheet ────────────────────────────────────────────────────────
+// ─── Add Product Sheet ────────────────────────────────────────────────────────[...]
 
 class _AddProductSheet extends ConsumerStatefulWidget {
   const _AddProductSheet();
@@ -968,7 +968,7 @@ class _AddProductSheetState extends ConsumerState<_AddProductSheet> {
   }
 }
 
-// ─── Edit Product Sheet ───────────────────────────────────────────────────────
+// ─── Edit Product Sheet ──────────────────────────────────────────────────────–[...]
 
 class _EditProductSheet extends ConsumerStatefulWidget {
   final Product product;
@@ -998,506 +998,3 @@ class _EditProductSheetState extends ConsumerState<_EditProductSheet>
   int? _selectedCategoryId;
   String _adjType = 'masuk';
   bool _loading = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _tab = TabController(length: 2, vsync: this);
-    _selectedCategoryId = widget.product.categoryId;
-  }
-
-  @override
-  void dispose() {
-    _tab.dispose();
-    for (final c in [_nameCtrl, _sellCtrl, _buyCtrl,
-        _stockCtrl, _minCtrl, _barcodeCtrl,
-        _adjQtyCtrl, _adjNoteCtrl]) {
-      c.dispose();
-    }
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final categories = ref.watch(categoriesProvider);
-    final movements = ref.watch(
-        stockMovementsProvider(widget.product.id));
-
-    return DraggableScrollableSheet(
-      expand: false,
-      initialChildSize: 0.85,
-      maxChildSize: 0.95,
-      builder: (_, ctrl) => Column(
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                _SheetHandle(),
-                Row(children: [
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(widget.product.name,
-                          style: const TextStyle(
-                            fontSize: 17, fontWeight: FontWeight.w700),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis),
-                        Text(CurrencyFormatter.format(
-                          widget.product.sellPrice),
-                          style: const TextStyle(
-                            color: AppColors.primary,
-                            fontWeight: FontWeight.w600)),
-                      ],
-                    ),
-                  ),
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 12, vertical: 6),
-                    decoration: BoxDecoration(
-                      color: widget.product.stock == 0
-                          ? AppColors.danger.withOpacity(0.1)
-                          : widget.product.stock <= widget.product.minStock
-                              ? AppColors.warning.withOpacity(0.1)
-                              : AppColors.success.withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: Text(
-                      'Stok: ${widget.product.stock} ${widget.product.unit}',
-                      style: TextStyle(
-                        fontWeight: FontWeight.w700,
-                        color: widget.product.stock == 0
-                            ? AppColors.danger
-                            : widget.product.stock <= widget.product.minStock
-                                ? AppColors.warning
-                                : AppColors.success,
-                      ),
-                    ),
-                  ),
-                ]),
-                const SizedBox(height: 12),
-                TabBar(
-                  controller: _tab,
-                  labelColor: AppColors.primary,
-                  unselectedLabelColor: Colors.grey,
-                  indicatorColor: AppColors.primary,
-                  tabs: const [
-                    Tab(text: 'Edit Produk'),
-                    Tab(text: 'Riwayat Stok'),
-                  ],
-                ),
-              ],
-            ),
-          ),
-          Expanded(
-            child: TabBarView(
-              controller: _tab,
-              children: [
-                // ── Edit form ──────────────────────────────────
-                SingleChildScrollView(
-                  controller: ctrl,
-                  padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      TextField(
-                        controller: _nameCtrl,
-                        decoration: const InputDecoration(
-                          labelText: 'Nama Produk'),
-                      ),
-                      const SizedBox(height: 10),
-                      TextField(
-                        controller: _barcodeCtrl,
-                        decoration: const InputDecoration(
-                          labelText: 'Barcode',
-                          prefixIcon: Icon(Icons.qr_code)),
-                      ),
-                      const SizedBox(height: 10),
-                      categories.when(
-                        data: (cats) =>
-                            DropdownButtonFormField<int>(
-                          value: _selectedCategoryId,
-                          decoration: const InputDecoration(
-                            labelText: 'Kategori',
-                            prefixIcon: Icon(Icons.category_outlined)),
-                          items: [
-                            const DropdownMenuItem(
-                              value: null,
-                              child: Text('-- Tanpa Kategori --')),
-                            ...cats.map((c) => DropdownMenuItem(
-                              value: c.id, child: Text(c.name))),
-                          ],
-                          onChanged: (v) =>
-                              setState(() => _selectedCategoryId = v),
-                        ),
-                        loading: () => const SizedBox(),
-                        error: (_, __) => const SizedBox(),
-                      ),
-                      const SizedBox(height: 10),
-                      Row(children: [
-                        Expanded(
-                          child: TextField(
-                            controller: _buyCtrl,
-                            keyboardType: TextInputType.number,
-                            inputFormatters: [
-                              FilteringTextInputFormatter.digitsOnly],
-                            decoration: const InputDecoration(
-                              labelText: 'Harga Beli',
-                              prefixText: 'Rp '),
-                          ),
-                        ),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: TextField(
-                            controller: _sellCtrl,
-                            keyboardType: TextInputType.number,
-                            inputFormatters: [
-                              FilteringTextInputFormatter.digitsOnly],
-                            decoration: const InputDecoration(
-                              labelText: 'Harga Jual',
-                              prefixText: 'Rp '),
-                          ),
-                        ),
-                      ]),
-                      const SizedBox(height: 10),
-                      Row(children: [
-                        Expanded(
-                          child: TextField(
-                            controller: _minCtrl,
-                            keyboardType: TextInputType.number,
-                            inputFormatters: [
-                              FilteringTextInputFormatter.digitsOnly],
-                            decoration: const InputDecoration(
-                              labelText: 'Stok Minimum'),
-                          ),
-                        ),
-                      ]),
-                      const SizedBox(height: 16),
-
-                      // Adjustment stok
-                      const Text('Penyesuaian Stok',
-                        style: TextStyle(
-                          fontWeight: FontWeight.w700, fontSize: 14)),
-                      const SizedBox(height: 8),
-                      Row(children: [
-                        Expanded(
-                          child: _buildAdjTypeChip('masuk', 'Masuk',
-                            Icons.add_circle_outline, AppColors.success),
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: _buildAdjTypeChip('keluar', 'Keluar',
-                            Icons.remove_circle_outline, AppColors.danger),
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: _buildAdjTypeChip('koreksi', 'Koreksi',
-                            Icons.edit_outlined, AppColors.info),
-                        ),
-                      ]),
-                      const SizedBox(height: 10),
-                      Row(children: [
-                        Expanded(
-                          flex: 2,
-                          child: TextField(
-                            controller: _adjQtyCtrl,
-                            keyboardType: TextInputType.number,
-                            inputFormatters: [
-                              FilteringTextInputFormatter.digitsOnly],
-                            decoration: InputDecoration(
-                              labelText: _adjType == 'koreksi'
-                                  ? 'Stok Baru'
-                                  : 'Jumlah',
-                              prefixIcon: Icon(
-                                _adjType == 'masuk'
-                                    ? Icons.add
-                                    : _adjType == 'keluar'
-                                        ? Icons.remove
-                                        : Icons.edit,
-                              ),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          flex: 3,
-                          child: TextField(
-                            controller: _adjNoteCtrl,
-                            decoration: const InputDecoration(
-                              labelText: 'Keterangan',
-                              prefixIcon: Icon(Icons.note_alt_outlined),
-                            ),
-                          ),
-                        ),
-                      ]),
-                      const SizedBox(height: 20),
-
-                      Row(children: [
-                        Expanded(
-                          child: OutlinedButton.icon(
-                            icon: const Icon(Icons.delete_outline,
-                              color: AppColors.danger, size: 18),
-                            label: const Text('Hapus',
-                              style: TextStyle(color: AppColors.danger)),
-                            onPressed: () => _delete(context)),
-                        ),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: ElevatedButton.icon(
-                            icon: _loading
-                                ? const SizedBox(
-                                    width: 16, height: 16,
-                                    child: CircularProgressIndicator(
-                                      color: Colors.white, strokeWidth: 2))
-                                : const Icon(Icons.save_outlined, size: 18),
-                            label: Text(_loading ? 'Menyimpan...' : 'Simpan'),
-                            onPressed: _loading ? null : _update),
-                        ),
-                      ]),
-                    ],
-                  ),
-                ),
-
-                // ── Riwayat stok ──────────────────────────────
-                movements.when(
-                  data: (list) => list.isEmpty
-                      ? const Center(
-                          child: Text('Belum ada riwayat stok'))
-                      : ListView.separated(
-                          controller: ctrl,
-                          padding: const EdgeInsets.fromLTRB(
-                            16, 12, 16, 20),
-                          itemCount: list.length,
-                          separatorBuilder: (_, __) =>
-                              const SizedBox(height: 4),
-                          itemBuilder: (_, i) =>
-                              _MovementCard(movement: list[i]),
-                        ),
-                  loading: () =>
-                      const Center(child: CircularProgressIndicator()),
-                  error: (e, _) => Center(child: Text('Error: $e')),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildAdjTypeChip(
-      String value, String label, IconData icon, Color color) {
-    final isSelected = _adjType == value;
-    return GestureDetector(
-      onTap: () => setState(() => _adjType = value),
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 150),
-        padding: const EdgeInsets.symmetric(vertical: 8),
-        decoration: BoxDecoration(
-          color: isSelected ? color.withOpacity(0.1) : Colors.grey.shade100,
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(
-            color: isSelected ? color : Colors.grey.shade300),
-        ),
-        child: Column(children: [
-          Icon(icon, size: 16,
-            color: isSelected ? color : Colors.grey.shade500),
-          const SizedBox(height: 3),
-          Text(label,
-            style: TextStyle(
-              fontSize: 11,
-              fontWeight: FontWeight.w600,
-              color: isSelected ? color : Colors.grey.shade500,
-            )),
-        ]),
-      ),
-    );
-  }
-
-  Future<void> _update() async {
-    setState(() => _loading = true);
-    try {
-      final db = ref.read(databaseProvider);
-      final adjQty = int.tryParse(_adjQtyCtrl.text) ?? 0;
-
-      await db.productsDao.updateProduct(
-        ProductsCompanion(
-          id: Value(widget.product.id),
-          name: Value(_nameCtrl.text.trim()),
-          barcode: Value(_barcodeCtrl.text.isEmpty
-              ? null : _barcodeCtrl.text),
-          categoryId: Value(_selectedCategoryId),
-          buyPrice:  Value(double.tryParse(_buyCtrl.text) ?? 0),
-          sellPrice: Value(double.tryParse(_sellCtrl.text) ?? 0),
-          minStock:  Value(int.tryParse(_minCtrl.text) ?? 5),
-        ),
-      );
-
-      // Apply stock adjustment
-      if (adjQty > 0) {
-        final oldStock = widget.product.stock;
-        int newStock;
-        if (_adjType == 'masuk') {
-          newStock = oldStock + adjQty;
-        } else if (_adjType == 'keluar') {
-          newStock = (oldStock - adjQty).clamp(0, 999999);
-        } else {
-          newStock = adjQty; // koreksi = set langsung
-        }
-        await db.stockMovementsDao.adjustStock(
-          db: db,
-          productId: widget.product.id,
-          newStock: newStock,
-          oldStock: oldStock,
-          type: _adjType,
-          notes: _adjNoteCtrl.text.isEmpty ? null : _adjNoteCtrl.text,
-        );
-      }
-
-      if (context.mounted) {
-        Navigator.pop(context);
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Produk diperbarui'),
-            backgroundColor: AppColors.success));
-      }
-    } catch (e) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e'),
-            backgroundColor: AppColors.danger));
-      }
-    } finally {
-      if (mounted) setState(() => _loading = false);
-    }
-  }
-
-  Future<void> _delete(BuildContext context) async {
-    final confirm = await showDialog<bool>(
-      context: context,
-      builder: (_) => AlertDialog(
-        title: const Text('Hapus Produk?'),
-        content: Text('${widget.product.name} akan dihapus.'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Batal')),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(context, true),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.danger),
-            child: const Text('Hapus')),
-        ],
-      ),
-    );
-    if (confirm == true) {
-      await ref.read(databaseProvider)
-          .productsDao.deleteProduct(widget.product.id);
-      if (context.mounted) Navigator.pop(context);
-    }
-  }
-}
-
-// ─── Movement Card ────────────────────────────────────────────────────────────
-
-class _MovementCard extends StatelessWidget {
-  final StockMovement movement;
-  const _MovementCard({required this.movement});
-
-  @override
-  Widget build(BuildContext context) {
-    final isMasuk   = movement.type == 'masuk';
-    final isKeluar  = movement.type == 'keluar';
-    final color = isMasuk
-        ? AppColors.success
-        : isKeluar
-            ? AppColors.danger
-            : AppColors.info;
-    final icon = isMasuk
-        ? Icons.add_circle_outline
-        : isKeluar
-            ? Icons.remove_circle_outline
-            : Icons.edit_outlined;
-
-    return Card(
-      margin: EdgeInsets.zero,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(
-          horizontal: 14, vertical: 10),
-        child: Row(children: [
-          Container(
-            width: 36,
-            height: 36,
-            decoration: BoxDecoration(
-              color: color.withOpacity(0.1),
-              shape: BoxShape.circle,
-            ),
-            child: Icon(icon, size: 18, color: color),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  '${movement.type.toUpperCase()} ${movement.quantity} unit',
-                  style: const TextStyle(
-                    fontWeight: FontWeight.w600, fontSize: 13)),
-                if (movement.notes != null) ...[
-                  const SizedBox(height: 2),
-                  Text(movement.notes!,
-                    style: TextStyle(
-                      fontSize: 11, color: Colors.grey.shade500)),
-                ],
-                const SizedBox(height: 2),
-                Text(
-                  _formatDate(movement.createdAt),
-                  style: TextStyle(
-                    fontSize: 11, color: Colors.grey.shade400)),
-              ],
-            ),
-          ),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              Text('${movement.stockBefore} → ${movement.stockAfter}',
-                style: const TextStyle(
-                  fontWeight: FontWeight.w700, fontSize: 13)),
-              Text('unit', style: TextStyle(
-                fontSize: 10, color: Colors.grey.shade400)),
-            ],
-          ),
-        ]),
-      ),
-    );
-  }
-
-  String _formatDate(DateTime dt) {
-    final now = DateTime.now();
-    final diff = now.difference(dt);
-    if (diff.inMinutes < 60) return '${diff.inMinutes} menit lalu';
-    if (diff.inHours < 24) return '${diff.inHours} jam lalu';
-    return '${dt.day}/${dt.month}/${dt.year}';
-  }
-}
-
-// ─── Shared Widgets ───────────────────────────────────────────────────────────
-
-class _SheetHandle extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 16),
-      child: Center(
-        child: Container(
-          width: 40, height: 4,
-          decoration: BoxDecoration(
-            color: Colors.grey.shade300,
-            borderRadius: BorderRadius.circular(2)),
-        ),
-      ),
-    );
-  }
-}
