@@ -646,6 +646,9 @@ class _PaymentSheetState extends ConsumerState<_PaymentSheet> {
   String _method = 'tunai';
   bool _loading = false;
 
+  // Untuk metode hutang
+  Customer? _selectedCustomer;
+
   @override
   void dispose() {
     _amountCtrl.dispose();
@@ -837,8 +840,60 @@ class _PaymentSheetState extends ConsumerState<_PaymentSheet> {
                   ),
                 ]),
               ),
+              // ── Customer picker untuk hutang ──────────────────────────────
+              if (_method == 'hutang') ...[
+                const SizedBox(height: 12),
+                GestureDetector(
+                  onTap: _pickCustomer,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 14, vertical: 12),
+                    decoration: BoxDecoration(
+                      border: Border.all(
+                        color: _selectedCustomer != null
+                            ? AppColors.primary
+                            : Colors.grey.shade300),
+                      borderRadius: BorderRadius.circular(12),
+                      color: _selectedCustomer != null
+                          ? AppColors.primaryLight
+                          : null,
+                    ),
+                    child: Row(children: [
+                      Icon(
+                        _selectedCustomer != null
+                            ? Icons.person
+                            : Icons.person_add_alt_outlined,
+                        color: _selectedCustomer != null
+                            ? AppColors.primary
+                            : Colors.grey.shade500,
+                        size: 20,
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          _selectedCustomer != null
+                              ? _selectedCustomer!.name
+                              : 'Pilih Pelanggan (wajib untuk hutang)',
+                          style: TextStyle(
+                            fontWeight: _selectedCustomer != null
+                                ? FontWeight.w600
+                                : FontWeight.normal,
+                            color: _selectedCustomer != null
+                                ? AppColors.primary
+                                : Colors.grey.shade500,
+                            fontSize: 13,
+                          ),
+                        ),
+                      ),
+                      Icon(Icons.chevron_right,
+                        color: Colors.grey.shade400, size: 18),
+                    ]),
+                  ),
+                ),
+              ],
               const SizedBox(height: 16),
             ],
+
 
             TextField(
               controller: _notesCtrl,
@@ -925,6 +980,98 @@ class _PaymentSheetState extends ConsumerState<_PaymentSheet> {
     return result.toSet().take(4).toList()..sort();
   }
 
+  Future<void> _pickCustomer() async {
+    final db = ref.read(databaseProvider);
+    final allCustomers = await db.customersDao.getAllCustomers();
+
+    if (!context.mounted) return;
+
+    await showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) {
+        String query = '';
+        return StatefulBuilder(
+          builder: (ctx, setLocalState) {
+            final filtered = query.isEmpty
+                ? allCustomers
+                : allCustomers
+                    .where((c) =>
+                        c.name.toLowerCase().contains(query.toLowerCase()))
+                    .toList();
+            return SizedBox(
+              height: MediaQuery.of(ctx).size.height * 0.6,
+              child: Column(children: [
+                const SizedBox(height: 12),
+                Container(
+                  width: 40, height: 4,
+                  decoration: BoxDecoration(
+                    color: Colors.grey.shade300,
+                    borderRadius: BorderRadius.circular(2)),
+                ),
+                const SizedBox(height: 12),
+                const Text('Pilih Pelanggan',
+                  style: TextStyle(
+                    fontSize: 16, fontWeight: FontWeight.w700)),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+                  child: TextField(
+                    autofocus: true,
+                    onChanged: (v) => setLocalState(() => query = v),
+                    decoration: const InputDecoration(
+                      hintText: 'Cari nama pelanggan...',
+                      prefixIcon: Icon(Icons.search, size: 18),
+                      isDense: true,
+                    ),
+                  ),
+                ),
+                Expanded(
+                  child: filtered.isEmpty
+                      ? Center(
+                          child: Text('Pelanggan tidak ditemukan',
+                            style: TextStyle(color: Colors.grey.shade500)))
+                      : ListView.builder(
+                          itemCount: filtered.length,
+                          itemBuilder: (_, i) {
+                            final c = filtered[i];
+                            return ListTile(
+                              leading: CircleAvatar(
+                                backgroundColor: AppColors.primaryLight,
+                                child: Text(
+                                  c.name[0].toUpperCase(),
+                                  style: const TextStyle(
+                                    color: AppColors.primary,
+                                    fontWeight: FontWeight.w700),
+                                ),
+                              ),
+                              title: Text(c.name,
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.w600)),
+                              subtitle: c.phone != null
+                                  ? Text(c.phone!,
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        color: Colors.grey.shade500))
+                                  : null,
+                              onTap: () {
+                                setState(() => _selectedCustomer = c);
+                                Navigator.pop(ctx);
+                              },
+                            );
+                          },
+                        ),
+                ),
+              ]),
+            );
+          },
+        );
+      },
+    );
+  }
+
   Future<void> _process() async {
     final cart = ref.read(kasirProvider);
 
@@ -937,6 +1084,15 @@ class _PaymentSheetState extends ConsumerState<_PaymentSheet> {
             backgroundColor: AppColors.danger));
         return;
       }
+    }
+
+    // Validasi pelanggan wajib untuk hutang
+    if (_method == 'hutang' && _selectedCustomer == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Pilih pelanggan terlebih dahulu untuk hutang!'),
+          backgroundColor: AppColors.warning));
+      return;
     }
 
     setState(() => _loading = true);
@@ -971,7 +1127,22 @@ class _PaymentSheetState extends ConsumerState<_PaymentSheet> {
           subtotal: i.subtotal,
         )).toList();
 
-      await db.transactionsDao.insertTransaction(tx, items);
+      final txId = await db.transactionsDao.insertTransaction(tx, items);
+
+      // ── Insert ke tabel Debts jika metode hutang ──────────────────────────
+      if (_method == 'hutang' && _selectedCustomer != null) {
+        await db.debtsDao.insertDebt(
+          DebtsCompanion.insert(
+            customerId: _selectedCustomer!.id,
+            transactionId: Value(txId),
+            amount: cart.total,
+            paidAmount: const Value(0),
+            status: const Value('unpaid'),
+            notes: Value(_notesCtrl.text.isEmpty ? null : _notesCtrl.text),
+          ),
+        );
+      }
+
       ref.read(kasirProvider.notifier).clear();
 
       if (context.mounted) {
@@ -993,6 +1164,7 @@ class _PaymentSheetState extends ConsumerState<_PaymentSheet> {
   void _showSuccessDialog(
     BuildContext context,
     String invoiceNumber,
+
     KasirState cart,
     double amountPaid,
   ) {
