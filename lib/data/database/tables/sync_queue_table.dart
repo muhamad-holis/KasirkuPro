@@ -2,7 +2,7 @@ part of '../app_database.dart';
 
 class SyncQueue extends Table {
   IntColumn get id => integer().autoIncrement()();
-  TextColumn get tableName => text()();
+  TextColumn get syncTableName => text()();
   TextColumn get operation => text()();
   TextColumn get data => text()();
   BoolColumn get isSynced => boolean().withDefault(const Constant(false))();

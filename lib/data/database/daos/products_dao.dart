@@ -23,7 +23,7 @@ class ProductsDao extends DatabaseAccessor<AppDatabase>
 
   Future<List<Product>> getLowStockProducts() =>
       (select(products)
-        ..where((t) => t.stock.isSmallerOrEqualValue(t.minStock))
+        ..where((t) => t.stock.isSmallerOrEqual(t.minStock))
         ..where((t) => t.isActive.equals(true)))
           .get();
 
@@ -52,7 +52,7 @@ class ProductsDao extends DatabaseAccessor<AppDatabase>
 
   Stream<List<Product>> watchLowStock() =>
       (select(products)
-        ..where((t) => t.stock.isSmallerOrEqualValue(t.minStock))
+        ..where((t) => t.stock.isSmallerOrEqual(t.minStock))
         ..where((t) => t.isActive.equals(true)))
           .watch();
 }

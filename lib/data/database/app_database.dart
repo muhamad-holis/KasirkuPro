@@ -28,12 +28,9 @@ part 'app_database.g.dart';
 
 LazyDatabase _openConnection() {
   return LazyDatabase(() async {
-    final dbFolder = await getApplicationDocumentsDirectory();
-    final file = File(p.join(dbFolder.path, 'database', 'kasirku.db'));
-    await file.parent.create(recursive: true);
     return driftDatabase(
       name: 'kasirku',
-      native: true,
+      native: DriftNativeOptions(),
     );
   });
 }

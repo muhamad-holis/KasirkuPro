@@ -5,6 +5,7 @@ import '../screens/kasir/kasir_screen.dart';
 import '../screens/stok/stok_screen.dart';
 import '../screens/laporan/laporan_screen.dart';
 import '../screens/settings/settings_screen.dart';
+import '../../core/theme/app_theme.dart';
 
 final currentNavIndexProvider = StateProvider<int>((ref) => 0);
 
@@ -109,6 +110,7 @@ class _NavItem extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isActive = index == current;
+    final colors = Theme.of(context).colorScheme;
     return GestureDetector(
       onTap: () =>
           ref.read(currentNavIndexProvider.notifier).state = index,
