@@ -61,12 +61,27 @@ class AppDatabase extends _$AppDatabase {
       await _insertDefaults();
     },
     onUpgrade: (Migrator m, int from, int to) async {
-      // v1 → v2: tidak ada perubahan schema struktural,
-      // hanya pastikan semua tabel sudah ada (future-proof).
+      // v1 -> v2: gunakan raw SQL agar kompatibel dengan Drift 2.18
       if (from < 2) {
-        // Buat tabel baru jika belum ada (Users, SyncQueue mungkin belum di v1)
-        await m.createTableIfNotExists(users);
-        await m.createTableIfNotExists(syncQueue);
+        await customStatement(
+          "CREATE TABLE IF NOT EXISTS users ("
+          "id INTEGER PRIMARY KEY AUTOINCREMENT,"
+          "name TEXT NOT NULL,"
+          "pin TEXT NOT NULL,"
+          "role TEXT NOT NULL DEFAULT 'kasir',"
+          "is_active INTEGER NOT NULL DEFAULT 1,"
+          "created_at INTEGER NOT NULL DEFAULT (strftime('%s','now') * 1000)"
+          ")"
+        );
+        await customStatement(
+          "CREATE TABLE IF NOT EXISTS sync_queue ("
+          "id INTEGER PRIMARY KEY AUTOINCREMENT,"
+          "table_name TEXT NOT NULL,"
+          "record_id INTEGER NOT NULL,"
+          "action TEXT NOT NULL,"
+          "created_at INTEGER NOT NULL DEFAULT (strftime('%s','now') * 1000)"
+          ")"
+        );
       }
     },
     beforeOpen: (details) async {
@@ -84,7 +99,7 @@ class AppDatabase extends _$AppDatabase {
       SettingsCompanion.insert(key: 'toko_nama', value: const Value('KasirKu')));
   }
 
-  /// Hapus semua data transaksi & stok, tapi pertahankan pengaturan & produk
+  /// Hapus semua data transaksi & stok, pertahankan produk & pengaturan
   Future<void> resetAllData() async {
     await transaction(() async {
       await delete(transactionItems).go();
@@ -92,9 +107,7 @@ class AppDatabase extends _$AppDatabase {
       await delete(debts).go();
       await delete(stockMovements).go();
       await delete(syncQueue).go();
-      // Reset stok produk ke 0
       await (update(products)).write(const ProductsCompanion(stock: Value(0)));
-      // Reset poin pelanggan ke 0
       await (update(customers)).write(const CustomersCompanion(points: Value(0)));
     });
   }
