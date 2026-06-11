@@ -171,3 +171,42 @@ class PrinterSettingsNotifier extends StateNotifier<PrinterSettings> {
 final printerSettingsProvider =
     StateNotifierProvider<PrinterSettingsNotifier, PrinterSettings>(
         (ref) => PrinterSettingsNotifier());
+
+// ─── PIN Settings ─────────────────────────────────────────────────────────────
+
+const _kPinKey = 'app_pin';
+
+class PinNotifier extends StateNotifier<String?> {
+  PinNotifier() : super(null) {
+    _load();
+  }
+
+  Future<void> _load() async {
+    final prefs = await SharedPreferences.getInstance();
+    state = prefs.getString(_kPinKey);
+  }
+
+  /// Simpan PIN baru. Mengembalikan true jika berhasil.
+  Future<bool> setPin(String pin) async {
+    final prefs = await SharedPreferences.getInstance();
+    final ok = await prefs.setString(_kPinKey, pin);
+    if (ok) state = pin;
+    return ok;
+  }
+
+  /// Hapus PIN (nonaktifkan keamanan PIN).
+  Future<void> clearPin() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_kPinKey);
+    state = null;
+  }
+
+  /// Cek apakah PIN yang dimasukkan cocok.
+  bool verify(String input) => state != null && input == state;
+
+  bool get isActive => state != null && state!.isNotEmpty;
+}
+
+final pinProvider = StateNotifierProvider<PinNotifier, String?>(
+  (ref) => PinNotifier(),
+);
