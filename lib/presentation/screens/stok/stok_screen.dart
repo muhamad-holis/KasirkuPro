@@ -8,6 +8,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:mobile_scanner/mobile_scanner.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/currency.dart';
 import '../../providers/products_provider.dart';
@@ -771,6 +772,7 @@ class _AddProductSheetState extends ConsumerState<_AddProductSheet> {
   final _unitCtrl     = TextEditingController(text: 'pcs');
   int? _selectedCategoryId;
   bool _loading = false;
+  bool _isScanning = false;
   String? _imagePath;
 
   @override
@@ -867,25 +869,83 @@ class _AddProductSheetState extends ConsumerState<_AddProductSheet> {
           ),
           const SizedBox(height: 10),
 
-          Row(children: [
-            Expanded(
-              child: TextField(
-                controller: _barcodeCtrl,
-                decoration: const InputDecoration(
-                  labelText: 'Barcode',
-                  prefixIcon: Icon(Icons.qr_code)),
-              ),
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: TextField(
-                controller: _skuCtrl,
-                decoration: const InputDecoration(
-                  labelText: 'SKU',
-                  prefixIcon: Icon(Icons.tag)),
-              ),
-            ),
-          ]),
+          // ── Barcode: Scan Button atau Preview Hasil ──────────────
+          StatefulBuilder(
+            builder: (ctx, setSt) => _barcodeCtrl.text.isEmpty
+                ? OutlinedButton.icon(
+                    icon: const Icon(Icons.qr_code_scanner,
+                        color: AppColors.primary),
+                    label: const Text('Scan Barcode',
+                        style: TextStyle(color: AppColors.primary)),
+                    style: OutlinedButton.styleFrom(
+                      minimumSize: const Size.fromHeight(50),
+                      side: const BorderSide(color: AppColors.primary),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10)),
+                    ),
+                    onPressed: () async {
+                      await _scanBarcode();
+                      setSt(() {});
+                    },
+                  )
+                : Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 12, vertical: 12),
+                    decoration: BoxDecoration(
+                      color: AppColors.primaryLight,
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(
+                          color: AppColors.primary.withOpacity(0.4)),
+                    ),
+                    child: Row(children: [
+                      const Icon(Icons.qr_code,
+                          color: AppColors.primary, size: 20),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text('Barcode terscan',
+                                style: TextStyle(
+                                    fontSize: 10,
+                                    color: AppColors.textSecondary)),
+                            Text(
+                              _barcodeCtrl.text,
+                              style: const TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w700,
+                                  color: AppColors.primary),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ],
+                        ),
+                      ),
+                      GestureDetector(
+                        onTap: () {
+                          setState(() => _barcodeCtrl.clear());
+                          setSt(() {});
+                        },
+                        child: Container(
+                          padding: const EdgeInsets.all(4),
+                          decoration: const BoxDecoration(
+                              color: AppColors.danger,
+                              shape: BoxShape.circle),
+                          child: const Icon(Icons.close,
+                              size: 12, color: Colors.white),
+                        ),
+                      ),
+                    ]),
+                  ),
+          ),
+          const SizedBox(height: 10),
+
+          // SKU (tetap manual)
+          TextField(
+            controller: _skuCtrl,
+            decoration: const InputDecoration(
+              labelText: 'SKU (opsional)',
+              prefixIcon: Icon(Icons.tag)),
+          ),
           const SizedBox(height: 10),
 
           // Category dropdown
@@ -978,6 +1038,132 @@ class _AddProductSheetState extends ConsumerState<_AddProductSheet> {
         ],
       ),
     );
+  }
+
+  // ── Barcode Scanner ───────────────────────────────────────────────────────
+  Future<void> _scanBarcode() async {
+    final MobileScannerController scanCtrl = MobileScannerController();
+    String? result;
+
+    await showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.black,
+      shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (ctx) => SizedBox(
+        height: MediaQuery.of(ctx).size.height * 0.65,
+        child: Stack(children: [
+          // Kamera scanner
+          ClipRRect(
+            borderRadius:
+                const BorderRadius.vertical(top: Radius.circular(20)),
+            child: MobileScanner(
+              controller: scanCtrl,
+              onDetect: (capture) {
+                final barcode = capture.barcodes.firstOrNull;
+                if (barcode?.rawValue != null) {
+                  result = barcode!.rawValue!;
+                  scanCtrl.stop();
+                  Navigator.pop(ctx);
+                }
+              },
+            ),
+          ),
+          // Overlay UI
+          Positioned(
+            top: 0,
+            left: 0,
+            right: 0,
+            child: Container(
+              padding: const EdgeInsets.symmetric(
+                  horizontal: 16, vertical: 12),
+              decoration: const BoxDecoration(
+                color: Colors.black54,
+                borderRadius:
+                    BorderRadius.vertical(top: Radius.circular(20)),
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text('Scan Barcode Produk',
+                      style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 15,
+                          fontWeight: FontWeight.w700)),
+                  GestureDetector(
+                    onTap: () {
+                      scanCtrl.stop();
+                      Navigator.pop(ctx);
+                    },
+                    child: Container(
+                      padding: const EdgeInsets.all(6),
+                      decoration: const BoxDecoration(
+                          color: Colors.white24,
+                          shape: BoxShape.circle),
+                      child: const Icon(Icons.close,
+                          color: Colors.white, size: 18),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          // Garis pemandu scan
+          Center(
+            child: Container(
+              width: 240,
+              height: 160,
+              decoration: BoxDecoration(
+                border: Border.all(
+                    color: AppColors.primary, width: 2),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: const Column(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  Padding(
+                    padding: EdgeInsets.only(bottom: 8),
+                    child: Text(
+                      'Arahkan kamera ke barcode',
+                      style: TextStyle(
+                          color: Colors.white70, fontSize: 11),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          // Tombol flash
+          Positioned(
+            bottom: 24,
+            right: 24,
+            child: StatefulBuilder(
+              builder: (ctx2, setSt) => GestureDetector(
+                onTap: () {
+                  scanCtrl.toggleTorch();
+                  setSt(() {});
+                },
+                child: Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: const BoxDecoration(
+                      color: Colors.white24,
+                      shape: BoxShape.circle),
+                  child: const Icon(Icons.flashlight_on,
+                      color: Colors.white, size: 24),
+                ),
+              ),
+            ),
+          ),
+        ]),
+      ),
+    );
+
+    await scanCtrl.dispose();
+
+    if (result != null && mounted) {
+      setState(() => _barcodeCtrl.text = result!);
+    }
   }
 
   Future<void> _pickImage() async {
