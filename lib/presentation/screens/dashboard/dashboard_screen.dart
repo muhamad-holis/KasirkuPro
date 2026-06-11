@@ -33,22 +33,21 @@ class DashboardStats {
   });
 }
 
-// Provider untuk DashboardStats — override di dashboard_provider.dart jika sudah ada
+// Provider untuk DashboardStats
 final dashboardStatsProvider =
     FutureProvider<DashboardStats>((ref) async {
-  // Ambil data dari database melalui databaseProvider
   final db = ref.watch(databaseProvider);
 
-  // Data hari ini
   final now = DateTime.now();
   final startOfToday = DateTime(now.year, now.month, now.day);
-  final startOfYesterday =
-      startOfToday.subtract(const Duration(days: 1));
+  final endOfToday = startOfToday.add(const Duration(days: 1));
+  final startOfYesterday = startOfToday.subtract(const Duration(days: 1));
 
+  // Gunakan method yang benar: getTransactionsByDate(start, end)
   final todayTx = await db.transactionsDao
-      .getTransactionsByDateRange(startOfToday, now);
+      .getTransactionsByDate(startOfToday, endOfToday);
   final yesterdayTx = await db.transactionsDao
-      .getTransactionsByDateRange(startOfYesterday, startOfToday);
+      .getTransactionsByDate(startOfYesterday, startOfToday);
 
   final omzetToday =
       todayTx.fold<double>(0, (sum, t) => sum + t.total);
@@ -67,8 +66,12 @@ final dashboardStatsProvider =
   final avgYesterday =
       txYesterday > 0 ? omzetYesterday / txYesterday : 0.0;
 
-  final productsSold =
-      todayTx.fold<int>(0, (sum, t) => sum + (t.itemCount ?? 0));
+  // Hitung total item terjual dari transactionItems hari ini
+  int productsSold = 0;
+  for (final tx in todayTx) {
+    final items = await db.transactionsDao.getTransactionItems(tx.id);
+    productsSold += items.fold<int>(0, (sum, item) => sum + item.quantity);
+  }
 
   return DashboardStats(
     omzetToday: omzetToday,
