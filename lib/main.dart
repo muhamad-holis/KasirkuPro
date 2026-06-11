@@ -21,7 +21,9 @@ class KasirKuApp extends ConsumerWidget {
       theme: AppTheme.light,
       darkTheme: AppTheme.dark,
       themeMode: isDark ? ThemeMode.dark : ThemeMode.light,
-      home: const _PinGate(),
+      // TODO: aktifkan _PinGate kembali sebelum release ke production
+      // home: const _PinGate(),
+      home: const MainNavigation(),
     );
   }
 }
