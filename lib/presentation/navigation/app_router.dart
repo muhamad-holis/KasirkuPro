@@ -61,7 +61,7 @@ class _BottomNavBar extends StatelessWidget {
       child: SafeArea(
         top: false,
         child: SizedBox(
-          height: 64,
+          height: 72,
           child: Row(
             children: [
               // 0 – Dashboard
@@ -136,8 +136,8 @@ class _KasirFABItem extends StatelessWidget {
           children: [
             // Lingkaran besar teal
             Container(
-              width: 54,
-              height: 54,
+              width: 48,
+              height: 48,
               decoration: BoxDecoration(
                 color: AppColors.primary,
                 shape: BoxShape.circle,
