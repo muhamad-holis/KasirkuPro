@@ -1,12 +1,14 @@
 // lib/presentation/providers/kas_provider.dart
 // ─────────────────────────────────────────────────────────────────────────────
-// Provider untuk Kas & Laporan Laba Rugi (P3)
+// Provider untuk: Kas Masuk & Kas Keluar, Laporan Arus Kas, Laporan Laba Rugi
+// Menggunakan tabel & DAO yang sudah ada (cash_flows, transactions,
+// transaction_items, products). Tidak mengubah struktur database.
 // ─────────────────────────────────────────────────────────────────────────────
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'database_provider.dart';
 
-// ─── Model ────────────────────────────────────────────────────────────────────
+// ─── Model: Rentang Tanggal ───────────────────────────────────────────────────
 
 class DateRange {
   final DateTime start;
@@ -15,13 +17,13 @@ class DateRange {
 
   @override
   bool operator ==(Object other) =>
-      other is DateRange &&
-      other.start == start &&
-      other.end == end;
+      other is DateRange && other.start == start && other.end == end;
 
   @override
   int get hashCode => Object.hash(start, end);
 }
+
+// ─── Model: Ringkasan Kas ─────────────────────────────────────────────────────
 
 class KasSummary {
   final double totalIncome;
@@ -35,46 +37,86 @@ class KasSummary {
   });
 }
 
+// ─── Model: Laporan Laba Rugi ─────────────────────────────────────────────────
+
 class LabaRugiData {
-  /// Omzet penjualan (dari tabel transactions)
+  /// Omzet penjualan (dari tabel transactions, status=completed)
   final double omzet;
 
-  /// HPP = SUM(buyPrice * quantity) dari transaction_items
+  /// HPP = SUM(buy_price * quantity) dari transaction_items JOIN products
   final double hpp;
+
+  /// Kas masuk selain kategori 'penjualan'
+  final double kasIncomeNonSales;
+
+  /// Kas keluar operasional (semua expense)
+  final double kasExpense;
+
+  /// Margin persen laba bersih
+  final double marginPersen;
 
   /// Laba kotor = omzet - hpp
   double get labaKotor => omzet - hpp;
 
-  /// Kas masuk non-penjualan (modal, dll)
-  final double kasIncome;
-
-  /// Kas keluar operasional
-  final double kasExpense;
-
-  /// Laba bersih = labaKotor + kasIncome - kasExpense
-  double get labaBersih => labaKotor + kasIncome - kasExpense;
-
-  /// Margin persentase
-  double get marginPersen =>
-      omzet == 0 ? 0 : (labaBersih / omzet) * 100;
+  /// Laba bersih = labaKotor + kasIncomeNonSales - kasExpense
+  double get labaBersih => labaKotor + kasIncomeNonSales - kasExpense;
 
   const LabaRugiData({
     required this.omzet,
     required this.hpp,
-    required this.kasIncome,
+    required this.kasIncomeNonSales,
     required this.kasExpense,
+    required this.marginPersen,
+  });
+
+  factory LabaRugiData.fromMap(Map<String, double> m) {
+    return LabaRugiData(
+      omzet: m['omzet'] ?? 0,
+      hpp: m['hpp'] ?? 0,
+      kasIncomeNonSales: m['kas_income_non_sales'] ?? 0,
+      kasExpense: m['kas_expense'] ?? 0,
+      marginPersen: m['margin_persen'] ?? 0,
+    );
+  }
+}
+
+// ─── Model: Arus Kas Harian (untuk grafik) ───────────────────────────────────
+
+class ArusKasHarian {
+  final String tanggal;
+  final double masuk;
+  final double keluar;
+
+  double get saldo => masuk - keluar;
+
+  const ArusKasHarian({
+    required this.tanggal,
+    required this.masuk,
+    required this.keluar,
+  });
+}
+
+// ─── Model: Kas per Kategori (untuk pie chart / breakdown) ───────────────────
+
+class KasKategori {
+  final String kategori;
+  final double total;
+  final int jumlah;
+
+  const KasKategori({
+    required this.kategori,
+    required this.total,
+    required this.jumlah,
   });
 }
 
 // ─── Providers ────────────────────────────────────────────────────────────────
 
-/// Summary kas (masuk, keluar, saldo)
+/// Ringkasan kas: total masuk, keluar, saldo dalam rentang tanggal
 final kasSummaryProvider =
     FutureProvider.family<KasSummary, DateRange>((ref, range) async {
   final db = ref.watch(databaseProvider);
-  final report =
-      await db.reportsDao.getCashReport(range.start, range.end);
-
+  final report = await db.reportsDao.getCashReport(range.start, range.end);
   return KasSummary(
     totalIncome: report['income'] ?? 0,
     totalExpense: report['expense'] ?? 0,
@@ -82,62 +124,99 @@ final kasSummaryProvider =
   );
 });
 
-/// Laporan Laba Rugi
+/// Laporan Laba Rugi lengkap (omzet, HPP, laba kotor, laba bersih, margin)
 final labaRugiProvider =
     FutureProvider.family<LabaRugiData, DateRange>((ref, range) async {
   final db = ref.watch(databaseProvider);
-
-  // 1. Omzet dari transaksi penjualan
-  final transactions =
-      await db.transactionsDao.getTransactionsByDate(range.start, range.end);
-  final omzet = transactions.fold<double>(0, (s, t) => s + t.total);
-
-  // 2. HPP: ambil semua items dan hitung buyPrice * qty
-  double hpp = 0;
-  for (final tx in transactions) {
-    final items = await db.transactionsDao.getTransactionItems(tx.id);
-    for (final item in items) {
-      // Cari buyPrice dari produk
-      final allProducts = await db.productsDao.getAllProducts();
-      final product = allProducts.where((p) => p.id == item.productId);
-      if (product.isNotEmpty) {
-        hpp += product.first.buyPrice * item.quantity;
-      }
-    }
-  }
-
-  // 3. Kas masuk non-penjualan (exclude category 'penjualan')
-  final kasReport = await db.reportsDao.getCashReport(range.start, range.end);
-  
-  // Ambil cash flows untuk pemilahan lebih detail
-  final cashFlows = await db.reportsDao
-      .watchCashFlows(range.start, range.end)
-      .first;
-
-  double kasIncome = 0;
-  double kasExpense = 0;
-
-  for (final f in cashFlows) {
-    if (f.type == 'income' && f.category != 'penjualan') {
-      kasIncome += f.amount;
-    } else if (f.type == 'expense') {
-      kasExpense += f.amount;
-    }
-  }
-
-  return LabaRugiData(
-    omzet: omzet,
-    hpp: hpp,
-    kasIncome: kasIncome,
-    kasExpense: kasExpense,
-  );
+  final result =
+      await db.reportsDao.getLabaRugiReport(range.start, range.end);
+  return LabaRugiData.fromMap(result);
 });
 
-/// Dashboard summary kas hari ini
+/// Arus kas harian dalam rentang tanggal (untuk grafik batang)
+final arusKasHarianProvider =
+    FutureProvider.family<List<ArusKasHarian>, DateRange>((ref, range) async {
+  final db = ref.watch(databaseProvider);
+  final rows =
+      await db.reportsDao.getDailyCashFlowChart(range.start, range.end);
+  return rows.map((r) {
+    return ArusKasHarian(
+      tanggal: r['tanggal'] as String,
+      masuk: (r['total_masuk'] as num).toDouble(),
+      keluar: (r['total_keluar'] as num).toDouble(),
+    );
+  }).toList();
+});
+
+/// Breakdown kas masuk per kategori
+final kasIncomeByKategoriProvider =
+    FutureProvider.family<List<KasKategori>, DateRange>((ref, range) async {
+  final db = ref.watch(databaseProvider);
+  final rows = await db.reportsDao
+      .getCashFlowByCategory(range.start, range.end, 'income');
+  return rows.map((r) {
+    return KasKategori(
+      kategori: r['category'] as String,
+      total: (r['total'] as num).toDouble(),
+      jumlah: (r['jumlah'] as num).toInt(),
+    );
+  }).toList();
+});
+
+/// Breakdown kas keluar per kategori
+final kasExpenseByKategoriProvider =
+    FutureProvider.family<List<KasKategori>, DateRange>((ref, range) async {
+  final db = ref.watch(databaseProvider);
+  final rows = await db.reportsDao
+      .getCashFlowByCategory(range.start, range.end, 'expense');
+  return rows.map((r) {
+    return KasKategori(
+      kategori: r['category'] as String,
+      total: (r['total'] as num).toDouble(),
+      jumlah: (r['jumlah'] as num).toInt(),
+    );
+  }).toList();
+});
+
+/// Ringkasan kas hari ini (untuk widget dashboard)
 final kasHariIniProvider = FutureProvider<KasSummary>((ref) async {
   final now = DateTime.now();
   final start = DateTime(now.year, now.month, now.day);
   final end = start.add(const Duration(days: 1));
-
-  return ref.watch(kasSummaryProvider(DateRange(start: start, end: end)).future);
+  return ref
+      .watch(kasSummaryProvider(DateRange(start: start, end: end)).future);
 });
+
+/// Laba rugi hari ini (untuk widget dashboard)
+final labaRugiHariIniProvider = FutureProvider<LabaRugiData>((ref) async {
+  final now = DateTime.now();
+  final start = DateTime(now.year, now.month, now.day);
+  final end = start.add(const Duration(days: 1));
+  return ref
+      .watch(labaRugiProvider(DateRange(start: start, end: end)).future);
+});
+
+// ─── Helper: label kategori kas ───────────────────────────────────────────────
+
+String labelKategoriKas(String cat) {
+  const labels = {
+    'penjualan': 'Penjualan',
+    'Penjualan': 'Penjualan',
+    'pelunasan_hutang': 'Pelunasan Hutang',
+    'modal': 'Tambah Modal',
+    'Modal Awal': 'Modal Awal',
+    'Pinjaman': 'Pinjaman',
+    'lain': 'Lain-lain',
+    'Lainnya': 'Lain-lain',
+    'operasional': 'Biaya Operasional',
+    'Biaya Operasional': 'Biaya Operasional',
+    'pembelian_stok': 'Pembelian Stok',
+    'Pembelian Stok': 'Pembelian Stok',
+    'gaji': 'Gaji Karyawan',
+    'Gaji': 'Gaji Karyawan',
+    'sewa': 'Biaya Sewa',
+    'listrik_air': 'Listrik & Air',
+    'Utilitas': 'Utilitas',
+  };
+  return labels[cat] ?? cat;
+}
