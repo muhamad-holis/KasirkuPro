@@ -13,13 +13,17 @@ class ThemeModeNotifier extends StateNotifier<bool> {
 
   Future<void> _load() async {
     final prefs = await SharedPreferences.getInstance();
+    // Guard: notifier mungkin sudah di-dispose sebelum async selesai
+    if (!mounted) return;
     state = prefs.getBool('dark_mode') ?? false;
   }
 
   Future<void> toggle() async {
-    state = !state;
+    if (!mounted) return;
+    final newVal = !state;
+    state = newVal;
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool('dark_mode', state);
+    await prefs.setBool('dark_mode', newVal);
   }
 }
 
