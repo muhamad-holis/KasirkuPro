@@ -5,6 +5,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
+import 'package:local_auth/local_auth.dart';
+import 'package:print_bluetooth_thermal/print_bluetooth_thermal.dart';
+import 'package:esc_pos_utils_plus/esc_pos_utils_plus.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/currency.dart';
 import '../../providers/settings_provider.dart';
@@ -198,7 +201,7 @@ class SettingsScreen extends ConsumerWidget {
               icon: Icons.fingerprint_outlined,
               title: 'Biometrik',
               subtitle: 'Fingerprint / Face ID',
-              onTap: () {},
+              onTap: () => _setupBiometric(context),
             ),
           ]),
 
@@ -408,12 +411,164 @@ class SettingsScreen extends ConsumerWidget {
 
   Future<void> _testPrint(
       BuildContext context, WidgetRef ref, StoreSettings store) async {
+    final printer = ref.read(printerSettingsProvider);
+    if (printer.deviceAddress == null) return;
+
+    // Tampilkan loading
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
         content: Text('Mengirim test print ke printer...'),
         backgroundColor: AppColors.primary,
+        duration: Duration(seconds: 2),
       ),
     );
+
+    try {
+      // Pastikan terhubung ke printer
+      final bool connected = await PrintBluetoothThermal.connectionStatus;
+      if (!connected) {
+        final bool result = await PrintBluetoothThermal.connect(
+          macPrinterAddress: printer.deviceAddress!,
+        );
+        if (!result) {
+          if (context.mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Gagal terhubung ke printer'),
+                backgroundColor: AppColors.danger,
+              ),
+            );
+          }
+          return;
+        }
+      }
+
+      // Generate ESC/POS bytes untuk struk test
+      final profile = await CapabilityProfile.load();
+      final paperSize = store.receiptSize == '80mm'
+          ? PaperSize.mm80
+          : PaperSize.mm58;
+      final generator = Generator(paperSize, profile);
+      var bytes = <int>[];
+
+      final storeName = store.storeName.isEmpty ? 'KasirKu' : store.storeName;
+      final now = DateTime.now();
+      final dateStr =
+          '${now.day.toString().padLeft(2, '0')}/${now.month.toString().padLeft(2, '0')}/${now.year} '
+          '${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}';
+
+      // Header
+      bytes += generator.text(storeName,
+          styles: const PosStyles(
+              align: PosAlign.center,
+              bold: true,
+              height: PosTextSize.size2,
+              width: PosTextSize.size2));
+      if (store.storeAddress.isNotEmpty) {
+        bytes += generator.text(store.storeAddress,
+            styles: const PosStyles(align: PosAlign.center));
+      }
+      if (store.storePhone.isNotEmpty) {
+        bytes += generator.text('Telp: ${store.storePhone}',
+            styles: const PosStyles(align: PosAlign.center));
+      }
+      bytes += generator.hr();
+      bytes += generator.text('*** STRUK UJI COBA ***',
+          styles: const PosStyles(align: PosAlign.center, bold: true));
+      bytes += generator.text(dateStr,
+          styles: const PosStyles(align: PosAlign.center));
+      bytes += generator.hr();
+
+      // Contoh item
+      bytes += generator.text('Aqua Botol 600ml',
+          styles: const PosStyles(bold: true));
+      bytes += generator.row([
+        PosColumn(
+            text: '  2 x Rp 4.000',
+            width: 8,
+            styles: const PosStyles(align: PosAlign.left)),
+        PosColumn(
+            text: 'Rp 8.000',
+            width: 4,
+            styles: const PosStyles(align: PosAlign.right)),
+      ]);
+      bytes += generator.text('Indomie Goreng',
+          styles: const PosStyles(bold: true));
+      bytes += generator.row([
+        PosColumn(
+            text: '  3 x Rp 3.500',
+            width: 8,
+            styles: const PosStyles(align: PosAlign.left)),
+        PosColumn(
+            text: 'Rp 10.500',
+            width: 4,
+            styles: const PosStyles(align: PosAlign.right)),
+      ]);
+      bytes += generator.hr();
+
+      // Total
+      bytes += generator.row([
+        PosColumn(
+            text: 'TOTAL',
+            width: 6,
+            styles: const PosStyles(bold: true, align: PosAlign.left)),
+        PosColumn(
+            text: 'Rp 18.500',
+            width: 6,
+            styles: const PosStyles(bold: true, align: PosAlign.right)),
+      ]);
+      bytes += generator.row([
+        PosColumn(
+            text: 'Bayar',
+            width: 6,
+            styles: const PosStyles(align: PosAlign.left)),
+        PosColumn(
+            text: 'Rp 20.000',
+            width: 6,
+            styles: const PosStyles(align: PosAlign.right)),
+      ]);
+      bytes += generator.row([
+        PosColumn(
+            text: 'Kembali',
+            width: 6,
+            styles: const PosStyles(align: PosAlign.left)),
+        PosColumn(
+            text: 'Rp 1.500',
+            width: 6,
+            styles: const PosStyles(align: PosAlign.right)),
+      ]);
+      bytes += generator.hr();
+
+      // Footer
+      if (store.storeNote.isNotEmpty) {
+        bytes += generator.text(store.storeNote,
+            styles: const PosStyles(align: PosAlign.center));
+      }
+      bytes += generator.text('Printer OK - Test Berhasil',
+          styles: const PosStyles(align: PosAlign.center, bold: true));
+      bytes += generator.feed(3);
+      bytes += generator.cut();
+
+      await PrintBluetoothThermal.writeBytes(bytes);
+
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('✅ Test print berhasil!'),
+            backgroundColor: AppColors.success,
+          ),
+        );
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Gagal test print: $e'),
+            backgroundColor: AppColors.danger,
+          ),
+        );
+      }
+    }
   }
 
   // ── PIN setup ──────────────────────────────────────────────────────────────
@@ -430,6 +585,97 @@ class SettingsScreen extends ConsumerWidget {
         child: _PinSetupSheet(isPinActive: isPinActive),
       ),
     );
+  }
+
+  // ── Biometric setup ────────────────────────────────────────────────────────
+
+  Future<void> _setupBiometric(BuildContext context) async {
+    final auth = LocalAuthentication();
+
+    // Cek apakah perangkat mendukung biometrik
+    final bool canCheckBiometrics = await auth.canCheckBiometrics;
+    final bool isDeviceSupported = await auth.isDeviceSupported();
+
+    if (!canCheckBiometrics || !isDeviceSupported) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Perangkat tidak mendukung biometrik'),
+            backgroundColor: AppColors.warning,
+          ),
+        );
+      }
+      return;
+    }
+
+    // Cek jenis biometrik yang tersedia
+    final List<BiometricType> availableBiometrics =
+        await auth.getAvailableBiometrics();
+
+    if (availableBiometrics.isEmpty) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+                'Belum ada data biometrik. Daftarkan fingerprint/Face ID di pengaturan perangkat terlebih dahulu.'),
+            backgroundColor: AppColors.warning,
+            duration: Duration(seconds: 4),
+          ),
+        );
+      }
+      return;
+    }
+
+    // Tentukan label biometrik yang tersedia
+    final hasFace = availableBiometrics.contains(BiometricType.face);
+    final hasFingerprint =
+        availableBiometrics.contains(BiometricType.fingerprint);
+    String biometricLabel = 'Biometrik';
+    if (hasFace && hasFingerprint) {
+      biometricLabel = 'Fingerprint / Face ID';
+    } else if (hasFace) {
+      biometricLabel = 'Face ID';
+    } else if (hasFingerprint) {
+      biometricLabel = 'Fingerprint';
+    }
+
+    // Autentikasi biometrik
+    try {
+      final bool authenticated = await auth.authenticate(
+        localizedReason: 'Verifikasi $biometricLabel untuk mengaktifkan login biometrik',
+        options: const AuthenticationOptions(
+          stickyAuth: true,
+          biometricOnly: true,
+        ),
+      );
+
+      if (!context.mounted) return;
+
+      if (authenticated) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('✅ $biometricLabel berhasil diverifikasi'),
+            backgroundColor: AppColors.success,
+          ),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Verifikasi biometrik dibatalkan'),
+            backgroundColor: AppColors.warning,
+          ),
+        );
+      }
+    } on PlatformException catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error biometrik: ${e.message ?? e.code}'),
+            backgroundColor: AppColors.danger,
+          ),
+        );
+      }
+    }
   }
 
   // ── Backup data ────────────────────────────────────────────────────────────
@@ -733,13 +979,35 @@ class _BluetoothScanSheet extends ConsumerStatefulWidget {
 class _BluetoothScanSheetState
     extends ConsumerState<_BluetoothScanSheet> {
   bool _scanning = false;
+  List<dynamic> _devices = [];
+  String? _error;
 
-  // Mock devices — replace with actual bluetooth scan
-  final _devices = [
-    {'name': 'Printer Thermal 58mm', 'address': 'DC:0D:30:11:22:33'},
-    {'name': 'RPP02N',               'address': 'DC:0D:30:44:55:66'},
-    {'name': 'MPT-II',               'address': 'DC:0D:30:77:88:99'},
-  ];
+  @override
+  void initState() {
+    super.initState();
+    _scanDevices();
+  }
+
+  Future<void> _scanDevices() async {
+    setState(() { _scanning = true; _error = null; });
+    try {
+      final List<dynamic> paired =
+          await PrintBluetoothThermal.pairedBluetooths;
+      if (mounted) {
+        setState(() {
+          _devices = paired;
+          _scanning = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _error = 'Gagal memuat daftar printer: $e';
+          _scanning = false;
+        });
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -758,60 +1026,84 @@ class _BluetoothScanSheetState
                 icon: Icon(
                     _scanning ? Icons.stop : Icons.refresh,
                     color: AppColors.primary),
-                onPressed: () {
-                  setState(() => _scanning = !_scanning);
-                  if (_scanning) {
-                    Future.delayed(const Duration(seconds: 2),
-                        () { if (mounted) setState(() => _scanning = false); });
-                  }
-                }),
+                onPressed: _scanning ? null : _scanDevices),
           ]),
           if (_scanning) ...[
             const SizedBox(height: 8),
             const LinearProgressIndicator(),
             const SizedBox(height: 8),
-            Text('Mencari perangkat...',
+            Text('Mencari perangkat Bluetooth yang dipasangkan...',
                 style: TextStyle(
                     color: Colors.grey.shade500, fontSize: 12)),
           ],
-          const SizedBox(height: 12),
-          ..._devices.map((d) => ListTile(
-            leading: Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: AppColors.primaryLight,
-                borderRadius: BorderRadius.circular(10),
+          if (_error != null) ...[
+            const SizedBox(height: 8),
+            Text(_error!,
+                style: const TextStyle(
+                    color: AppColors.danger, fontSize: 12)),
+          ],
+          if (!_scanning && _devices.isEmpty && _error == null) ...[
+            const SizedBox(height: 16),
+            Center(
+              child: Column(children: [
+                Icon(Icons.bluetooth_disabled,
+                    size: 40, color: Colors.grey.shade400),
+                const SizedBox(height: 8),
+                Text('Tidak ada printer Bluetooth yang dipasangkan',
+                    style: TextStyle(
+                        color: Colors.grey.shade500, fontSize: 13),
+                    textAlign: TextAlign.center),
+                const SizedBox(height: 4),
+                Text('Pasangkan printer terlebih dahulu\ndi Pengaturan Bluetooth perangkat',
+                    style: TextStyle(
+                        color: Colors.grey.shade400, fontSize: 11),
+                    textAlign: TextAlign.center),
+              ]),
+            ),
+            const SizedBox(height: 16),
+          ],
+          if (_devices.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            ..._devices.map((d) => ListTile(
+              leading: Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: AppColors.primaryLight,
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: const Icon(Icons.print_outlined,
+                    color: AppColors.primary, size: 20),
               ),
-              child: const Icon(Icons.print_outlined,
-                  color: AppColors.primary, size: 20),
-            ),
-            title: Text(d['name']!,
-                style: const TextStyle(fontWeight: FontWeight.w600)),
-            subtitle: Text(d['address']!,
-                style: TextStyle(
-                    fontSize: 11, color: Colors.grey.shade500)),
-            trailing: ElevatedButton(
-              onPressed: () async {
-                await ref.read(printerSettingsProvider.notifier)
-                    .setPrinter(d['name']!, d['address']!);
-                if (context.mounted) {
-                  Navigator.pop(context);
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content:
-                          Text('${d['name']} terhubung'),
-                      backgroundColor: AppColors.success,
-                    ),
-                  );
-                }
-              },
-              style: ElevatedButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 16, vertical: 8)),
-              child: const Text('Pilih',
-                  style: TextStyle(fontSize: 13)),
-            ),
-          )),
+              title: Text(d.name ?? 'Printer Bluetooth',
+                  style: const TextStyle(fontWeight: FontWeight.w600)),
+              subtitle: Text(d.macAdress ?? '',
+                  style: TextStyle(
+                      fontSize: 11, color: Colors.grey.shade500)),
+              trailing: ElevatedButton(
+                onPressed: () async {
+                  await ref.read(printerSettingsProvider.notifier)
+                      .setPrinter(
+                          d.name ?? 'Printer Bluetooth',
+                          d.macAdress ?? '');
+                  if (context.mounted) {
+                    Navigator.pop(context);
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text(
+                            '${d.name ?? 'Printer'} terhubung'),
+                        backgroundColor: AppColors.success,
+                      ),
+                    );
+                  }
+                },
+                style: ElevatedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 16, vertical: 8)),
+                child: const Text('Pilih',
+                    style: TextStyle(fontSize: 13)),
+              ),
+            )),
+          ],
           const SizedBox(height: 8),
           Center(
             child: TextButton.icon(
