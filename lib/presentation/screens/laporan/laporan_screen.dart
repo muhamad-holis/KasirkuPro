@@ -2,7 +2,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 // Layar Laporan — Kasirku
 // Tab: Penjualan | Arus Kas | Laba Rugi | Kas | Stok | Kategori
-// Ditambahkan: Tab Arus Kas & Laba Rugi (prioritas baru)
+
 // ─────────────────────────────────────────────────────────────────────────────
 
 import 'dart:typed_data';
@@ -13,7 +13,6 @@ import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 import 'package:intl/intl.dart';
-import 'package:intl/date_symbol_data_local.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/currency.dart';
 import '../../../data/database/app_database.dart';
@@ -46,7 +45,7 @@ class _LaporanScreenState extends ConsumerState<LaporanScreen>
   @override
   void initState() {
     super.initState();
-    _tab = TabController(length: 6, vsync: this);
+    _tab = TabController(length: 3, vsync: this);
   }
 
   @override
@@ -121,11 +120,8 @@ class _LaporanScreenState extends ConsumerState<LaporanScreen>
           tabAlignment: TabAlignment.start,
           tabs: const [
             Tab(text: 'Penjualan'),
-            Tab(text: 'Arus Kas'),
             Tab(text: 'Laba Rugi'),
             Tab(text: 'Kas'),
-            Tab(text: 'Stok'),
-            Tab(text: 'Kategori'),
           ],
         ),
       ),
@@ -153,11 +149,8 @@ class _LaporanScreenState extends ConsumerState<LaporanScreen>
               controller: _tab,
               children: [
                 _SalesTab(start: _start, end: DateTime.now()),
-                _ArusKasTab(range: _range),       // ← BARU
-                _LabaRugiTab(range: _range),       // ← BARU
-                _CashTab(start: _start, end: DateTime.now()),
-                const _StockTab(),
-                _CategoryTab(start: _start, end: DateTime.now()),
+                _LabaRugiTab(range: _range),
+                _CashTab(start: _start, end: DateTime.now(), range: _range),
               ],
             ),
           ),
@@ -171,8 +164,6 @@ class _LaporanScreenState extends ConsumerState<LaporanScreen>
   Future<void> _exportPdf() async {
     setState(() => _exportingPdf = true);
     try {
-      // Pastikan locale 'id' sudah diinisialisasi sebelum pakai DateFormat
-      await initializeDateFormatting('id', null);
       final db = ref.read(databaseProvider);
       final end = DateTime.now();
       final salesData =
@@ -740,6 +731,155 @@ class _SalesTab extends ConsumerWidget {
 // ─────────────────────────────────────────────────────────────────────────────
 // TAB 2 — ARUS KAS (BARU)
 // ─────────────────────────────────────────────────────────────────────────────
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Widget Arus Kas — digunakan sebagai section di dalam tab Kas
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _ArusKasSection extends ConsumerWidget {
+  final DateRange range;
+  const _ArusKasSection({required this.range});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final arusAsync = ref.watch(arusKasHarianProvider(range));
+    final incKatAsync = ref.watch(kasIncomeByKategoriProvider(range));
+    final expKatAsync = ref.watch(kasExpenseByKategoriProvider(range));
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text('Arus Kas Harian',
+            style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: AppColors.textPrimary)),
+        const SizedBox(height: 12),
+
+        // ── Grafik Arus Kas Harian ────────────────────────────────────────────
+        arusAsync.when(
+          data: (rows) {
+            if (rows.isEmpty) return const Padding(
+              padding: EdgeInsets.symmetric(vertical: 16),
+              child: Center(child: Text('Belum ada data arus kas', style: TextStyle(color: AppColors.textSecondary))),
+            );
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                SizedBox(
+                  height: 180,
+                  child: BarChart(BarChartData(
+                    barGroups: rows.asMap().entries.map((e) {
+                      return BarChartGroupData(
+                        x: e.key,
+                        barsSpace: 4,
+                        barRods: [
+                          BarChartRodData(
+                            toY: e.value.masuk,
+                            color: AppColors.success,
+                            width: 9,
+                            borderRadius: BorderRadius.circular(3),
+                          ),
+                          BarChartRodData(
+                            toY: e.value.keluar,
+                            color: AppColors.danger,
+                            width: 9,
+                            borderRadius: BorderRadius.circular(3),
+                          ),
+                        ],
+                      );
+                    }).toList(),
+                    titlesData: FlTitlesData(
+                      leftTitles: AxisTitles(
+                        sideTitles: SideTitles(
+                          showTitles: true,
+                          reservedSize: 55,
+                          getTitlesWidget: (v, _) => Text(
+                              CurrencyFormatter.formatCompact(v),
+                              style: const TextStyle(fontSize: 8)),
+                        ),
+                      ),
+                      bottomTitles: AxisTitles(
+                        sideTitles: SideTitles(
+                          showTitles: true,
+                          reservedSize: 22,
+                          getTitlesWidget: (v, _) {
+                            final i = v.toInt();
+                            if (i >= rows.length) return const SizedBox();
+                            final dt = DateTime.tryParse(rows[i].tanggal);
+                            if (dt == null) return const SizedBox();
+                            return Text(
+                              DateFormat('dd/MM').format(dt),
+                              style: const TextStyle(fontSize: 8),
+                            );
+                          },
+                        ),
+                      ),
+                      topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                      rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                    ),
+                    gridData: FlGridData(
+                        getDrawingHorizontalLine: (_) => FlLine(
+                            color: Colors.grey.shade100, strokeWidth: 1)),
+                    borderData: FlBorderData(show: false),
+                  )),
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    _Legend('Masuk', AppColors.success),
+                    const SizedBox(width: 16),
+                    _Legend('Keluar', AppColors.danger),
+                  ],
+                ),
+              ],
+            );
+          },
+          loading: () => const Center(child: CircularProgressIndicator()),
+          error: (e, _) => Text('Error: \$e'),
+        ),
+
+        const SizedBox(height: 16),
+
+        // ── Breakdown Kategori ────────────────────────────────────────────────
+        incKatAsync.when(
+          data: (items) {
+            if (items.isEmpty) return const SizedBox();
+            final total = items.fold<double>(0, (s, k) => s + k.total);
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text('Breakdown Kas Masuk',
+                    style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13)),
+                const SizedBox(height: 8),
+                ...items.map((k) => _KatRow(item: k, total: total, color: AppColors.success)),
+                const SizedBox(height: 12),
+              ],
+            );
+          },
+          loading: () => const SizedBox(),
+          error: (_, __) => const SizedBox(),
+        ),
+
+        expKatAsync.when(
+          data: (items) {
+            if (items.isEmpty) return const SizedBox();
+            final total = items.fold<double>(0, (s, k) => s + k.total);
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text('Breakdown Kas Keluar',
+                    style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13)),
+                const SizedBox(height: 8),
+                ...items.map((k) => _KatRow(item: k, total: total, color: AppColors.danger)),
+              ],
+            );
+          },
+          loading: () => const SizedBox(),
+          error: (_, __) => const SizedBox(),
+        ),
+      ],
+    );
+  }
+}
 
 class _ArusKasTab extends ConsumerWidget {
   final DateRange range;
@@ -1385,7 +1525,8 @@ class _MarginBar extends StatelessWidget {
 
 class _CashTab extends ConsumerStatefulWidget {
   final DateTime start, end;
-  const _CashTab({required this.start, required this.end});
+  final DateRange range;
+  const _CashTab({required this.start, required this.end, required this.range});
 
   @override
   ConsumerState<_CashTab> createState() => _CashTabState();
@@ -1447,6 +1588,15 @@ class _CashTabState extends ConsumerState<_CashTab> {
               return ListView(
                 padding: const EdgeInsets.fromLTRB(16, 16, 16, 100),
                 children: [
+                  // ── Arus Kas Harian (gabungan dari tab sebelumnya) ──────────
+                  _ArusKasSection(range: widget.range),
+                  const SizedBox(height: 20),
+                  const Divider(),
+                  const SizedBox(height: 12),
+                  // ── Ringkasan Kas Manual ────────────────────────────────────
+                  const Text('Kas Manual',
+                    style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: AppColors.textPrimary)),
+                  const SizedBox(height: 12),
                   Row(children: [
                     Expanded(
                         child: _InfoCard(
