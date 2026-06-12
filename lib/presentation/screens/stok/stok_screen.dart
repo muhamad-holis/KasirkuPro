@@ -359,7 +359,7 @@ class _ProductListTab extends ConsumerWidget {
                   crossAxisCount: 3,
                   crossAxisSpacing: 8,
                   mainAxisSpacing: 8,
-                  childAspectRatio: 0.72,
+                  childAspectRatio: 0.62,
                 ),
                 itemCount: list.length,
                 itemBuilder: (_, i) => _ProductGridCard(product: list[i]),
@@ -431,7 +431,7 @@ class _LowStockTab extends ConsumerWidget {
                   crossAxisCount: 3,
                   crossAxisSpacing: 8,
                   mainAxisSpacing: 8,
-                  childAspectRatio: 0.72,
+                  childAspectRatio: 0.62,
                 ),
                 itemCount: list.length,
                 itemBuilder: (_, i) => _ProductGridCard(product: list[i]),
@@ -1022,17 +1022,18 @@ class _ProductGridCard extends ConsumerWidget {
             Expanded(
               flex: 4,
               child: Padding(
-                padding: const EdgeInsets.fromLTRB(7, 6, 7, 6),
+                padding: const EdgeInsets.fromLTRB(7, 5, 7, 5),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                  mainAxisSize: MainAxisSize.max,
                   children: [
                     // Nama produk
                     Text(
                       product.name,
                       style: const TextStyle(
                         fontWeight: FontWeight.w600,
-                        fontSize: 11,
+                        fontSize: 10,
                       ),
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
@@ -1042,7 +1043,7 @@ class _ProductGridCard extends ConsumerWidget {
                       CurrencyFormatter.format(product.sellPrice),
                       style: const TextStyle(
                         color: AppColors.primary,
-                        fontSize: 11,
+                        fontSize: 10,
                         fontWeight: FontWeight.w600,
                       ),
                       maxLines: 1,
@@ -1051,18 +1052,20 @@ class _ProductGridCard extends ConsumerWidget {
                     // Badge stok
                     Container(
                       padding: const EdgeInsets.symmetric(
-                          horizontal: 6, vertical: 3),
+                          horizontal: 5, vertical: 2),
                       decoration: BoxDecoration(
                         color: statusColor.withOpacity(0.12),
-                        borderRadius: BorderRadius.circular(6),
+                        borderRadius: BorderRadius.circular(5),
                       ),
                       child: Text(
                         '${product.stock} ${product.unit}',
                         style: TextStyle(
-                          fontSize: 10,
+                          fontSize: 9,
                           fontWeight: FontWeight.w700,
                           color: statusColor,
                         ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
                     ),
                   ],
