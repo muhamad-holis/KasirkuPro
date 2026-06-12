@@ -34,6 +34,14 @@ class _LaporanScreenState extends ConsumerState<LaporanScreen>
   String _period = '7d';
   bool _exportingPdf = false;
 
+  // ── PDF color constants (accessible from all PDF builder methods) ──────────
+  static const _pdfPrimary   = PdfColor.fromInt(0xFF0D9488);
+  static const _pdfSuccess   = PdfColor.fromInt(0xFF10B981);
+  static const _pdfDanger    = PdfColor.fromInt(0xFFEF4444);
+  static const _pdfWarning   = PdfColor.fromInt(0xFFF59E0B);
+  static const _pdfGrey      = PdfColor.fromInt(0xFF6B7280);
+  static const _pdfLightGrey = PdfColor.fromInt(0xFFF3F4F6);
+
   @override
   void initState() {
     super.initState();
@@ -214,12 +222,6 @@ class _LaporanScreenState extends ConsumerState<LaporanScreen>
     final printDate =
         DateFormat('dd MMMM yyyy, HH:mm', 'id').format(now);
 
-    const primaryColor = PdfColor.fromInt(0xFF0D9488);
-    const successColor = PdfColor.fromInt(0xFF10B981);
-    const dangerColor = PdfColor.fromInt(0xFFEF4444);
-    const warningColor = PdfColor.fromInt(0xFFF59E0B);
-    const greyColor = PdfColor.fromInt(0xFF6B7280);
-    const lightGrey = PdfColor.fromInt(0xFFF3F4F6);
 
     final omzet =
         salesData.fold<double>(0, (s, r) => s + (r['omzet'] as num));
@@ -243,7 +245,7 @@ class _LaporanScreenState extends ConsumerState<LaporanScreen>
           pw.Container(
             padding: const pw.EdgeInsets.all(16),
             decoration: const pw.BoxDecoration(
-              color: primaryColor,
+              color: _pdfPrimary,
               borderRadius:
                   pw.BorderRadius.all(pw.Radius.circular(10)),
             ),
@@ -294,97 +296,97 @@ class _LaporanScreenState extends ConsumerState<LaporanScreen>
       ),
       build: (ctx) => [
         // ── Penjualan ──
-        _pdfSectionTitle('Ringkasan Penjualan', primaryColor),
+        _pdfSectionTitle('Ringkasan Penjualan', _pdfPrimary),
         pw.SizedBox(height: 8),
         pw.Row(children: [
           pw.Expanded(
               child: _pdfSummaryCard('Total Omzet',
-                  CurrencyFormatter.format(omzet), successColor, lightGrey)),
+                  CurrencyFormatter.format(omzet), _pdfSuccess, _pdfLightGrey)),
           pw.SizedBox(width: 8),
           pw.Expanded(
               child: _pdfSummaryCard('Transaksi', '$txCount',
-                  primaryColor, lightGrey)),
+                  _pdfPrimary, _pdfLightGrey)),
           pw.SizedBox(width: 8),
           pw.Expanded(
               child: _pdfSummaryCard('Rata-rata/Transaksi',
-                  CurrencyFormatter.format(avgTx), warningColor, lightGrey)),
+                  CurrencyFormatter.format(avgTx), _pdfWarning, _pdfLightGrey)),
         ]),
         pw.SizedBox(height: 16),
 
         // ── Laba Rugi ──
-        _pdfSectionTitle('Laporan Laba Rugi', primaryColor),
+        _pdfSectionTitle('Laporan Laba Rugi', _pdfPrimary),
         pw.SizedBox(height: 8),
         pw.Container(
           padding: const pw.EdgeInsets.all(14),
           decoration: pw.BoxDecoration(
-            color: lightGrey,
+            color: _pdfLightGrey,
             borderRadius:
                 const pw.BorderRadius.all(pw.Radius.circular(8)),
           ),
           child: pw.Column(
             children: [
               _pdfLRRow('Omzet Penjualan',
-                  CurrencyFormatter.format(omzet), successColor),
+                  CurrencyFormatter.format(omzet), _pdfSuccess),
               _pdfLRRow('HPP (Harga Pokok Penjualan)',
-                  '- ${CurrencyFormatter.format(hpp)}', dangerColor),
-              pw.Divider(thickness: 0.5, color: greyColor),
+                  '- ${CurrencyFormatter.format(hpp)}', _pdfDanger),
+              pw.Divider(thickness: 0.5, color: _pdfGrey),
               _pdfLRRow('Laba Kotor',
                   CurrencyFormatter.format(labaKotor),
-                  labaKotor >= 0 ? successColor : dangerColor,
+                  labaKotor >= 0 ? _pdfSuccess : _pdfDanger,
                   bold: true),
               pw.SizedBox(height: 4),
               _pdfLRRow('Kas Masuk (non-penjualan)',
                   CurrencyFormatter.format(
                       labaData['kas_income_non_sales'] ?? 0),
-                  successColor),
+                  _pdfSuccess),
               _pdfLRRow('Kas Keluar (operasional)',
                   '- ${CurrencyFormatter.format(labaData['kas_expense'] ?? 0)}',
-                  dangerColor),
-              pw.Divider(thickness: 0.5, color: greyColor),
+                  _pdfDanger),
+              pw.Divider(thickness: 0.5, color: _pdfGrey),
               _pdfLRRow('LABA BERSIH',
                   CurrencyFormatter.format(labaBersih),
-                  labaBersih >= 0 ? successColor : dangerColor,
+                  labaBersih >= 0 ? _pdfSuccess : _pdfDanger,
                   bold: true),
               _pdfLRRow('Margin Laba Bersih',
                   '${margin.toStringAsFixed(1)}%',
-                  margin >= 10 ? successColor : dangerColor),
+                  margin >= 10 ? _pdfSuccess : _pdfDanger),
             ],
           ),
         ),
         pw.SizedBox(height: 16),
 
         // ── Kas ──
-        _pdfSectionTitle('Laporan Kas', primaryColor),
+        _pdfSectionTitle('Laporan Kas', _pdfPrimary),
         pw.SizedBox(height: 8),
         pw.Row(children: [
           pw.Expanded(
               child: _pdfSummaryCard('Kas Masuk',
-                  CurrencyFormatter.format(income), successColor, lightGrey)),
+                  CurrencyFormatter.format(income), _pdfSuccess, _pdfLightGrey)),
           pw.SizedBox(width: 8),
           pw.Expanded(
               child: _pdfSummaryCard('Kas Keluar',
-                  CurrencyFormatter.format(expense), dangerColor, lightGrey)),
+                  CurrencyFormatter.format(expense), _pdfDanger, _pdfLightGrey)),
           pw.SizedBox(width: 8),
           pw.Expanded(
               child: _pdfSummaryCard(
                   'Saldo Bersih',
                   CurrencyFormatter.format(saldo),
-                  saldo >= 0 ? successColor : dangerColor,
-                  lightGrey)),
+                  saldo >= 0 ? _pdfSuccess : _pdfDanger,
+                  _pdfLightGrey)),
         ]),
         pw.SizedBox(height: 16),
 
         // ── Stok ──
         if (lowStockProducts.isNotEmpty) ...[
-          _pdfSectionTitle('Produk Stok Hampir Habis', warningColor),
+          _pdfSectionTitle('Produk Stok Hampir Habis', _pdfWarning),
           pw.SizedBox(height: 8),
           pw.Table(
             border:
-                pw.TableBorder.all(color: lightGrey, width: 0.5),
+                pw.TableBorder.all(color: _pdfLightGrey, width: 0.5),
             children: [
               pw.TableRow(
                 decoration:
-                    pw.BoxDecoration(color: warningColor.shade(0.8)),
+                    pw.BoxDecoration(color: _pdfWarning.shade(0.8)),
                 children: [
                   _pdfTableCell('Nama Produk', isHeader: true),
                   _pdfTableCell('Stok', isHeader: true),
@@ -398,29 +400,29 @@ class _LaporanScreenState extends ConsumerState<LaporanScreen>
                   _pdfTableCell(p.name),
                   _pdfTableCell('${p.stock} ${p.unit}',
                       color:
-                          isOut ? dangerColor : warningColor),
+                          isOut ? _pdfDanger : _pdfWarning),
                   _pdfTableCell('${p.minStock} ${p.unit}'),
                   _pdfTableCell(
                       isOut ? 'Habis' : 'Hampir Habis',
-                      color: isOut ? dangerColor : warningColor,
+                      color: isOut ? _pdfDanger : _pdfWarning,
                       bold: true),
                 ]);
               }),
             ],
           ),
         ] else ...[
-          _pdfSectionTitle('Status Stok', primaryColor),
+          _pdfSectionTitle('Status Stok', _pdfPrimary),
           pw.SizedBox(height: 8),
           pw.Container(
             padding: const pw.EdgeInsets.all(12),
             decoration: pw.BoxDecoration(
-              color: successColor.shade(0.1),
+              color: _pdfSuccess.shade(0.1),
               borderRadius:
                   const pw.BorderRadius.all(pw.Radius.circular(8)),
             ),
             child: pw.Text('✓  Semua stok dalam kondisi aman',
                 style: pw.TextStyle(
-                    color: successColor,
+                    color: _pdfSuccess,
                     fontWeight: pw.FontWeight.bold,
                     fontSize: 10)),
           ),
@@ -428,11 +430,11 @@ class _LaporanScreenState extends ConsumerState<LaporanScreen>
 
         // Footer
         pw.SizedBox(height: 20),
-        pw.Divider(thickness: 0.5, color: greyColor),
+        pw.Divider(thickness: 0.5, color: _pdfGrey),
         pw.SizedBox(height: 6),
         pw.Text(
           'Laporan digenerate otomatis oleh $storeName • $printDate',
-          style: const pw.TextStyle(fontSize: 8, color: greyColor),
+          style: const pw.TextStyle(fontSize: 8, color: _pdfGrey),
           textAlign: pw.TextAlign.center,
         ),
       ],
@@ -474,7 +476,7 @@ class _LaporanScreenState extends ConsumerState<LaporanScreen>
         children: [
           pw.Text(label,
               style: const pw.TextStyle(
-                  fontSize: 8, color: greyColor)),
+                  fontSize: 8, color: _pdfGrey)),
           pw.SizedBox(height: 4),
           pw.Text(value,
               style: pw.TextStyle(
