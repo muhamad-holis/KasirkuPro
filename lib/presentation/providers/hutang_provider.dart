@@ -154,8 +154,8 @@ final debtPaymentHistoryProvider =
   // Filter yang berkaitan dengan debt ini (dari description)
   final related = flows.where((f) {
     return f.category == 'pelunasan_hutang' &&
-        (f.description?.contains('${debtId}') ?? false ||
-         f.description?.contains('Invoice') ?? false);
+        ((f.description?.contains('$debtId') ?? false) ||
+         (f.description?.contains('Invoice') ?? false));
   }).toList();
 
   return related
