@@ -6,6 +6,7 @@ import '../screens/stok/stok_screen.dart';
 import '../screens/laporan/laporan_screen.dart';
 import '../screens/settings/settings_screen.dart';
 import '../screens/pelanggan/pelanggan_screen.dart';
+import '../screens/kas/kas_screen.dart';
 import '../../core/theme/app_theme.dart';
 
 final currentNavIndexProvider = StateProvider<int>((ref) => 0);
@@ -15,6 +16,7 @@ class MainNavigation extends ConsumerWidget {
 
   // Urutan tab: 0=Dashboard, 1=Laporan, 2=Kasir(FAB), 3=Stock, 4=Pelanggan
   // Settings diakses lewat header Dashboard
+  // KasScreen diakses via navigateToKas (push route)
   static final List<Widget> _screens = [
     const DashboardScreen(),  // 0 Dashboard
     const LaporanScreen(),    // 1 Laporan
@@ -22,6 +24,19 @@ class MainNavigation extends ConsumerWidget {
     const StokScreen(),       // 3 Stock
     const PelangganScreen(),  // 4 Pelanggan
   ];
+
+  /// Buka layar Kas Masuk & Kas Keluar sebagai push route
+  static void navigateToKas(BuildContext context) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => ProviderScope(
+          parent: ProviderScope.containerOf(context),
+          child: const KasScreen(),
+        ),
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
