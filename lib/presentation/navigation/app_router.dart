@@ -6,6 +6,8 @@ import '../screens/stok/stok_screen.dart';
 import '../screens/laporan/laporan_screen.dart';
 import '../screens/settings/settings_screen.dart';
 import '../screens/pelanggan/pelanggan_screen.dart';
+import '../screens/hutang/hutang_screen.dart';
+import '../screens/notifikasi/notifikasi_screen.dart';
 import '../screens/kas/kas_screen.dart';
 import '../../core/theme/app_theme.dart';
 
@@ -14,15 +16,13 @@ final currentNavIndexProvider = StateProvider<int>((ref) => 0);
 class MainNavigation extends ConsumerWidget {
   const MainNavigation({super.key});
 
-  // Urutan tab: 0=Dashboard, 1=Laporan, 2=Kasir(FAB), 3=Stock, 4=Pelanggan
-  // Settings diakses lewat header Dashboard
-  // KasScreen diakses via navigateToKas (push route)
+  // Urutan tab: 0=Dashboard, 1=Laporan, 2=Kasir(FAB), 3=Stok, 4=More(bottom sheet)
+  // More berisi: Pelanggan, Hutang, Notifikasi, Pengaturan
   static final List<Widget> _screens = [
     const DashboardScreen(),  // 0 Dashboard
     const LaporanScreen(),    // 1 Laporan
     const KasirScreen(),      // 2 Kasir
-    const StokScreen(),       // 3 Stock
-    const PelangganScreen(),  // 4 Pelanggan
+    const StokScreen(),       // 3 Stok
   ];
 
   /// Buka layar Kas Masuk & Kas Keluar sebagai push route
@@ -38,6 +38,18 @@ class MainNavigation extends ConsumerWidget {
     );
   }
 
+  /// Buka More Menu bottom sheet
+  static void showMoreMenu(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (_) => ProviderScope(
+        parent: ProviderScope.containerOf(context),
+        child: const _MoreMenuSheet(),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final idx = ref.watch(currentNavIndexProvider);
@@ -45,6 +57,179 @@ class MainNavigation extends ConsumerWidget {
     return Scaffold(
       body: IndexedStack(index: idx, children: _screens),
       bottomNavigationBar: _BottomNavBar(currentIndex: idx, ref: ref),
+    );
+  }
+}
+
+// ─── More Menu Bottom Sheet ───────────────────────────────────────────────────
+
+class _MoreMenuSheet extends StatelessWidget {
+  const _MoreMenuSheet();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: const BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      padding: const EdgeInsets.fromLTRB(20, 12, 20, 32),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // Handle bar
+          Container(
+            width: 40,
+            height: 4,
+            margin: const EdgeInsets.only(bottom: 20),
+            decoration: BoxDecoration(
+              color: Colors.grey.shade300,
+              borderRadius: BorderRadius.circular(2),
+            ),
+          ),
+          const Align(
+            alignment: Alignment.centerLeft,
+            child: Text(
+              'Menu Lainnya',
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w700,
+                color: AppColors.textPrimary,
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+          GridView.count(
+            crossAxisCount: 3,
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            mainAxisSpacing: 12,
+            crossAxisSpacing: 12,
+            childAspectRatio: 1.1,
+            children: [
+              _MoreMenuItem(
+                icon: Icons.people_rounded,
+                label: 'Pelanggan',
+                color: AppColors.primary,
+                onTap: () {
+                  Navigator.pop(context);
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => ProviderScope(
+                        parent: ProviderScope.containerOf(context),
+                        child: const PelangganScreen(),
+                      ),
+                    ),
+                  );
+                },
+              ),
+              _MoreMenuItem(
+                icon: Icons.account_balance_wallet_rounded,
+                label: 'Hutang',
+                color: AppColors.warning,
+                onTap: () {
+                  Navigator.pop(context);
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => ProviderScope(
+                        parent: ProviderScope.containerOf(context),
+                        child: const HutangScreen(),
+                      ),
+                    ),
+                  );
+                },
+              ),
+              _MoreMenuItem(
+                icon: Icons.notifications_rounded,
+                label: 'Notifikasi',
+                color: AppColors.info,
+                onTap: () {
+                  Navigator.pop(context);
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => ProviderScope(
+                        parent: ProviderScope.containerOf(context),
+                        child: const NotifikasiScreen(),
+                      ),
+                    ),
+                  );
+                },
+              ),
+              _MoreMenuItem(
+                icon: Icons.settings_rounded,
+                label: 'Pengaturan',
+                color: AppColors.textSecondary,
+                onTap: () {
+                  Navigator.pop(context);
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => ProviderScope(
+                        parent: ProviderScope.containerOf(context),
+                        child: const SettingsScreen(),
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _MoreMenuItem extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final Color color;
+  final VoidCallback onTap;
+
+  const _MoreMenuItem({
+    required this.icon,
+    required this.label,
+    required this.color,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(16),
+      child: Container(
+        decoration: BoxDecoration(
+          color: color.withOpacity(0.08),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: color.withOpacity(0.15), width: 1),
+        ),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: color.withOpacity(0.12),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(icon, color: color, size: 24),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: color,
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
@@ -103,24 +288,17 @@ class _BottomNavBar extends StatelessWidget {
                 onTap: () =>
                     ref.read(currentNavIndexProvider.notifier).state = 2,
               ),
-              // 3 – Stock
+              // 3 – Stok
               _NavItem(
                 index: 3,
                 current: currentIndex,
                 icon: Icons.inventory_2_outlined,
                 activeIcon: Icons.inventory_2_rounded,
-                label: 'Stock',
+                label: 'Stok',
                 ref: ref,
               ),
-              // 4 – Pelanggan
-              _NavItem(
-                index: 4,
-                current: currentIndex,
-                icon: Icons.people_outline_rounded,
-                activeIcon: Icons.people_rounded,
-                label: 'Pelanggan',
-                ref: ref,
-              ),
+              // 4 – More
+              _MoreNavItem(context: context),
             ],
           ),
         ),
@@ -179,6 +357,51 @@ class _KasirFABItem extends StatelessWidget {
                 color: isActive
                     ? AppColors.primary
                     : AppColors.textSecondary,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ─── More Nav Item ────────────────────────────────────────────────────────────
+
+class _MoreNavItem extends StatelessWidget {
+  final BuildContext context;
+
+  const _MoreNavItem({required this.context});
+
+  @override
+  Widget build(BuildContext ctx) {
+    return Expanded(
+      child: GestureDetector(
+        onTap: () => MainNavigation.showMoreMenu(context),
+        behavior: HitTestBehavior.opaque,
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            AnimatedContainer(
+              duration: const Duration(milliseconds: 180),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 5),
+              decoration: BoxDecoration(
+                color: Colors.transparent,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: const Icon(
+                Icons.grid_view_rounded,
+                color: AppColors.textSecondary,
+                size: 22,
+              ),
+            ),
+            const SizedBox(height: 3),
+            const Text(
+              'Lainnya',
+              style: TextStyle(
+                fontSize: 10,
+                fontWeight: FontWeight.w500,
+                color: AppColors.textSecondary,
               ),
             ),
           ],
