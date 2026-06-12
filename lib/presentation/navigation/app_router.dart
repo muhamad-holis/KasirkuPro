@@ -14,6 +14,9 @@ import '../../core/theme/app_theme.dart';
 
 final currentNavIndexProvider = StateProvider<int>((ref) => 0);
 
+// Key untuk nested Navigator di tab Lainnya — agar back button bisa dicegat
+final _lainnyaNavKey = GlobalKey<NavigatorState>();
+
 class MainNavigation extends ConsumerStatefulWidget {
   const MainNavigation({super.key});
 
@@ -30,33 +33,31 @@ class MainNavigation extends ConsumerStatefulWidget {
     );
   }
 
-  /// Buka More Menu bottom sheet
-  static void showMoreMenu(BuildContext context) {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: Colors.transparent,
-      builder: (_) => ProviderScope(
-        parent: ProviderScope.containerOf(context),
-        child: const _MoreMenuSheet(),
-      ),
-    );
-  }
-
   @override
   ConsumerState<MainNavigation> createState() => _MainNavigationState();
 }
 
 class _MainNavigationState extends ConsumerState<MainNavigation> {
-  // Urutan tab: 0=Dashboard, 1=Laporan, 2=Kasir(FAB), 3=Stok, 4=More(bottom sheet)
-  // More berisi: Pelanggan, Hutang, Notifikasi, Pengaturan
-  static final List<Widget> _screens = [
-    const DashboardScreen(),  // 0 Dashboard
-    const LaporanScreen(),    // 1 Laporan
-    const KasirScreen(),      // 2 Kasir
-    const StokScreen(),       // 3 Stok
+  final List<Widget> _screens = [
+    const DashboardScreen(),   // 0 Dashboard
+    const LaporanScreen(),     // 1 Laporan
+    const KasirScreen(),       // 2 Kasir
+    const StokScreen(),        // 3 Stok
+    const _LainnyaTab(),       // 4 Lainnya (nested navigator)
   ];
 
   Future<bool> _onWillPop() async {
+    final idx = ref.read(currentNavIndexProvider);
+
+    // Jika di tab Lainnya dan ada screen di dalam nested navigator → pop nested dulu
+    if (idx == 4) {
+      final canPop = _lainnyaNavKey.currentState?.canPop() ?? false;
+      if (canPop) {
+        _lainnyaNavKey.currentState!.pop();
+        return false;
+      }
+    }
+
     final shouldExit = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -85,7 +86,7 @@ class _MainNavigationState extends ConsumerState<MainNavigation> {
               backgroundColor: AppColors.primary,
               foregroundColor: Colors.white,
               shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(8)),
+                  borderRadius: BorderRadius.circular(8)),
             ),
             child: const Text('Keluar'),
           ),
@@ -116,173 +117,225 @@ class _MainNavigationState extends ConsumerState<MainNavigation> {
   }
 }
 
-// ─── More Menu Bottom Sheet ───────────────────────────────────────────────────
+// ─── Tab Lainnya dengan Nested Navigator ─────────────────────────────────────
+// Nested Navigator memungkinkan push sub-screen (Pelanggan, Hutang, dll)
+// tanpa bottom nav hilang. Bottom nav tetap kelihatan karena ada di Scaffold
+// luar, bukan di dalam Navigator ini.
 
-class _MoreMenuSheet extends StatelessWidget {
-  const _MoreMenuSheet();
+class _LainnyaTab extends StatelessWidget {
+  const _LainnyaTab();
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      decoration: const BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
-      padding: const EdgeInsets.fromLTRB(20, 12, 20, 32),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          // Handle bar
-          Container(
-            width: 40,
-            height: 4,
-            margin: const EdgeInsets.only(bottom: 20),
-            decoration: BoxDecoration(
-              color: Colors.grey.shade300,
-              borderRadius: BorderRadius.circular(2),
-            ),
-          ),
-          const Align(
-            alignment: Alignment.centerLeft,
-            child: Text(
-              'Menu Lainnya',
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.w700,
-                color: AppColors.textPrimary,
-              ),
-            ),
-          ),
-          const SizedBox(height: 16),
-          GridView.count(
-            crossAxisCount: 3,
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            mainAxisSpacing: 12,
-            crossAxisSpacing: 12,
-            childAspectRatio: 1.1,
-            children: [
-              _MoreMenuItem(
-                icon: Icons.people_rounded,
-                label: 'Pelanggan',
-                color: AppColors.primary,
-                onTap: () {
-                  Navigator.pop(context);
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => ProviderScope(
-                        parent: ProviderScope.containerOf(context),
-                        child: const PelangganScreen(),
-                      ),
-                    ),
-                  );
-                },
-              ),
-              _MoreMenuItem(
-                icon: Icons.account_balance_wallet_rounded,
-                label: 'Hutang',
-                color: AppColors.warning,
-                onTap: () {
-                  Navigator.pop(context);
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => ProviderScope(
-                        parent: ProviderScope.containerOf(context),
-                        child: const HutangScreen(),
-                      ),
-                    ),
-                  );
-                },
-              ),
-              _MoreMenuItem(
-                icon: Icons.notifications_rounded,
-                label: 'Notifikasi',
-                color: AppColors.info,
-                onTap: () {
-                  Navigator.pop(context);
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => ProviderScope(
-                        parent: ProviderScope.containerOf(context),
-                        child: const NotifikasiScreen(),
-                      ),
-                    ),
-                  );
-                },
-              ),
-              _MoreMenuItem(
-                icon: Icons.settings_rounded,
-                label: 'Pengaturan',
-                color: AppColors.textSecondary,
-                onTap: () {
-                  Navigator.pop(context);
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => ProviderScope(
-                        parent: ProviderScope.containerOf(context),
-                        child: const SettingsScreen(),
-                      ),
-                    ),
-                  );
-                },
-              ),
-            ],
-          ),
-        ],
+    return Navigator(
+      key: _lainnyaNavKey,
+      onGenerateRoute: (_) => MaterialPageRoute(
+        builder: (_) => const _LainnyaHomeScreen(),
       ),
     );
   }
 }
 
-class _MoreMenuItem extends StatelessWidget {
+// ─── Halaman utama tab Lainnya (grid menu) ────────────────────────────────────
+
+class _LainnyaHomeScreen extends StatelessWidget {
+  const _LainnyaHomeScreen();
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+    final titleColor = isDark ? Colors.white : AppColors.textPrimary;
+    final subtitleColor = isDark ? const Color(0xFF94A3B8) : AppColors.textSecondary;
+
+    return Scaffold(
+      body: SafeArea(
+        child: CustomScrollView(
+          slivers: [
+            // ── Header ────────────────────────────────────────────────────────
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(20, 20, 20, 8),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Menu Lainnya',
+                      style: TextStyle(
+                        fontSize: 22,
+                        fontWeight: FontWeight.w800,
+                        color: titleColor,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Kelola pelanggan, hutang, dan pengaturan',
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: subtitleColor,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+
+            // ── Grid menu ─────────────────────────────────────────────────────
+            SliverPadding(
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+              sliver: SliverGrid(
+                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: 2,
+                  mainAxisSpacing: 14,
+                  crossAxisSpacing: 14,
+                  childAspectRatio: 1.55,
+                ),
+                delegate: SliverChildListDelegate([
+                  _MenuCard(
+                    icon: Icons.people_rounded,
+                    label: 'Pelanggan',
+                    description: 'Kelola data pelanggan',
+                    color: AppColors.primary,
+                    onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => ProviderScope(
+                          parent: ProviderScope.containerOf(context),
+                          child: const PelangganScreen(),
+                        ),
+                      ),
+                    ),
+                  ),
+                  _MenuCard(
+                    icon: Icons.account_balance_wallet_rounded,
+                    label: 'Hutang',
+                    description: 'Catat hutang piutang',
+                    color: AppColors.warning,
+                    onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => ProviderScope(
+                          parent: ProviderScope.containerOf(context),
+                          child: const HutangScreen(),
+                        ),
+                      ),
+                    ),
+                  ),
+                  _MenuCard(
+                    icon: Icons.notifications_rounded,
+                    label: 'Notifikasi',
+                    description: 'Stok & jatuh tempo',
+                    color: AppColors.info,
+                    onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => ProviderScope(
+                          parent: ProviderScope.containerOf(context),
+                          child: const NotifikasiScreen(),
+                        ),
+                      ),
+                    ),
+                  ),
+                  _MenuCard(
+                    icon: Icons.settings_rounded,
+                    label: 'Pengaturan',
+                    description: 'Toko, struk & printer',
+                    color: AppColors.textSecondary,
+                    onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => ProviderScope(
+                          parent: ProviderScope.containerOf(context),
+                          child: const SettingsScreen(),
+                        ),
+                      ),
+                    ),
+                  ),
+                ]),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ─── Card menu Lainnya ────────────────────────────────────────────────────────
+
+class _MenuCard extends StatelessWidget {
   final IconData icon;
   final String label;
+  final String description;
   final Color color;
   final VoidCallback onTap;
 
-  const _MoreMenuItem({
+  const _MenuCard({
     required this.icon,
     required this.label,
+    required this.description,
     required this.color,
     required this.onTap,
   });
 
   @override
   Widget build(BuildContext context) {
-    return InkWell(
-      onTap: onTap,
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final cardBg = isDark ? AppColors.darkCard : Colors.white;
+    final descColor = isDark ? const Color(0xFF94A3B8) : AppColors.textSecondary;
+
+    return Material(
+      color: cardBg,
       borderRadius: BorderRadius.circular(16),
-      child: Container(
-        decoration: BoxDecoration(
-          color: color.withOpacity(0.08),
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: color.withOpacity(0.15), width: 1),
-        ),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Container(
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(
-                color: color.withOpacity(0.12),
-                shape: BoxShape.circle,
-              ),
-              child: Icon(icon, color: color, size: 24),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(16),
+        child: Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+              color: isDark ? AppColors.darkBorder : AppColors.border,
+              width: 0.5,
             ),
-            const SizedBox(height: 8),
-            Text(
-              label,
-              style: TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
-                color: color,
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: color.withOpacity(0.12),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Icon(icon, color: color, size: 22),
               ),
-            ),
-          ],
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    label,
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
+                      color: color,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    description,
+                    style: TextStyle(
+                      fontSize: 10,
+                      color: descColor,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -302,12 +355,18 @@ class _BottomNavBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final navBg = isDark ? AppColors.darkSurface : Colors.white;
+    final shadowColor = isDark
+        ? Colors.black.withOpacity(0.3)
+        : Colors.black.withOpacity(0.07);
+
     return Container(
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: navBg,
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.07),
+            color: shadowColor,
             blurRadius: 24,
             offset: const Offset(0, -4),
           ),
@@ -352,8 +411,22 @@ class _BottomNavBar extends StatelessWidget {
                 label: 'Stok',
                 ref: ref,
               ),
-              // 4 – More
-              _MoreNavItem(context: context),
+              // 4 – Lainnya (tab, bukan bottom sheet)
+              _NavItem(
+                index: 4,
+                current: currentIndex,
+                icon: Icons.grid_view_outlined,
+                activeIcon: Icons.grid_view_rounded,
+                label: 'Lainnya',
+                ref: ref,
+                // Jika sudah di tab Lainnya & tap lagi → pop ke grid home
+                onRetap: () {
+                  if (_lainnyaNavKey.currentState?.canPop() ?? false) {
+                    _lainnyaNavKey.currentState!
+                        .popUntil((route) => route.isFirst);
+                  }
+                },
+              ),
             ],
           ),
         ),
@@ -375,6 +448,10 @@ class _KasirFABItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final inactiveColor =
+        isDark ? const Color(0xFF94A3B8) : AppColors.textSecondary;
+
     return Expanded(
       child: GestureDetector(
         onTap: onTap,
@@ -382,7 +459,6 @@ class _KasirFABItem extends StatelessWidget {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            // Lingkaran besar teal
             Container(
               width: 48,
               height: 48,
@@ -409,54 +485,7 @@ class _KasirFABItem extends StatelessWidget {
               style: TextStyle(
                 fontSize: 10,
                 fontWeight: FontWeight.w700,
-                color: isActive
-                    ? AppColors.primary
-                    : AppColors.textSecondary,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-// ─── More Nav Item ────────────────────────────────────────────────────────────
-
-class _MoreNavItem extends StatelessWidget {
-  final BuildContext context;
-
-  const _MoreNavItem({required this.context});
-
-  @override
-  Widget build(BuildContext ctx) {
-    return Expanded(
-      child: GestureDetector(
-        onTap: () => MainNavigation.showMoreMenu(context),
-        behavior: HitTestBehavior.opaque,
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            AnimatedContainer(
-              duration: const Duration(milliseconds: 180),
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 5),
-              decoration: BoxDecoration(
-                color: Colors.transparent,
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: const Icon(
-                Icons.grid_view_rounded,
-                color: AppColors.textSecondary,
-                size: 22,
-              ),
-            ),
-            const SizedBox(height: 3),
-            const Text(
-              'Lainnya',
-              style: TextStyle(
-                fontSize: 10,
-                fontWeight: FontWeight.w500,
-                color: AppColors.textSecondary,
+                color: isActive ? AppColors.primary : inactiveColor,
               ),
             ),
           ],
@@ -473,6 +502,8 @@ class _NavItem extends StatelessWidget {
   final IconData icon, activeIcon;
   final String label;
   final WidgetRef ref;
+  /// Dipanggil ketika tab sudah aktif lalu di-tap lagi (misal: scroll ke atas)
+  final VoidCallback? onRetap;
 
   const _NavItem({
     required this.index,
@@ -481,35 +512,42 @@ class _NavItem extends StatelessWidget {
     required this.activeIcon,
     required this.label,
     required this.ref,
+    this.onRetap,
   });
 
   @override
   Widget build(BuildContext context) {
     final isActive = index == current;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final activeBg =
+        isDark ? AppColors.darkPrimaryLight : AppColors.primaryLight;
+    final inactiveColor =
+        isDark ? const Color(0xFF94A3B8) : AppColors.textSecondary;
 
     return Expanded(
       child: GestureDetector(
-        onTap: () =>
-            ref.read(currentNavIndexProvider.notifier).state = index,
+        onTap: () {
+          if (isActive) {
+            onRetap?.call();
+          } else {
+            ref.read(currentNavIndexProvider.notifier).state = index;
+          }
+        },
         behavior: HitTestBehavior.opaque,
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             AnimatedContainer(
               duration: const Duration(milliseconds: 180),
-              padding: const EdgeInsets.symmetric(
-                  horizontal: 14, vertical: 5),
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 14, vertical: 5),
               decoration: BoxDecoration(
-                color: isActive
-                    ? AppColors.primaryLight
-                    : Colors.transparent,
+                color: isActive ? activeBg : Colors.transparent,
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Icon(
                 isActive ? activeIcon : icon,
-                color: isActive
-                    ? AppColors.primary
-                    : AppColors.textSecondary,
+                color: isActive ? AppColors.primary : inactiveColor,
                 size: 22,
               ),
             ),
@@ -518,11 +556,8 @@ class _NavItem extends StatelessWidget {
               label,
               style: TextStyle(
                 fontSize: 10,
-                fontWeight:
-                    isActive ? FontWeight.w700 : FontWeight.w500,
-                color: isActive
-                    ? AppColors.primary
-                    : AppColors.textSecondary,
+                fontWeight: isActive ? FontWeight.w700 : FontWeight.w500,
+                color: isActive ? AppColors.primary : inactiveColor,
               ),
             ),
           ],
