@@ -1,7 +1,8 @@
 // lib/presentation/screens/kas/kas_screen.dart
 // ─────────────────────────────────────────────────────────────────────────────
-// Kas Masuk & Kas Keluar — P3
-// Fitur: Daftar arus kas, Tambah kas masuk/keluar, Laporan Laba Rugi
+// Layar Kas Masuk & Kas Keluar — Fitur Prioritas Kasirku
+// Tab: Semua | Kas Masuk | Kas Keluar
+// Fitur: Tambah, Hapus, Filter periode, Summary bar, Breakdown kategori
 // ─────────────────────────────────────────────────────────────────────────────
 
 import 'package:flutter/material.dart';
@@ -15,7 +16,7 @@ import '../../providers/database_provider.dart';
 import '../../providers/kas_provider.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
-// SCREEN UTAMA KAS
+// MAIN SCREEN
 // ─────────────────────────────────────────────────────────────────────────────
 
 class KasScreen extends ConsumerStatefulWidget {
@@ -56,12 +57,14 @@ class _KasScreenState extends ConsumerState<KasScreen>
     }
   }
 
+  DateRange get _range => DateRange(start: _start, end: DateTime.now());
+
   @override
   Widget build(BuildContext context) {
-    final summary = ref.watch(
-        kasSummaryProvider(DateRange(start: _start, end: DateTime.now())));
+    final summaryAsync = ref.watch(kasSummaryProvider(_range));
 
     return Scaffold(
+      backgroundColor: AppColors.bg,
       appBar: AppBar(
         title: const Text('Kas & Keuangan',
             style: TextStyle(fontWeight: FontWeight.w700)),
@@ -69,24 +72,24 @@ class _KasScreenState extends ConsumerState<KasScreen>
           PopupMenuButton<String>(
             icon: const Icon(Icons.add_circle_outline),
             tooltip: 'Catat Kas',
-            onSelected: (type) => _showFormSheet(context, type),
+            onSelected: (type) => _showForm(type),
             itemBuilder: (_) => [
-              const PopupMenuItem(
+              PopupMenuItem(
                 value: 'income',
                 child: Row(children: [
-                  Icon(Icons.arrow_downward_rounded,
+                  Icon(Icons.arrow_circle_down_rounded,
                       color: AppColors.success, size: 18),
-                  SizedBox(width: 8),
-                  Text('Kas Masuk'),
+                  const SizedBox(width: 8),
+                  const Text('Kas Masuk'),
                 ]),
               ),
-              const PopupMenuItem(
+              PopupMenuItem(
                 value: 'expense',
                 child: Row(children: [
-                  Icon(Icons.arrow_upward_rounded,
+                  Icon(Icons.arrow_circle_up_rounded,
                       color: AppColors.danger, size: 18),
-                  SizedBox(width: 8),
-                  Text('Kas Keluar'),
+                  const SizedBox(width: 8),
+                  const Text('Kas Keluar'),
                 ]),
               ),
             ],
@@ -99,7 +102,7 @@ class _KasScreenState extends ConsumerState<KasScreen>
           indicatorColor: Colors.white,
           indicatorWeight: 3,
           tabs: const [
-            Tab(text: 'Arus Kas'),
+            Tab(text: 'Semua'),
             Tab(text: 'Masuk'),
             Tab(text: 'Keluar'),
           ],
@@ -125,64 +128,58 @@ class _KasScreenState extends ConsumerState<KasScreen>
             ),
           ),
 
-          // ── Summary bar ───────────────────────────────────────────────────
-          summary.when(
-            data: (s) => _KasSummaryBar(summary: s),
-            loading: () => const SizedBox(height: 72),
+          // ── Summary bar ────────────────────────────────────────────────────
+          summaryAsync.when(
+            data: (s) => _SummaryBar(summary: s),
+            loading: () => const SizedBox(height: 76),
             error: (_, __) => const SizedBox(),
           ),
 
-          // ── Tab views ─────────────────────────────────────────────────────
+          // ── Tab views ──────────────────────────────────────────────────────
           Expanded(
             child: TabBarView(
               controller: _tab,
               children: [
-                _ArusKasTab(start: _start, end: DateTime.now()),
-                _KasListTab(
-                    start: _start,
-                    end: DateTime.now(),
-                    type: 'income'),
-                _KasListTab(
-                    start: _start,
-                    end: DateTime.now(),
-                    type: 'expense'),
+                _KasListTab(range: _range, type: null),
+                _KasListTab(range: _range, type: 'income'),
+                _KasListTab(range: _range, type: 'expense'),
               ],
             ),
           ),
         ],
       ),
-      // ── FAB ──────────────────────────────────────────────────────────────
       floatingActionButton: Column(
         mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.end,
         children: [
           FloatingActionButton.small(
-            heroTag: 'fab_keluar',
+            heroTag: 'fab_kas_keluar',
             backgroundColor: AppColors.danger,
             foregroundColor: Colors.white,
-            onPressed: () => _showFormSheet(context, 'expense'),
+            onPressed: () => _showForm('expense'),
             tooltip: 'Kas Keluar',
-            child: const Icon(Icons.arrow_upward_rounded),
+            child: const Icon(Icons.arrow_circle_up_rounded),
           ),
           const SizedBox(height: 8),
           FloatingActionButton.extended(
-            heroTag: 'fab_masuk',
+            heroTag: 'fab_kas_masuk',
             backgroundColor: AppColors.success,
             foregroundColor: Colors.white,
-            onPressed: () => _showFormSheet(context, 'income'),
-            icon: const Icon(Icons.arrow_downward_rounded),
-            label: const Text('Kas Masuk'),
+            onPressed: () => _showForm('income'),
+            icon: const Icon(Icons.arrow_circle_down_rounded),
+            label: const Text('Kas Masuk',
+                style: TextStyle(fontWeight: FontWeight.w700)),
           ),
         ],
       ),
     );
   }
 
-  void _showFormSheet(BuildContext context, String type) {
+  void _showForm(String type) {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      shape: const RoundedRectangleBorder(
-          borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+      backgroundColor: Colors.transparent,
       builder: (_) => ProviderScope(
         parent: ProviderScope.containerOf(context),
         child: _KasFormSheet(initialType: type),
@@ -195,36 +192,36 @@ class _KasScreenState extends ConsumerState<KasScreen>
 // SUMMARY BAR
 // ─────────────────────────────────────────────────────────────────────────────
 
-class _KasSummaryBar extends StatelessWidget {
+class _SummaryBar extends StatelessWidget {
   final KasSummary summary;
-  const _KasSummaryBar({required this.summary});
+  const _SummaryBar({required this.summary});
 
   @override
   Widget build(BuildContext context) {
     return Container(
       color: Colors.white,
-      padding: const EdgeInsets.fromLTRB(16, 10, 16, 10),
+      padding: const EdgeInsets.fromLTRB(14, 10, 14, 10),
       child: Row(
         children: [
-          _KasCard(
+          _MiniCard(
             label: 'Kas Masuk',
-            value: CurrencyFormatter.format(summary.totalIncome),
+            value: CurrencyFormatter.formatCompact(summary.totalIncome),
             color: AppColors.success,
-            icon: Icons.arrow_downward_rounded,
+            icon: Icons.arrow_circle_down_rounded,
           ),
           const SizedBox(width: 8),
-          _KasCard(
+          _MiniCard(
             label: 'Kas Keluar',
-            value: CurrencyFormatter.format(summary.totalExpense),
+            value: CurrencyFormatter.formatCompact(summary.totalExpense),
             color: AppColors.danger,
-            icon: Icons.arrow_upward_rounded,
+            icon: Icons.arrow_circle_up_rounded,
           ),
           const SizedBox(width: 8),
-          _KasCard(
+          _MiniCard(
             label: 'Saldo',
-            value: CurrencyFormatter.format(summary.saldo),
+            value: CurrencyFormatter.formatCompact(summary.saldo),
             color:
-                summary.saldo >= 0 ? AppColors.success : AppColors.danger,
+                summary.saldo >= 0 ? AppColors.primary : AppColors.danger,
             icon: Icons.account_balance_wallet_outlined,
           ),
         ],
@@ -233,22 +230,22 @@ class _KasSummaryBar extends StatelessWidget {
   }
 }
 
-class _KasCard extends StatelessWidget {
+class _MiniCard extends StatelessWidget {
   final String label, value;
   final Color color;
   final IconData icon;
-  const _KasCard({
-    required this.label,
-    required this.value,
-    required this.color,
-    required this.icon,
-  });
+  const _MiniCard(
+      {required this.label,
+      required this.value,
+      required this.color,
+      required this.icon});
 
   @override
   Widget build(BuildContext context) {
     return Expanded(
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+        padding:
+            const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
         decoration: BoxDecoration(
           color: color.withOpacity(0.08),
           borderRadius: BorderRadius.circular(10),
@@ -274,424 +271,234 @@ class _KasCard extends StatelessWidget {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// ARUS KAS TAB — Laba Rugi Sederhana
+// KAS LIST TAB
 // ─────────────────────────────────────────────────────────────────────────────
 
-class _ArusKasTab extends ConsumerWidget {
-  final DateTime start, end;
-  const _ArusKasTab({required this.start, required this.end});
+class _KasListTab extends ConsumerWidget {
+  final DateRange range;
+  final String? type; // null = semua
+
+  const _KasListTab({required this.range, required this.type});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final labaAsync = ref.watch(
-        labaRugiProvider(DateRange(start: start, end: end)));
+    final stream = type != null
+        ? ref
+            .read(databaseProvider)
+            .reportsDao
+            .watchCashFlowsByType(range.start, range.end, type!)
+        : ref
+            .read(databaseProvider)
+            .reportsDao
+            .watchCashFlows(range.start, range.end);
 
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        children: [
-          // ── Laporan Laba Rugi ────────────────────────────────────────────
-          labaAsync.when(
-            data: (lr) => _LabaRugiCard(data: lr),
-            loading: () => const Center(
-                child: Padding(
-              padding: EdgeInsets.all(24),
-              child: CircularProgressIndicator(),
-            )),
-            error: (e, _) =>
-                Center(child: Text('Error: $e')),
-          ),
-          const SizedBox(height: 16),
+    return StreamBuilder<List<CashFlow>>(
+      stream: stream,
+      builder: (context, snap) {
+        if (!snap.hasData) {
+          return const Center(child: CircularProgressIndicator());
+        }
+        final flows = snap.data!;
 
-          // ── Arus Kas Stream ───────────────────────────────────────────────
-          StreamBuilder<List<CashFlow>>(
-            stream: ref
-                .read(databaseProvider)
-                .reportsDao
-                .watchCashFlows(start, end),
-            builder: (_, snap) {
-              if (!snap.hasData) {
-                return const Center(
-                    child: CircularProgressIndicator());
-              }
-              final flows = snap.data!;
-              if (flows.isEmpty) {
-                return Container(
-                  padding: const EdgeInsets.all(24),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: const Center(
-                    child: Text('Belum ada transaksi kas',
-                        style: TextStyle(color: Colors.grey)),
-                  ),
-                );
-              }
-              return Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text('Riwayat Kas',
-                      style: TextStyle(
-                          fontWeight: FontWeight.w700,
-                          fontSize: 14)),
-                  const SizedBox(height: 8),
-                  ...flows.map((f) => _CashFlowRow(flow: f)),
-                ],
-              );
-            },
-          ),
-        ],
-      ),
-    );
-  }
-}
+        if (flows.isEmpty) {
+          return _EmptyState(type: type);
+        }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// LAPORAN LABA RUGI CARD (P3)
-// ─────────────────────────────────────────────────────────────────────────────
+        // Group by tanggal
+        final grouped = <String, List<CashFlow>>{};
+        for (final f in flows) {
+          final key = DateFormat('yyyy-MM-dd').format(f.createdAt);
+          grouped.putIfAbsent(key, () => []).add(f);
+        }
 
-class _LabaRugiCard extends StatelessWidget {
-  final LabaRugiData data;
-  const _LabaRugiCard({required this.data});
+        return ListView.builder(
+          padding: const EdgeInsets.fromLTRB(14, 10, 14, 100),
+          itemCount: grouped.length,
+          itemBuilder: (context, i) {
+            final date = grouped.keys.elementAt(i);
+            final items = grouped[date]!;
+            final dayTotal = items.fold<double>(0, (s, f) {
+              return s + (f.type == 'income' ? f.amount : -f.amount);
+            });
 
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(14),
-        boxShadow: [
-          BoxShadow(
-              color: Colors.black.withOpacity(0.06),
-              blurRadius: 12,
-              offset: const Offset(0, 3)),
-        ],
-      ),
-      child: Column(
-        children: [
-          // Header
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: AppColors.primary,
-              borderRadius:
-                  const BorderRadius.vertical(top: Radius.circular(14)),
-            ),
-            child: Row(
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Icon(Icons.bar_chart_rounded,
-                    color: Colors.white, size: 20),
-                const SizedBox(width: 8),
-                const Text('Laporan Laba Rugi',
-                    style: TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.w800,
-                        fontSize: 15)),
-                const Spacer(),
-                Text(
-                  DateFormat('dd MMM yyyy', 'id')
-                      .format(DateTime.now()),
-                  style: const TextStyle(
-                      color: Colors.white70, fontSize: 11),
-                ),
-              ],
-            ),
-          ),
-
-          Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              children: [
-                // Pendapatan
-                _LabaRow(
-                  label: 'Total Penjualan (Omzet)',
-                  value: data.omzet,
-                  color: AppColors.success,
-                  bold: false,
-                ),
-                _LabaRow(
-                  label: 'HPP (Harga Pokok Penjualan)',
-                  value: -data.hpp,
-                  color: AppColors.danger,
-                  prefix: '- ',
-                ),
-                const Divider(height: 20),
-                _LabaRow(
-                  label: 'Laba Kotor',
-                  value: data.labaKotor,
-                  color: data.labaKotor >= 0
-                      ? AppColors.success
-                      : AppColors.danger,
-                  bold: true,
-                ),
-                const SizedBox(height: 8),
-
-                // Biaya operasional
-                _LabaRow(
-                  label: 'Kas Masuk (Non-Penjualan)',
-                  value: data.kasIncome,
-                  color: AppColors.success,
-                ),
-                _LabaRow(
-                  label: 'Kas Keluar (Biaya Operasional)',
-                  value: -data.kasExpense,
-                  color: AppColors.danger,
-                  prefix: '- ',
-                ),
-                const Divider(height: 20),
-
-                // Laba bersih
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: (data.labaBersih >= 0
-                            ? AppColors.success
-                            : AppColors.danger)
-                        .withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
+                // ── Date header ──
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 8),
                   child: Row(
                     children: [
-                      const Text('LABA BERSIH',
-                          style: TextStyle(
-                              fontWeight: FontWeight.w800,
-                              fontSize: 13)),
+                      Text(
+                        _formatDateGroup(date),
+                        style: const TextStyle(
+                            fontWeight: FontWeight.w700,
+                            fontSize: 12,
+                            color: AppColors.textSecondary),
+                      ),
                       const Spacer(),
                       Text(
-                        CurrencyFormatter.format(
-                            data.labaBersih.abs()),
+                        (dayTotal >= 0 ? '+' : '') +
+                            CurrencyFormatter.format(dayTotal),
                         style: TextStyle(
-                            fontWeight: FontWeight.w800,
-                            fontSize: 15,
-                            color: data.labaBersih >= 0
+                            fontWeight: FontWeight.w700,
+                            fontSize: 12,
+                            color: dayTotal >= 0
                                 ? AppColors.success
                                 : AppColors.danger),
                       ),
                     ],
                   ),
                 ),
-
-                const SizedBox(height: 10),
-                // Margin indicator
-                _MarginIndicator(
-                    margin: data.marginPersen,
-                    omzet: data.omzet),
+                // ── Items ──
+                ...items.map(
+                    (f) => _KasRow(flow: f, onDelete: () => _delete(context, ref, f))),
+                const SizedBox(height: 4),
               ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _LabaRow extends StatelessWidget {
-  final String label;
-  final double value;
-  final Color color;
-  final bool bold;
-  final String prefix;
-
-  const _LabaRow({
-    required this.label,
-    required this.value,
-    required this.color,
-    this.bold = false,
-    this.prefix = '',
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
-      child: Row(
-        children: [
-          Expanded(
-            child: Text(label,
-                style: TextStyle(
-                    fontSize: bold ? 13 : 12,
-                    fontWeight:
-                        bold ? FontWeight.w700 : FontWeight.normal,
-                    color: bold
-                        ? Colors.black87
-                        : Colors.grey.shade700)),
-          ),
-          Text(
-            '$prefix${CurrencyFormatter.format(value.abs())}',
-            style: TextStyle(
-                fontSize: bold ? 14 : 12,
-                fontWeight: bold ? FontWeight.w800 : FontWeight.w600,
-                color: color),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _MarginIndicator extends StatelessWidget {
-  final double margin, omzet;
-  const _MarginIndicator({required this.margin, required this.omzet});
-
-  @override
-  Widget build(BuildContext context) {
-    if (omzet == 0) return const SizedBox();
-    final pct = margin.clamp(0.0, 100.0);
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          children: [
-            Text('Margin Laba Bersih: ',
-                style: TextStyle(
-                    fontSize: 11, color: Colors.grey.shade600)),
-            Text('${margin.toStringAsFixed(1)}%',
-                style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w700,
-                    color: margin >= 20
-                        ? AppColors.success
-                        : margin >= 10
-                            ? AppColors.warning
-                            : AppColors.danger)),
-          ],
-        ),
-        const SizedBox(height: 6),
-        ClipRRect(
-          borderRadius: BorderRadius.circular(4),
-          child: LinearProgressIndicator(
-            value: pct / 100,
-            backgroundColor: Colors.grey.shade200,
-            valueColor: AlwaysStoppedAnimation(
-              margin >= 20
-                  ? AppColors.success
-                  : margin >= 10
-                      ? AppColors.warning
-                      : AppColors.danger,
-            ),
-            minHeight: 6,
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// KAS LIST TAB
-// ─────────────────────────────────────────────────────────────────────────────
-
-class _KasListTab extends ConsumerWidget {
-  final DateTime start, end;
-  final String type;
-  const _KasListTab(
-      {required this.start, required this.end, required this.type});
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    return StreamBuilder<List<CashFlow>>(
-      stream: ref
-          .read(databaseProvider)
-          .reportsDao
-          .watchCashFlows(start, end),
-      builder: (_, snap) {
-        if (!snap.hasData) {
-          return const Center(child: CircularProgressIndicator());
-        }
-        final all = snap.data!;
-        final filtered = all.where((f) => f.type == type).toList();
-
-        if (filtered.isEmpty) {
-          return Center(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(
-                  type == 'income'
-                      ? Icons.arrow_downward_rounded
-                      : Icons.arrow_upward_rounded,
-                  size: 48,
-                  color: (type == 'income'
-                          ? AppColors.success
-                          : AppColors.danger)
-                      .withOpacity(0.3),
-                ),
-                const SizedBox(height: 12),
-                Text(
-                  type == 'income'
-                      ? 'Belum ada kas masuk'
-                      : 'Belum ada kas keluar',
-                  style:
-                      TextStyle(color: Colors.grey.shade500),
-                ),
-              ],
-            ),
-          );
-        }
-
-        return ListView.separated(
-          padding: const EdgeInsets.fromLTRB(16, 12, 16, 100),
-          itemCount: filtered.length,
-          separatorBuilder: (_, __) => const SizedBox(height: 8),
-          itemBuilder: (_, i) => _CashFlowRow(flow: filtered[i]),
+            );
+          },
         );
       },
     );
   }
+
+  String _formatDateGroup(String dateStr) {
+    final dt = DateTime.parse(dateStr);
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final yesterday = today.subtract(const Duration(days: 1));
+    final d = DateTime(dt.year, dt.month, dt.day);
+    if (d == today) return 'Hari Ini';
+    if (d == yesterday) return 'Kemarin';
+    return DateFormat('EEEE, dd MMM yyyy', 'id').format(dt);
+  }
+
+  Future<void> _delete(
+      BuildContext context, WidgetRef ref, CashFlow flow) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('Hapus Entri Kas?'),
+        content: Text(
+            '${labelKategoriKas(flow.category)}\n${CurrencyFormatter.format(flow.amount)}\n\nData ini tidak dapat dikembalikan.'),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Batal')),
+          TextButton(
+              onPressed: () => Navigator.pop(context, true),
+              style: TextButton.styleFrom(
+                  foregroundColor: AppColors.danger),
+              child: const Text('Hapus')),
+        ],
+      ),
+    );
+    if (confirm == true && context.mounted) {
+      try {
+        await ref.read(databaseProvider).reportsDao.deleteCashFlow(flow.id);
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+            content: Text('Entri kas dihapus'),
+            behavior: SnackBarBehavior.floating,
+          ));
+        }
+      } catch (e) {
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text('Gagal hapus: $e')));
+        }
+      }
+    }
+  }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// CASH FLOW ROW
+// KAS ROW
 // ─────────────────────────────────────────────────────────────────────────────
 
-class _CashFlowRow extends StatelessWidget {
+class _KasRow extends StatelessWidget {
   final CashFlow flow;
-  const _CashFlowRow({required this.flow});
+  final VoidCallback onDelete;
+  const _KasRow({required this.flow, required this.onDelete});
 
   @override
   Widget build(BuildContext context) {
     final isIncome = flow.type == 'income';
     final color = isIncome ? AppColors.success : AppColors.danger;
 
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: Colors.grey.shade100),
+    return Dismissible(
+      key: Key('kas_${flow.id}'),
+      direction: DismissDirection.endToStart,
+      confirmDismiss: (_) async {
+        onDelete();
+        return false; // Hapus dari dalam dialog, bukan auto-dismiss
+      },
+      background: Container(
+        alignment: Alignment.centerRight,
+        padding: const EdgeInsets.only(right: 20),
+        margin: const EdgeInsets.only(bottom: 8),
+        decoration: BoxDecoration(
+          color: AppColors.danger.withOpacity(0.1),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: const Icon(Icons.delete_outline, color: AppColors.danger),
       ),
-      child: ListTile(
-        leading: Container(
-          width: 38,
-          height: 38,
-          decoration: BoxDecoration(
-            color: color.withOpacity(0.1),
-            shape: BoxShape.circle,
-          ),
-          child: Icon(
-            isIncome
-                ? Icons.arrow_downward_rounded
-                : Icons.arrow_upward_rounded,
-            size: 18,
-            color: color,
-          ),
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 8),
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: AppColors.border, width: 0.5),
         ),
-        title: Text(
-          _categoryLabel(flow.category),
-          style:
-              const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
-        ),
-        subtitle: flow.description != null && flow.description!.isNotEmpty
-            ? Text(flow.description!,
-                style: TextStyle(
-                    fontSize: 11, color: Colors.grey.shade500),
-                overflow: TextOverflow.ellipsis)
-            : null,
-        trailing: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          crossAxisAlignment: CrossAxisAlignment.end,
+        child: Row(
           children: [
+            // Icon
+            Container(
+              width: 38,
+              height: 38,
+              decoration: BoxDecoration(
+                color: color.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Icon(
+                isIncome
+                    ? Icons.arrow_circle_down_rounded
+                    : Icons.arrow_circle_up_rounded,
+                size: 20,
+                color: color,
+              ),
+            ),
+            const SizedBox(width: 10),
+            // Info
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    labelKategoriKas(flow.category),
+                    style: const TextStyle(
+                        fontWeight: FontWeight.w700, fontSize: 13),
+                  ),
+                  if (flow.description != null &&
+                      flow.description!.isNotEmpty)
+                    Text(
+                      flow.description!,
+                      style: const TextStyle(
+                          fontSize: 11,
+                          color: AppColors.textSecondary),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  Text(
+                    DateFormat('HH:mm', 'id').format(flow.createdAt),
+                    style: const TextStyle(
+                        fontSize: 10, color: AppColors.textHint),
+                  ),
+                ],
+              ),
+            ),
+            // Nominal
             Text(
               '${isIncome ? '+' : '-'} ${CurrencyFormatter.format(flow.amount)}',
               style: TextStyle(
@@ -699,34 +506,60 @@ class _CashFlowRow extends StatelessWidget {
                   fontSize: 13,
                   color: color),
             ),
-            Text(
-              DateFormat('dd MMM, HH:mm', 'id').format(flow.createdAt),
-              style: TextStyle(fontSize: 10, color: Colors.grey.shade400),
-            ),
           ],
         ),
       ),
     );
   }
+}
 
-  String _categoryLabel(String cat) {
-    const labels = {
-      'penjualan': 'Penjualan',
-      'pelunasan_hutang': 'Pelunasan Hutang',
-      'modal': 'Modal',
-      'lain': 'Lain-lain',
-      'operasional': 'Biaya Operasional',
-      'pembelian_stok': 'Pembelian Stok',
-      'gaji': 'Gaji Karyawan',
-      'sewa': 'Biaya Sewa',
-      'listrik_air': 'Listrik & Air',
-    };
-    return labels[cat] ?? cat;
+// ─────────────────────────────────────────────────────────────────────────────
+// EMPTY STATE
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _EmptyState extends StatelessWidget {
+  final String? type;
+  const _EmptyState({this.type});
+
+  @override
+  Widget build(BuildContext context) {
+    final label = type == 'income'
+        ? 'Belum ada kas masuk'
+        : type == 'expense'
+            ? 'Belum ada kas keluar'
+            : 'Belum ada catatan kas';
+    final icon = type == 'income'
+        ? Icons.arrow_circle_down_outlined
+        : type == 'expense'
+            ? Icons.arrow_circle_up_outlined
+            : Icons.account_balance_wallet_outlined;
+    final color = type == 'income'
+        ? AppColors.success
+        : type == 'expense'
+            ? AppColors.danger
+            : AppColors.primary;
+
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(icon, size: 54, color: color.withOpacity(0.25)),
+          const SizedBox(height: 12),
+          Text(label,
+              style: const TextStyle(
+                  color: AppColors.textSecondary, fontSize: 14)),
+          const SizedBox(height: 4),
+          const Text('Tekan tombol + untuk menambah',
+              style: TextStyle(
+                  color: AppColors.textHint, fontSize: 12)),
+        ],
+      ),
+    );
   }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// KAS FORM SHEET — Input Kas Masuk / Keluar
+// FORM SHEET — Tambah Kas Masuk / Kas Keluar
 // ─────────────────────────────────────────────────────────────────────────────
 
 class _KasFormSheet extends ConsumerStatefulWidget {
@@ -741,30 +574,34 @@ class _KasFormSheetState extends ConsumerState<_KasFormSheet> {
   late String _type;
   final _amountCtrl = TextEditingController();
   final _descCtrl = TextEditingController();
-  String _category = 'operasional';
+  String _category = '';
   bool _loading = false;
 
-  static const _incomeCategories = {
-    'penjualan': 'Penjualan',
-    'pelunasan_hutang': 'Pelunasan Hutang',
-    'modal': 'Tambah Modal',
-    'lain': 'Lain-lain',
-  };
+  static const _incomeCategories = [
+    'Penjualan',
+    'Pelunasan Hutang',
+    'Tambah Modal',
+    'Pinjaman',
+    'Lainnya',
+  ];
 
-  static const _expenseCategories = {
-    'pembelian_stok': 'Pembelian Stok',
-    'operasional': 'Biaya Operasional',
-    'gaji': 'Gaji Karyawan',
-    'sewa': 'Biaya Sewa',
-    'listrik_air': 'Listrik & Air',
-    'lain': 'Lain-lain',
-  };
+  static const _expenseCategories = [
+    'Pembelian Stok',
+    'Biaya Operasional',
+    'Gaji Karyawan',
+    'Biaya Sewa',
+    'Listrik & Air',
+    'Lainnya',
+  ];
+
+  List<String> get _categories =>
+      _type == 'income' ? _incomeCategories : _expenseCategories;
 
   @override
   void initState() {
     super.initState();
     _type = widget.initialType;
-    _category = _type == 'income' ? 'penjualan' : 'operasional';
+    _category = _categories.first;
   }
 
   @override
@@ -774,18 +611,15 @@ class _KasFormSheetState extends ConsumerState<_KasFormSheet> {
     super.dispose();
   }
 
-  Map<String, String> get _categories =>
-      _type == 'income' ? _incomeCategories : _expenseCategories;
-
   Future<void> _save() async {
-    final raw = _amountCtrl.text.replaceAll(RegExp(r'[^\d]'), '');
+    final raw =
+        _amountCtrl.text.replaceAll(RegExp(r'[^\d]'), '');
     final amount = double.tryParse(raw) ?? 0;
     if (amount <= 0) {
       ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Masukkan jumlah kas')));
       return;
     }
-
     setState(() => _loading = true);
     try {
       await ref.read(databaseProvider).reportsDao.addCashFlow(
@@ -796,18 +630,15 @@ class _KasFormSheetState extends ConsumerState<_KasFormSheet> {
                 ? null
                 : _descCtrl.text.trim(),
           );
-
       if (mounted) {
         Navigator.pop(context);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-                '${_type == 'income' ? 'Kas masuk' : 'Kas keluar'} ${CurrencyFormatter.format(amount)} dicatat'),
-            backgroundColor: _type == 'income'
-                ? AppColors.success
-                : AppColors.danger,
-          ),
-        );
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(
+              '${_type == 'income' ? '✅ Kas masuk' : '🔴 Kas keluar'} ${CurrencyFormatter.format(amount)} dicatat'),
+          backgroundColor:
+              _type == 'income' ? AppColors.success : AppColors.danger,
+          behavior: SnackBarBehavior.floating,
+        ));
       }
     } catch (e) {
       if (mounted) {
@@ -824,193 +655,240 @@ class _KasFormSheetState extends ConsumerState<_KasFormSheet> {
     final isIncome = _type == 'income';
     final color = isIncome ? AppColors.success : AppColors.danger;
 
-    return Padding(
+    return Container(
       padding: EdgeInsets.only(
-          bottom: MediaQuery.of(context).viewInsets.bottom),
-      child: Container(
-        padding: const EdgeInsets.fromLTRB(20, 20, 20, 32),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Header
-            Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    isIncome ? 'Catat Kas Masuk' : 'Catat Kas Keluar',
-                    style: const TextStyle(
-                        fontSize: 18, fontWeight: FontWeight.w800),
-                  ),
-                ),
-                IconButton(
-                    onPressed: () => Navigator.pop(context),
-                    icon: const Icon(Icons.close)),
-              ],
+        top: 20,
+        left: 20,
+        right: 20,
+        bottom: MediaQuery.of(context).viewInsets.bottom + 28,
+      ),
+      decoration: const BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Handle
+          Center(
+            child: Container(
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: Colors.grey.shade300,
+                borderRadius: BorderRadius.circular(2),
+              ),
             ),
+          ),
+          const SizedBox(height: 14),
 
-            // Type toggle
-            Row(
-              children: [
-                Expanded(
-                  child: GestureDetector(
-                    onTap: () => setState(() {
-                      _type = 'income';
-                      _category = 'penjualan';
-                    }),
-                    child: AnimatedContainer(
-                      duration: const Duration(milliseconds: 200),
-                      padding:
-                          const EdgeInsets.symmetric(vertical: 10),
-                      decoration: BoxDecoration(
-                        color: _type == 'income'
-                            ? AppColors.success
-                            : Colors.grey.shade100,
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(Icons.arrow_downward_rounded,
-                              size: 16,
-                              color: _type == 'income'
-                                  ? Colors.white
-                                  : Colors.grey),
-                          const SizedBox(width: 4),
-                          Text('Masuk',
-                              style: TextStyle(
-                                  fontWeight: FontWeight.w700,
-                                  color: _type == 'income'
-                                      ? Colors.white
-                                      : Colors.grey)),
-                        ],
-                      ),
+          // Header row
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  isIncome ? 'Catat Kas Masuk' : 'Catat Kas Keluar',
+                  style: const TextStyle(
+                      fontSize: 18, fontWeight: FontWeight.w800),
+                ),
+              ),
+              IconButton(
+                  onPressed: () => Navigator.pop(context),
+                  icon: const Icon(Icons.close)),
+            ],
+          ),
+          const SizedBox(height: 12),
+
+          // Toggle Masuk / Keluar
+          Row(
+            children: [
+              Expanded(
+                child: GestureDetector(
+                  onTap: () => setState(() {
+                    _type = 'income';
+                    _category = _incomeCategories.first;
+                  }),
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 200),
+                    padding: const EdgeInsets.symmetric(vertical: 10),
+                    decoration: BoxDecoration(
+                      color: _type == 'income'
+                          ? AppColors.success
+                          : Colors.grey.shade100,
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.arrow_circle_down_rounded,
+                            size: 16,
+                            color: _type == 'income'
+                                ? Colors.white
+                                : Colors.grey),
+                        const SizedBox(width: 4),
+                        Text('Kas Masuk',
+                            style: TextStyle(
+                                fontWeight: FontWeight.w700,
+                                color: _type == 'income'
+                                    ? Colors.white
+                                    : Colors.grey)),
+                      ],
                     ),
                   ),
                 ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: GestureDetector(
-                    onTap: () => setState(() {
-                      _type = 'expense';
-                      _category = 'operasional';
-                    }),
-                    child: AnimatedContainer(
-                      duration: const Duration(milliseconds: 200),
-                      padding:
-                          const EdgeInsets.symmetric(vertical: 10),
-                      decoration: BoxDecoration(
-                        color: _type == 'expense'
-                            ? AppColors.danger
-                            : Colors.grey.shade100,
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(Icons.arrow_upward_rounded,
-                              size: 16,
-                              color: _type == 'expense'
-                                  ? Colors.white
-                                  : Colors.grey),
-                          const SizedBox(width: 4),
-                          Text('Keluar',
-                              style: TextStyle(
-                                  fontWeight: FontWeight.w700,
-                                  color: _type == 'expense'
-                                      ? Colors.white
-                                      : Colors.grey)),
-                        ],
-                      ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: GestureDetector(
+                  onTap: () => setState(() {
+                    _type = 'expense';
+                    _category = _expenseCategories.first;
+                  }),
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 200),
+                    padding: const EdgeInsets.symmetric(vertical: 10),
+                    decoration: BoxDecoration(
+                      color: _type == 'expense'
+                          ? AppColors.danger
+                          : Colors.grey.shade100,
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.arrow_circle_up_rounded,
+                            size: 16,
+                            color: _type == 'expense'
+                                ? Colors.white
+                                : Colors.grey),
+                        const SizedBox(width: 4),
+                        Text('Kas Keluar',
+                            style: TextStyle(
+                                fontWeight: FontWeight.w700,
+                                color: _type == 'expense'
+                                    ? Colors.white
+                                    : Colors.grey)),
+                      ],
                     ),
                   ),
                 ),
-              ],
-            ),
-            const SizedBox(height: 14),
-
-            // Kategori
-            DropdownButtonFormField<String>(
-              value: _category,
-              decoration: InputDecoration(
-                labelText: 'Kategori',
-                border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12)),
               ),
-              items: _categories.entries
-                  .map((e) => DropdownMenuItem(
-                      value: e.key, child: Text(e.value)))
-                  .toList(),
-              onChanged: (v) =>
-                  setState(() => _category = v ?? _category),
-            ),
-            const SizedBox(height: 12),
+            ],
+          ),
+          const SizedBox(height: 14),
 
-            // Jumlah
-            TextField(
-              controller: _amountCtrl,
-              keyboardType: TextInputType.number,
-              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-              decoration: InputDecoration(
-                labelText: 'Jumlah',
-                prefixText: 'Rp ',
-                border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12)),
-              ),
-            ),
-            const SizedBox(height: 12),
-
-            // Deskripsi
-            TextField(
-              controller: _descCtrl,
-              decoration: InputDecoration(
-                labelText: 'Keterangan (opsional)',
-                hintText: 'cth: Bayar tagihan listrik bulan Mei',
-                border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12)),
-              ),
-            ),
-            const SizedBox(height: 20),
-
-            // Save button
-            SizedBox(
-              width: double.infinity,
-              child: FilledButton(
-                style: FilledButton.styleFrom(
-                  backgroundColor: color,
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                  shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12)),
+          // Kategori (chip selector)
+          const Text('Kategori',
+              style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: AppColors.textSecondary)),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: _categories.map((cat) {
+              final sel = cat == _category;
+              return GestureDetector(
+                onTap: () => setState(() => _category = cat),
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 150),
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 14, vertical: 7),
+                  decoration: BoxDecoration(
+                    color: sel
+                        ? color.withOpacity(0.1)
+                        : Colors.grey.shade100,
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(
+                        color: sel ? color : Colors.transparent),
+                  ),
+                  child: Text(cat,
+                      style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color:
+                              sel ? color : AppColors.textSecondary)),
                 ),
-                onPressed: _loading ? null : _save,
-                child: _loading
-                    ? const SizedBox(
-                        width: 20,
-                        height: 20,
-                        child: CircularProgressIndicator(
-                            color: Colors.white, strokeWidth: 2))
-                    : Text(
-                        isIncome
-                            ? 'Simpan Kas Masuk'
-                            : 'Simpan Kas Keluar',
-                        style: const TextStyle(
-                            fontWeight: FontWeight.w700,
-                            fontSize: 15)),
+              );
+            }).toList(),
+          ),
+          const SizedBox(height: 14),
+
+          // Input Jumlah
+          TextField(
+            controller: _amountCtrl,
+            keyboardType: TextInputType.number,
+            inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+            style:
+                const TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
+            decoration: InputDecoration(
+              labelText: 'Jumlah',
+              prefixText: 'Rp ',
+              hintText: '0',
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: BorderSide(color: color, width: 1.5),
               ),
             ),
-          ],
-        ),
+          ),
+          const SizedBox(height: 10),
+
+          // Input Keterangan
+          TextField(
+            controller: _descCtrl,
+            maxLines: 2,
+            decoration: InputDecoration(
+              labelText: 'Keterangan (opsional)',
+              hintText: 'cth: Bayar tagihan listrik bulan Mei',
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: BorderSide(color: color, width: 1.5),
+              ),
+            ),
+          ),
+          const SizedBox(height: 18),
+
+          // Tombol Simpan
+          SizedBox(
+            width: double.infinity,
+            child: FilledButton(
+              style: FilledButton.styleFrom(
+                backgroundColor: color,
+                padding: const EdgeInsets.symmetric(vertical: 14),
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12)),
+              ),
+              onPressed: _loading ? null : _save,
+              child: _loading
+                  ? const SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(
+                          color: Colors.white, strokeWidth: 2))
+                  : Text(
+                      isIncome
+                          ? 'Simpan Kas Masuk'
+                          : 'Simpan Kas Keluar',
+                      style: const TextStyle(
+                          fontWeight: FontWeight.w700, fontSize: 15)),
+            ),
+          ),
+        ],
       ),
     );
   }
 }
 
-// Helper
+// ─────────────────────────────────────────────────────────────────────────────
+// PERIOD CHIP
+// ─────────────────────────────────────────────────────────────────────────────
+
 class _PeriodChip extends StatelessWidget {
   final String label, value, current;
   final void Function(String) onChanged;
-  const _PeriodChip(this.label, this.value, this.current,
-      this.onChanged);
+  const _PeriodChip(this.label, this.value, this.current, this.onChanged);
 
   @override
   Widget build(BuildContext context) {
@@ -1034,7 +912,9 @@ class _PeriodChip extends StatelessWidget {
             style: TextStyle(
                 fontSize: 12,
                 fontWeight: FontWeight.w600,
-                color: isSelected ? Colors.white : Colors.grey.shade700)),
+                color: isSelected
+                    ? Colors.white
+                    : Colors.grey.shade700)),
       ),
     );
   }
