@@ -13,6 +13,7 @@ import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 import 'package:intl/intl.dart';
+import 'package:intl/date_symbol_data_local.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/currency.dart';
 import '../../../data/database/app_database.dart';
@@ -170,6 +171,8 @@ class _LaporanScreenState extends ConsumerState<LaporanScreen>
   Future<void> _exportPdf() async {
     setState(() => _exportingPdf = true);
     try {
+      // Pastikan locale 'id' sudah diinisialisasi sebelum pakai DateFormat
+      await initializeDateFormatting('id', null);
       final db = ref.read(databaseProvider);
       final end = DateTime.now();
       final salesData =
