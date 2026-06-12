@@ -864,65 +864,75 @@ class _CheckoutPanel extends ConsumerWidget {
               const Divider(height: 12),
             ],
             Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              crossAxisAlignment: CrossAxisAlignment.center,
               children: [
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text('${cart.totalItems} item',
-                      style: TextStyle(
-                        fontSize: 12, color: Colors.grey.shade500)),
-                    Text(CurrencyFormatter.format(cart.total),
-                      style: const TextStyle(
-                        fontSize: 22,
-                        fontWeight: FontWeight.w800,
-                        color: AppColors.primary,
-                      )),
-                  ],
+                // Total harga — ambil sisa space yang tidak dipakai tombol
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text('${cart.totalItems} item',
+                        style: TextStyle(
+                          fontSize: 12, color: Colors.grey.shade500)),
+                      Text(CurrencyFormatter.format(cart.total),
+                        style: const TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.w800,
+                          color: AppColors.primary,
+                        )),
+                    ],
+                  ),
                 ),
-                Row(children: [
-                  OutlinedButton.icon(
-                    icon: const Icon(Icons.local_offer_outlined, size: 16),
-                    label: const Text('Diskon', style: TextStyle(fontSize: 13)),
-                    onPressed: () => _showDiscount(context, ref),
-                    style: OutlinedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 12, vertical: 12),
-                    ),
+                const SizedBox(width: 8),
+                // Tombol Diskon
+                OutlinedButton.icon(
+                  icon: const Icon(Icons.local_offer_outlined, size: 16),
+                  label: const Text('Diskon', style: TextStyle(fontSize: 12)),
+                  onPressed: () => _showDiscount(context, ref),
+                  style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10, vertical: 10),
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                   ),
-                  const SizedBox(width: 8),
-                  OutlinedButton.icon(
-                    icon: const Icon(Icons.percent_outlined, size: 16),
-                    label: Text(
-                      cart.taxPercent > 0
-                          ? 'Pajak ${cart.taxPercent.toStringAsFixed(0)}%'
-                          : 'Pajak',
-                      style: const TextStyle(fontSize: 13),
-                    ),
-                    onPressed: () => _showTax(context, ref),
-                    style: OutlinedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 12, vertical: 12),
-                      foregroundColor: cart.taxPercent > 0
-                          ? AppColors.warning
-                          : null,
-                      side: cart.taxPercent > 0
-                          ? const BorderSide(color: AppColors.warning)
-                          : null,
-                    ),
+                ),
+                const SizedBox(width: 6),
+                // Tombol Pajak
+                OutlinedButton.icon(
+                  icon: const Icon(Icons.percent_outlined, size: 16),
+                  label: Text(
+                    cart.taxPercent > 0
+                        ? 'Pajak ${cart.taxPercent.toStringAsFixed(0)}%'
+                        : 'Pajak',
+                    style: const TextStyle(fontSize: 12),
                   ),
-                  const SizedBox(width: 8),
-                  ElevatedButton.icon(
-                    icon: const Icon(Icons.payment, size: 18),
-                    label: const Text('Bayar'),
-                    onPressed: () => _showPayment(context, ref),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.success,
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 24, vertical: 14),
-                    ),
+                  onPressed: () => _showTax(context, ref),
+                  style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10, vertical: 10),
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    foregroundColor: cart.taxPercent > 0
+                        ? AppColors.warning
+                        : null,
+                    side: cart.taxPercent > 0
+                        ? const BorderSide(color: AppColors.warning)
+                        : null,
                   ),
-                ]),
+                ),
+                const SizedBox(width: 6),
+                // Tombol Bayar
+                ElevatedButton.icon(
+                  icon: const Icon(Icons.payment, size: 18),
+                  label: const Text('Bayar',
+                    style: TextStyle(fontWeight: FontWeight.w700)),
+                  onPressed: () => _showPayment(context, ref),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.success,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 18, vertical: 12),
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  ),
+                ),
               ],
             ),
             const SizedBox(height: 8),
