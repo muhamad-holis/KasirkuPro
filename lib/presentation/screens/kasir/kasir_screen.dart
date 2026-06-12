@@ -1800,6 +1800,10 @@ class _PaymentSheetState extends ConsumerState<_PaymentSheet> {
       },
     );
 
+    // Tunggu animasi penutupan bottom sheet selesai sebelum dispose controller,
+    // agar TextField yang masih dalam proses unmount tidak kehilangan listener
+    // controller secara tiba-tiba (penyebab error '_dependents.isEmpty').
+    await Future.delayed(const Duration(milliseconds: 300));
     nameCtrl.dispose();
     phoneCtrl.dispose();
     addressCtrl.dispose();
