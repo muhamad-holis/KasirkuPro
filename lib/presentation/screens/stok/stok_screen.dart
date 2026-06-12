@@ -121,6 +121,10 @@ class _StokScreenState extends ConsumerState<StokScreen>
         final minStock = int.tryParse(row[6]?.value?.toString() ?? '')    ?? 5;
         final unit     = row[7]?.value?.toString().trim() ?? 'pcs';
 
+        // Skip jika nama persis sama sudah ada (case-insensitive)
+        final existing = await db.productsDao.getProductByName(name);
+        if (existing != null) continue; // timpa/skip — tidak duplikat
+
         await db.productsDao.insertProduct(
           ProductsCompanion.insert(
             name: name,
@@ -1237,6 +1241,41 @@ class _AddProductSheetState extends ConsumerState<_AddProductSheet> {
     setState(() => _loading = true);
     try {
       final db = ref.read(databaseProvider);
+      final inputName = _nameCtrl.text.trim();
+
+      // ── Deteksi nama mirip/sama ──────────────────────────────────────────
+      final similar = await db.productsDao.findSimilarByName(inputName);
+      if (similar.isNotEmpty && context.mounted) {
+        setState(() => _loading = false);
+        final existing = similar.first;
+        final confirm = await showDialog<bool>(
+          context: context,
+          builder: (_) => AlertDialog(
+            title: const Text('Nama Produk Serupa'),
+            content: Text(
+              'Produk dengan nama mirip sudah ada:\n\n'
+              '"${existing.name}"\n\n'
+              'Apakah kamu ingin tetap menambahkan produk baru?',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context, false),
+                child: const Text('Batal'),
+              ),
+              ElevatedButton(
+                onPressed: () => Navigator.pop(context, true),
+                style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.primary),
+                child: const Text('Tambah Tetap'),
+              ),
+            ],
+          ),
+        );
+        if (confirm != true) return;
+        setState(() => _loading = true);
+      }
+      // ────────────────────────────────────────────────────────────────────
+
       final stock = int.tryParse(_stockCtrl.text) ?? 0;
       final productId = await db.productsDao.insertProduct(
         ProductsCompanion.insert(
