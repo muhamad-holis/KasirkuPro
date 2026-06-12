@@ -837,6 +837,7 @@ class SettingsScreen extends ConsumerWidget {
             backgroundColor: AppColors.danger));
       }
     }
+  } // <--- KURUNG KURAWAL PENUTUP INI YANG HILANG SEBELUMNYA
 
   // ── Tentang Aplikasi ──────────────────────────────────────────────────────
 
