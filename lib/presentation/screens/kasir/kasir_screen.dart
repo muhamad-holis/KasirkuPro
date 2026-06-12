@@ -1498,7 +1498,7 @@ class _PaymentSheetState extends ConsumerState<_PaymentSheet> {
 
   Future<void> _pickCustomer() async {
     final db = ref.read(databaseProvider);
-    final allCustomers = await db.customersDao.getAllCustomers();
+    List<Customer> allCustomers = await db.customersDao.getAllCustomers();
 
     if (!context.mounted) return;
 
@@ -1519,7 +1519,7 @@ class _PaymentSheetState extends ConsumerState<_PaymentSheet> {
                         c.name.toLowerCase().contains(query.toLowerCase()))
                     .toList();
             return SizedBox(
-              height: MediaQuery.of(ctx).size.height * 0.6,
+              height: MediaQuery.of(ctx).size.height * 0.75,
               child: Column(children: [
                 const SizedBox(height: 12),
                 Container(
@@ -1537,10 +1537,49 @@ class _PaymentSheetState extends ConsumerState<_PaymentSheet> {
                   child: TextField(
                     autofocus: true,
                     onChanged: (v) => setLocalState(() => query = v),
-                    decoration: const InputDecoration(
+                    decoration: InputDecoration(
                       hintText: 'Cari nama pelanggan...',
-                      prefixIcon: Icon(Icons.search, size: 18),
+                      prefixIcon: const Icon(Icons.search, size: 18),
                       isDense: true,
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: BorderSide(color: AppColors.primary),
+                      ),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: BorderSide(color: AppColors.primary),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: BorderSide(color: AppColors.primary, width: 2),
+                      ),
+                    ),
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                  child: SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton.icon(
+                      icon: const Icon(Icons.person_add_outlined, size: 18),
+                      label: const Text(
+                        'Tambah pelanggan',
+                        style: TextStyle(fontWeight: FontWeight.w700, fontSize: 15),
+                      ),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.primary,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                      onPressed: () async {
+                        // Tutup sheet pilih pelanggan dulu
+                        Navigator.pop(ctx);
+                        // Buka form tambah pelanggan
+                        await _showAddCustomerForm(db);
+                      },
                     ),
                   ),
                 ),
@@ -1586,6 +1625,180 @@ class _PaymentSheetState extends ConsumerState<_PaymentSheet> {
         );
       },
     );
+  }
+
+  Future<void> _showAddCustomerForm(AppDatabase db) async {
+    if (!context.mounted) return;
+
+    final nameCtrl    = TextEditingController();
+    final phoneCtrl   = TextEditingController();
+    final addressCtrl = TextEditingController();
+    bool loading = false;
+
+    await showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (ctx, setLocalState) {
+            return Padding(
+              padding: EdgeInsets.only(
+                bottom: MediaQuery.of(ctx).viewInsets.bottom + 24,
+                top: 20, left: 20, right: 20,
+              ),
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Handle
+                    Center(
+                      child: Container(
+                        width: 40, height: 4,
+                        margin: const EdgeInsets.only(bottom: 16),
+                        decoration: BoxDecoration(
+                          color: Colors.grey.shade300,
+                          borderRadius: BorderRadius.circular(2)),
+                      ),
+                    ),
+                    const Text(
+                      'Tambah Pelanggan',
+                      style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700),
+                    ),
+                    const SizedBox(height: 4),
+                    const Text(
+                      'Isi data pelanggan baru',
+                      style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
+                    ),
+                    const SizedBox(height: 20),
+
+                    // Nama
+                    TextField(
+                      controller: nameCtrl,
+                      textCapitalization: TextCapitalization.words,
+                      decoration: const InputDecoration(
+                        labelText: 'Nama Pelanggan *',
+                        prefixIcon: Icon(Icons.person_outline),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+
+                    // No HP
+                    TextField(
+                      controller: phoneCtrl,
+                      keyboardType: TextInputType.phone,
+                      inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                      decoration: const InputDecoration(
+                        labelText: 'Nomor HP',
+                        prefixIcon: Icon(Icons.phone_outlined),
+                        prefixText: '+62 ',
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+
+                    // Alamat
+                    TextField(
+                      controller: addressCtrl,
+                      textCapitalization: TextCapitalization.sentences,
+                      maxLines: 2,
+                      decoration: const InputDecoration(
+                        labelText: 'Alamat',
+                        prefixIcon: Icon(Icons.location_on_outlined),
+                        alignLabelWithHint: true,
+                      ),
+                    ),
+                    const SizedBox(height: 24),
+
+                    // Tombol simpan
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton.icon(
+                        icon: loading
+                            ? const SizedBox(
+                                width: 16, height: 16,
+                                child: CircularProgressIndicator(
+                                    color: Colors.white, strokeWidth: 2))
+                            : const Icon(Icons.save_outlined, size: 18),
+                        label: Text(loading ? 'Menyimpan...' : 'Tambah Pelanggan'),
+                        onPressed: loading
+                            ? null
+                            : () async {
+                                if (nameCtrl.text.trim().isEmpty) {
+                                  ScaffoldMessenger.of(ctx).showSnackBar(
+                                    const SnackBar(
+                                      content: Text('Nama pelanggan wajib diisi'),
+                                      backgroundColor: AppColors.danger,
+                                    ),
+                                  );
+                                  return;
+                                }
+                                setLocalState(() => loading = true);
+                                try {
+                                  final newId = await db.customersDao.insertCustomer(
+                                    CustomersCompanion.insert(
+                                      name: nameCtrl.text.trim(),
+                                      phone: Value(phoneCtrl.text.isEmpty
+                                          ? null
+                                          : phoneCtrl.text.trim()),
+                                      address: Value(addressCtrl.text.isEmpty
+                                          ? null
+                                          : addressCtrl.text.trim()),
+                                    ),
+                                  );
+                                  // Ambil customer yang baru saja ditambahkan
+                                  final allCustomers =
+                                      await db.customersDao.getAllCustomers();
+                                  final newCustomer = allCustomers
+                                      .where((c) => c.id == newId)
+                                      .firstOrNull;
+                                  if (ctx.mounted) {
+                                    Navigator.pop(ctx);
+                                  }
+                                  if (newCustomer != null && mounted) {
+                                    setState(() => _selectedCustomer = newCustomer);
+                                    if (context.mounted) {
+                                      ScaffoldMessenger.of(context).showSnackBar(
+                                        SnackBar(
+                                          content: Text(
+                                            'Pelanggan "${newCustomer.name}" berhasil ditambahkan dan dipilih'),
+                                          backgroundColor: AppColors.success,
+                                        ),
+                                      );
+                                    }
+                                  }
+                                } catch (e) {
+                                  setLocalState(() => loading = false);
+                                  if (ctx.mounted) {
+                                    ScaffoldMessenger.of(ctx).showSnackBar(
+                                      SnackBar(
+                                        content: Text('Gagal menyimpan: $e'),
+                                        backgroundColor: AppColors.danger,
+                                      ),
+                                    );
+                                  }
+                                }
+                              },
+                        style: ElevatedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+
+    nameCtrl.dispose();
+    phoneCtrl.dispose();
+    addressCtrl.dispose();
   }
 
   Future<void> _process() async {
