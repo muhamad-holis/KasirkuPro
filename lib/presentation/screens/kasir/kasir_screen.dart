@@ -1757,17 +1757,21 @@ class _PaymentSheetState extends ConsumerState<_PaymentSheet> {
                                   if (ctx.mounted) {
                                     Navigator.pop(ctx);
                                   }
-                                  if (newCustomer != null && mounted) {
-                                    setState(() => _selectedCustomer = newCustomer);
-                                    if (context.mounted) {
-                                      ScaffoldMessenger.of(context).showSnackBar(
-                                        SnackBar(
-                                          content: Text(
-                                            'Pelanggan "${newCustomer.name}" berhasil ditambahkan dan dipilih'),
-                                          backgroundColor: AppColors.success,
-                                        ),
-                                      );
-                                    }
+                                  if (newCustomer != null) {
+                                    WidgetsBinding.instance.addPostFrameCallback((_) {
+                                      if (mounted) {
+                                        setState(() => _selectedCustomer = newCustomer);
+                                      }
+                                      if (context.mounted) {
+                                        ScaffoldMessenger.of(context).showSnackBar(
+                                          SnackBar(
+                                            content: Text(
+                                              'Pelanggan "${newCustomer.name}" berhasil ditambahkan dan dipilih'),
+                                            backgroundColor: AppColors.success,
+                                          ),
+                                        );
+                                      }
+                                    });
                                   }
                                 } catch (e) {
                                   setLocalState(() => loading = false);
