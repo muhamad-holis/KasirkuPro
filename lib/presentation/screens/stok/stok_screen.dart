@@ -121,9 +121,24 @@ class _StokScreenState extends ConsumerState<StokScreen>
         final minStock = int.tryParse(row[6]?.value?.toString() ?? '')    ?? 5;
         final unit     = row[7]?.value?.toString().trim() ?? 'pcs';
 
-        // Skip jika nama persis sama sudah ada (case-insensitive)
+        // Jika nama sama persis sudah ada → tambah stok (jangan insert baru)
         final existing = await db.productsDao.getProductByName(name);
-        if (existing != null) continue; // timpa/skip — tidak duplikat
+        if (existing != null) {
+          if (stock > 0) {
+            final stockBefore = existing.stock;
+            final stockAfter  = stockBefore + stock;
+            await db.stockMovementsDao.adjustStock(
+              db: db,
+              productId: existing.id,
+              newStock:  stockAfter,
+              oldStock:  stockBefore,
+              type: 'masuk',
+              notes: 'Import CSV - penambahan stok',
+            );
+          }
+          imported++;
+          continue;
+        }
 
         await db.productsDao.insertProduct(
           ProductsCompanion.insert(
@@ -337,11 +352,17 @@ class _ProductListTab extends ConsumerWidget {
                   ),
                 );
               }
-              return ListView.separated(
+              return GridView.builder(
                 padding: const EdgeInsets.fromLTRB(12, 8, 12, 100),
+                gridDelegate:
+                    const SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: 3,
+                  crossAxisSpacing: 8,
+                  mainAxisSpacing: 8,
+                  childAspectRatio: 0.72,
+                ),
                 itemCount: list.length,
-                separatorBuilder: (_, __) => const SizedBox(height: 4),
-                itemBuilder: (_, i) => _ProductCard(product: list[i]),
+                itemBuilder: (_, i) => _ProductGridCard(product: list[i]),
               );
             },
             loading: () => const Center(child: CircularProgressIndicator()),
@@ -403,11 +424,17 @@ class _LowStockTab extends ConsumerWidget {
               ]),
             ),
             Expanded(
-              child: ListView.separated(
+              child: GridView.builder(
                 padding: const EdgeInsets.fromLTRB(12, 8, 12, 100),
+                gridDelegate:
+                    const SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: 3,
+                  crossAxisSpacing: 8,
+                  mainAxisSpacing: 8,
+                  childAspectRatio: 0.72,
+                ),
                 itemCount: list.length,
-                separatorBuilder: (_, __) => const SizedBox(height: 4),
-                itemBuilder: (_, i) => _ProductCard(product: list[i]),
+                itemBuilder: (_, i) => _ProductGridCard(product: list[i]),
               ),
             ),
           ],
@@ -612,6 +639,134 @@ class _StatChip extends StatelessWidget {
             fontWeight: FontWeight.w600,
             color: color)),
       ]),
+    );
+  }
+}
+
+// ─── Product Grid Card (3 kolom) ──────────────────────────────────────────────
+
+class _ProductGridCard extends ConsumerWidget {
+  final Product product;
+  const _ProductGridCard({required this.product});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final isOut = product.stock == 0;
+    final isLow = product.stock <= product.minStock && !isOut;
+    final statusColor = isOut
+        ? AppColors.danger
+        : isLow
+            ? AppColors.warning
+            : AppColors.success;
+
+    return Card(
+      margin: EdgeInsets.zero,
+      clipBehavior: Clip.antiAlias,
+      shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(14)),
+      child: InkWell(
+        onTap: () => _showDetail(context, ref),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            // Gambar / ikon produk
+            Expanded(
+              flex: 5,
+              child: Container(
+                color: isOut
+                    ? Colors.grey.shade100
+                    : AppColors.primaryLight,
+                child: product.imagePath != null &&
+                        product.imagePath!.isNotEmpty
+                    ? Image.file(
+                        File(product.imagePath!),
+                        fit: BoxFit.cover,
+                        errorBuilder: (_, __, ___) => Icon(
+                          Icons.inventory_2_outlined,
+                          size: 32,
+                          color: isOut
+                              ? Colors.grey.shade400
+                              : AppColors.primary,
+                        ),
+                      )
+                    : Icon(
+                        Icons.inventory_2_outlined,
+                        size: 32,
+                        color: isOut
+                            ? Colors.grey.shade400
+                            : AppColors.primary,
+                      ),
+              ),
+            ),
+
+            // Info bawah
+            Expanded(
+              flex: 4,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(7, 6, 7, 6),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    // Nama produk
+                    Text(
+                      product.name,
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w600,
+                        fontSize: 11,
+                      ),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    // Harga
+                    Text(
+                      CurrencyFormatter.format(product.sellPrice),
+                      style: const TextStyle(
+                        color: AppColors.primary,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    // Badge stok
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 6, vertical: 3),
+                      decoration: BoxDecoration(
+                        color: statusColor.withOpacity(0.12),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Text(
+                        '${product.stock} ${product.unit}',
+                        style: TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w700,
+                          color: statusColor,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showDetail(BuildContext context, WidgetRef ref) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (_) => ProviderScope(
+        parent: ProviderScope.containerOf(context),
+        child: _EditProductSheet(product: product),
+      ),
     );
   }
 }
@@ -1242,12 +1397,44 @@ class _AddProductSheetState extends ConsumerState<_AddProductSheet> {
     try {
       final db = ref.read(databaseProvider);
       final inputName = _nameCtrl.text.trim();
+      final inputStock = int.tryParse(_stockCtrl.text) ?? 0;
 
-      // ── Deteksi nama mirip/sama ──────────────────────────────────────────
+      // ── Cek nama persis sama (case-insensitive) ──────────────────────────
+      final exact = await db.productsDao.getProductByName(inputName);
+      if (exact != null) {
+        // Nama sama persis → timpa: tambah stok saja
+        final stockBefore = exact.stock;
+        final stockAfter  = stockBefore + inputStock;
+        await db.stockMovementsDao.adjustStock(
+          db: db,
+          productId: exact.id,
+          newStock:  stockAfter,
+          oldStock:  stockBefore,
+          type: 'masuk',
+          notes: 'Penambahan stok dari form tambah produk',
+        );
+        if (context.mounted) {
+          Navigator.pop(context);
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                'Stok "${exact.name}" diperbarui: '
+                '$stockBefore → $stockAfter ${exact.unit}'),
+              backgroundColor: AppColors.success));
+        }
+        return;
+      }
+
+      // ── Cek nama mirip (tapi tidak sama persis) ──────────────────────────
       final similar = await db.productsDao.findSimilarByName(inputName);
-      if (similar.isNotEmpty && context.mounted) {
+      // Filter: buang exact match (sudah ditangani atas), ambil yang benar-benar mirip
+      final notExact = similar
+          .where((p) => p.name.toLowerCase() != inputName.toLowerCase())
+          .toList();
+
+      if (notExact.isNotEmpty && context.mounted) {
         setState(() => _loading = false);
-        final existing = similar.first;
+        final existing = notExact.first;
         final confirm = await showDialog<bool>(
           context: context,
           builder: (_) => AlertDialog(
@@ -1255,23 +1442,53 @@ class _AddProductSheetState extends ConsumerState<_AddProductSheet> {
             content: Text(
               'Produk dengan nama mirip sudah ada:\n\n'
               '"${existing.name}"\n\n'
-              'Apakah kamu ingin tetap menambahkan produk baru?',
+              'Apakah ini produk yang sama?\n'
+              '• Tekan "Tambah Stok" untuk menambah ke produk yang ada\n'
+              '• Tekan "Produk Baru" jika memang berbeda',
             ),
             actions: [
               TextButton(
-                onPressed: () => Navigator.pop(context, false),
+                onPressed: () => Navigator.pop(context, null),
                 child: const Text('Batal'),
+              ),
+              OutlinedButton(
+                onPressed: () => Navigator.pop(context, false),
+                child: const Text('Produk Baru'),
               ),
               ElevatedButton(
                 onPressed: () => Navigator.pop(context, true),
                 style: ElevatedButton.styleFrom(
                     backgroundColor: AppColors.primary),
-                child: const Text('Tambah Tetap'),
+                child: const Text('Tambah Stok'),
               ),
             ],
           ),
         );
-        if (confirm != true) return;
+        if (confirm == null) return; // Batal
+        if (confirm == true) {
+          // Tambah stok ke produk yang mirip
+          final stockBefore = existing.stock;
+          final stockAfter  = stockBefore + inputStock;
+          await db.stockMovementsDao.adjustStock(
+            db: db,
+            productId: existing.id,
+            newStock:  stockAfter,
+            oldStock:  stockBefore,
+            type: 'masuk',
+            notes: 'Penambahan stok (nama mirip: $inputName)',
+          );
+          if (context.mounted) {
+            Navigator.pop(context);
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(
+                  'Stok "${existing.name}" diperbarui: '
+                  '$stockBefore → $stockAfter ${existing.unit}'),
+                backgroundColor: AppColors.success));
+          }
+          return;
+        }
+        // confirm == false → lanjut insert produk baru
         setState(() => _loading = true);
       }
       // ────────────────────────────────────────────────────────────────────
