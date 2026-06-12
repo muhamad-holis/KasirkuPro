@@ -28,9 +28,9 @@ class ReportsDao extends DatabaseAccessor<AppDatabase>
       GROUP BY p.id ORDER BY total_qty DESC LIMIT ?
       ''',
       variables: [
-        Variable(start.toIso8601String()),
-        Variable(end.toIso8601String()),
-        Variable(limit),
+        Variable<DateTime>(start),
+        Variable<DateTime>(end),
+        Variable<int>(limit),
       ],
       readsFrom: {transactionItems, products, transactions},
     );
@@ -56,8 +56,8 @@ class ReportsDao extends DatabaseAccessor<AppDatabase>
       ORDER BY total_omzet DESC
       ''',
       variables: [
-        Variable(start.toIso8601String()),
-        Variable(end.toIso8601String()),
+        Variable<DateTime>(start),
+        Variable<DateTime>(end),
       ],
       readsFrom: {transactionItems, products, transactions, categories},
     );
@@ -70,15 +70,15 @@ class ReportsDao extends DatabaseAccessor<AppDatabase>
       DateTime start, DateTime end) async {
     final query = db.customSelect(
       '''
-      SELECT DATE(created_at) as tanggal,
+      SELECT DATE(created_at / 1000, 'unixepoch', 'localtime') as tanggal,
         SUM(total) as omzet, COUNT(*) as jumlah
       FROM transactions
       WHERE created_at BETWEEN ? AND ? AND status = 'completed'
-      GROUP BY DATE(created_at) ORDER BY tanggal ASC
+      GROUP BY DATE(created_at / 1000, 'unixepoch', 'localtime') ORDER BY tanggal ASC
       ''',
       variables: [
-        Variable(start.toIso8601String()),
-        Variable(end.toIso8601String()),
+        Variable<DateTime>(start),
+        Variable<DateTime>(end),
       ],
       readsFrom: {transactions},
     );
@@ -86,22 +86,24 @@ class ReportsDao extends DatabaseAccessor<AppDatabase>
   }
 
   // ─── Ringkasan Kas (Masuk, Keluar, Saldo) ──────────────────────────────────
+  // FIX: Gunakan single-quotes untuk string literal SQLite (bukan double-quotes)
+  // FIX: Gunakan Variable<DateTime> agar Drift mengkonversi ke integer epoch
 
   Future<Map<String, double>> getCashReport(
       DateTime start, DateTime end) async {
     final inc = await db.customSelect(
-      'SELECT COALESCE(SUM(amount),0) as total FROM cash_flows WHERE type="income" AND created_at BETWEEN ? AND ?',
+      "SELECT COALESCE(SUM(amount),0) as total FROM cash_flows WHERE type='income' AND created_at BETWEEN ? AND ?",
       variables: [
-        Variable(start.toIso8601String()),
-        Variable(end.toIso8601String()),
+        Variable<DateTime>(start),
+        Variable<DateTime>(end),
       ],
       readsFrom: {cashFlows},
     ).getSingle();
     final exp = await db.customSelect(
-      'SELECT COALESCE(SUM(amount),0) as total FROM cash_flows WHERE type="expense" AND created_at BETWEEN ? AND ?',
+      "SELECT COALESCE(SUM(amount),0) as total FROM cash_flows WHERE type='expense' AND created_at BETWEEN ? AND ?",
       variables: [
-        Variable(start.toIso8601String()),
-        Variable(end.toIso8601String()),
+        Variable<DateTime>(start),
+        Variable<DateTime>(end),
       ],
       readsFrom: {cashFlows},
     ).getSingle();
@@ -123,9 +125,9 @@ class ReportsDao extends DatabaseAccessor<AppDatabase>
       ORDER BY total DESC
       ''',
       variables: [
-        Variable(type),
-        Variable(start.toIso8601String()),
-        Variable(end.toIso8601String()),
+        Variable<String>(type),
+        Variable<DateTime>(start),
+        Variable<DateTime>(end),
       ],
       readsFrom: {cashFlows},
     );
@@ -139,17 +141,17 @@ class ReportsDao extends DatabaseAccessor<AppDatabase>
     final query = db.customSelect(
       '''
       SELECT
-        DATE(created_at) as tanggal,
+        DATE(created_at / 1000, 'unixepoch', 'localtime') as tanggal,
         SUM(CASE WHEN type = 'income' THEN amount ELSE 0 END) as total_masuk,
         SUM(CASE WHEN type = 'expense' THEN amount ELSE 0 END) as total_keluar
       FROM cash_flows
       WHERE created_at BETWEEN ? AND ?
-      GROUP BY DATE(created_at)
+      GROUP BY DATE(created_at / 1000, 'unixepoch', 'localtime')
       ORDER BY tanggal ASC
       ''',
       variables: [
-        Variable(start.toIso8601String()),
-        Variable(end.toIso8601String()),
+        Variable<DateTime>(start),
+        Variable<DateTime>(end),
       ],
       readsFrom: {cashFlows},
     );
@@ -169,8 +171,8 @@ class ReportsDao extends DatabaseAccessor<AppDatabase>
         AND t.status = 'completed'
       ''',
       variables: [
-        Variable(start.toIso8601String()),
-        Variable(end.toIso8601String()),
+        Variable<DateTime>(start),
+        Variable<DateTime>(end),
       ],
       readsFrom: {transactionItems, products, transactions},
     ).getSingle();
@@ -188,8 +190,8 @@ class ReportsDao extends DatabaseAccessor<AppDatabase>
         AND status = 'completed'
       ''',
       variables: [
-        Variable(start.toIso8601String()),
-        Variable(end.toIso8601String()),
+        Variable<DateTime>(start),
+        Variable<DateTime>(end),
       ],
       readsFrom: {transactions},
     ).getSingle();
