@@ -14,6 +14,7 @@ class SplashScreen extends ConsumerStatefulWidget {
 class _SplashScreenState extends ConsumerState<SplashScreen> {
   late VideoPlayerController _videoController;
   bool _videoReady = false;
+  bool _navigated = false; // guard agar navigasi hanya dipanggil 1x
 
   @override
   void initState() {
@@ -37,8 +38,9 @@ class _SplashScreenState extends ConsumerState<SplashScreen> {
 
     // Navigasi setelah video selesai
     _videoController.addListener(() {
-      if (_videoController.value.position >= _videoController.value.duration &&
-          _videoController.value.duration > Duration.zero) {
+      if (!_navigated &&
+          _videoController.value.duration > Duration.zero &&
+          _videoController.value.position >= _videoController.value.duration) {
         _navigateToMain();
       }
     });
@@ -50,7 +52,8 @@ class _SplashScreenState extends ConsumerState<SplashScreen> {
   }
 
   void _navigateToMain() {
-    if (!mounted) return;
+    if (!mounted || _navigated) return;
+    _navigated = true;
     Navigator.of(context).pushReplacement(
       PageRouteBuilder(
         pageBuilder: (_, __, ___) => const MainNavigation(),
