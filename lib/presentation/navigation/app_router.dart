@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../screens/dashboard/dashboard_screen.dart';
 import '../screens/kasir/kasir_screen.dart';
@@ -13,17 +14,8 @@ import '../../core/theme/app_theme.dart';
 
 final currentNavIndexProvider = StateProvider<int>((ref) => 0);
 
-class MainNavigation extends ConsumerWidget {
+class MainNavigation extends ConsumerStatefulWidget {
   const MainNavigation({super.key});
-
-  // Urutan tab: 0=Dashboard, 1=Laporan, 2=Kasir(FAB), 3=Stok, 4=More(bottom sheet)
-  // More berisi: Pelanggan, Hutang, Notifikasi, Pengaturan
-  static final List<Widget> _screens = [
-    const DashboardScreen(),  // 0 Dashboard
-    const LaporanScreen(),    // 1 Laporan
-    const KasirScreen(),      // 2 Kasir
-    const StokScreen(),       // 3 Stok
-  ];
 
   /// Buka layar Kas Masuk & Kas Keluar sebagai push route
   static void navigateToKas(BuildContext context) {
@@ -51,12 +43,75 @@ class MainNavigation extends ConsumerWidget {
   }
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<MainNavigation> createState() => _MainNavigationState();
+}
+
+class _MainNavigationState extends ConsumerState<MainNavigation> {
+  // Urutan tab: 0=Dashboard, 1=Laporan, 2=Kasir(FAB), 3=Stok, 4=More(bottom sheet)
+  // More berisi: Pelanggan, Hutang, Notifikasi, Pengaturan
+  static final List<Widget> _screens = [
+    const DashboardScreen(),  // 0 Dashboard
+    const LaporanScreen(),    // 1 Laporan
+    const KasirScreen(),      // 2 Kasir
+    const StokScreen(),       // 3 Stok
+  ];
+
+  Future<bool> _onWillPop() async {
+    final shouldExit = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Row(
+          children: [
+            Icon(Icons.exit_to_app_rounded, color: AppColors.primary, size: 22),
+            SizedBox(width: 8),
+            Text('Keluar Aplikasi',
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+          ],
+        ),
+        content: const Text(
+          'Apakah kamu yakin ingin keluar dari aplikasi?',
+          style: TextStyle(fontSize: 14),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Tidak',
+              style: TextStyle(color: AppColors.textSecondary)),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.primary,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8)),
+            ),
+            child: const Text('Keluar'),
+          ),
+        ],
+      ),
+    );
+    return shouldExit ?? false;
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final idx = ref.watch(currentNavIndexProvider);
 
-    return Scaffold(
-      body: IndexedStack(index: idx, children: _screens),
-      bottomNavigationBar: _BottomNavBar(currentIndex: idx, ref: ref),
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) async {
+        if (didPop) return;
+        final shouldExit = await _onWillPop();
+        if (shouldExit) {
+          SystemNavigator.pop();
+        }
+      },
+      child: Scaffold(
+        body: IndexedStack(index: idx, children: _screens),
+        bottomNavigationBar: _BottomNavBar(currentIndex: idx, ref: ref),
+      ),
     );
   }
 }
