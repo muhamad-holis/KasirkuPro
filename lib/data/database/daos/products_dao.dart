@@ -27,6 +27,20 @@ class ProductsDao extends DatabaseAccessor<AppDatabase>
         ..where((t) => t.isActive.equals(true)))
           .get();
 
+  /// Cari produk dengan nama sama persis (case-insensitive)
+  Future<Product?> getProductByName(String name) =>
+      (select(products)
+        ..where((t) => t.name.lower().equals(name.toLowerCase()))
+        ..where((t) => t.isActive.equals(true)))
+          .getSingleOrNull();
+
+  /// Cari produk yang namanya mengandung kata kunci tertentu
+  Future<List<Product>> findSimilarByName(String name) =>
+      (select(products)
+        ..where((t) => t.name.like('%${name.toLowerCase()}%'))
+        ..where((t) => t.isActive.equals(true)))
+          .get();
+
   Future<int> insertProduct(ProductsCompanion product) =>
       into(products).insert(product);
 
