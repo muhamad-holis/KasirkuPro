@@ -3,7 +3,7 @@ import 'products_provider.dart';
 
 // ─── Model Notifikasi ─────────────────────────────────────────────────────────
 
-enum NotifType { stokHampirHabis, stokHabis, scanBarcode, info }
+enum NotifType { stokHampirHabis, stokHabis, hutangJatuhTempo, scanBarcode, info }
 
 class AppNotification {
   final String id;
