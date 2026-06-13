@@ -939,7 +939,7 @@ class _AboutSheet extends StatelessWidget {
             ),
             const SizedBox(height: 14),
             Text(
-              'KasirKu',
+              'KasirKu Pro',
               style: TextStyle(
                 fontSize: 24,
                 fontWeight: FontWeight.w800,
@@ -961,7 +961,7 @@ class _AboutSheet extends StatelessWidget {
                 borderRadius: BorderRadius.circular(20),
               ),
               child: const Text(
-                'by Artholic Studio',
+                'Oleh Artholic Studio',
                 style: TextStyle(
                   fontSize: 12,
                   fontWeight: FontWeight.w700,
@@ -989,7 +989,7 @@ class _AboutSheet extends StatelessWidget {
                         color: AppColors.primary, size: 16),
                     const SizedBox(width: 6),
                     Text(
-                      'Aplikasi Offline Mode',
+                      'Aplikasi Kasir Offline Mode',
                       style: TextStyle(
                         fontSize: 13,
                         fontWeight: FontWeight.w700,
@@ -1081,7 +1081,7 @@ class _AboutSheet extends StatelessWidget {
 
             const SizedBox(height: 20),
             Text(
-              '© 2025 Artholic Studio. All rights reserved.',
+              '© 2026 Artholic Studio. All rights reserved.',
               style: TextStyle(
                 fontSize: 11,
                 fontWeight: FontWeight.w600,
