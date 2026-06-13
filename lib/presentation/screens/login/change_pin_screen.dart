@@ -9,6 +9,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:drift/drift.dart' hide Column;
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/pin_hasher.dart';
+import '../../../data/database/app_database.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/database_provider.dart';
 import '../../navigation/app_router.dart';
