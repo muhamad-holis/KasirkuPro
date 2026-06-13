@@ -18,6 +18,7 @@ import '../../providers/kasir_provider.dart';
 import '../../providers/products_provider.dart';
 import '../../providers/database_provider.dart';
 import '../../providers/settings_provider.dart';
+import '../../providers/auth_provider.dart';
 import '../../../data/database/app_database.dart';
 import '../dashboard/dashboard_screen.dart' show dashboardStatsProvider;
 
@@ -1869,6 +1870,8 @@ class _PaymentSheetState extends ConsumerState<_PaymentSheet> {
       final txId = await db.transactionsDao.insertTransaction(
         tx, items,
         customerId: _selectedCustomer?.id,
+        kasirId:   ref.read(authProvider)?.id,
+        kasirName: ref.read(authProvider)?.name,
       );
 
       // ── Insert ke tabel Debts jika metode hutang ──────────────────────────
@@ -1895,7 +1898,8 @@ class _PaymentSheetState extends ConsumerState<_PaymentSheet> {
 
       if (context.mounted) {
         Navigator.pop(context);
-        _showSuccessDialog(context, invoiceNumber, cart, amountPaid);
+        _showSuccessDialog(context, invoiceNumber, cart, amountPaid,
+            ref.read(authProvider)?.name);
       }
     } catch (e) {
       if (context.mounted) {
@@ -1912,9 +1916,9 @@ class _PaymentSheetState extends ConsumerState<_PaymentSheet> {
   void _showSuccessDialog(
     BuildContext context,
     String invoiceNumber,
-
     KasirState cart,
     double amountPaid,
+    String? kasirName,
   ) {
     final change = amountPaid - cart.total;
     showDialog(
@@ -1928,6 +1932,7 @@ class _PaymentSheetState extends ConsumerState<_PaymentSheet> {
           amountPaid: amountPaid,
           change: change,
           paymentMethod: _method,
+          kasirName: kasirName,
         ),
       ),
     );
@@ -1942,6 +1947,7 @@ class _SuccessDialog extends ConsumerStatefulWidget {
   final double amountPaid;
   final double change;
   final String paymentMethod;
+  final String? kasirName;
 
   const _SuccessDialog({
     required this.invoiceNumber,
@@ -1949,6 +1955,7 @@ class _SuccessDialog extends ConsumerStatefulWidget {
     required this.amountPaid,
     required this.change,
     required this.paymentMethod,
+    this.kasirName,
   });
 
   @override
@@ -2195,6 +2202,10 @@ class _SuccessDialogState extends ConsumerState<_SuccessDialog> {
       styles: const PosStyles(align: PosAlign.center));
     bytes += generator.text(dateStr,
       styles: const PosStyles(align: PosAlign.center));
+    if (widget.kasirName != null && widget.kasirName!.isNotEmpty) {
+      bytes += generator.text('Kasir: ${widget.kasirName}',
+        styles: const PosStyles(align: PosAlign.center));
+    }
     bytes += generator.hr();
 
     // ── Items ────────────────────────────────────────────────────────────────
