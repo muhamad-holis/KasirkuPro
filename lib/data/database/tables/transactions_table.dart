@@ -4,6 +4,8 @@ class Transactions extends Table {
   IntColumn get id => integer().autoIncrement()();
   TextColumn get invoiceNumber => text()();
   IntColumn get customerId => integer().nullable().references(Customers, #id)();
+  IntColumn get kasirId => integer().nullable().references(Users, #id)();
+  TextColumn get kasirName => text().nullable()();
   RealColumn get subtotal => real().withDefault(const Constant(0))();
   RealColumn get discountAmount => real().withDefault(const Constant(0))();
   RealColumn get taxAmount => real().withDefault(const Constant(0))();
