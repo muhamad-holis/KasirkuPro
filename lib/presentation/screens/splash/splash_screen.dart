@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:video_player/video_player.dart';
 import '../../../core/theme/app_theme.dart';
-import '../../navigation/app_router.dart';
+import '../login/login_screen.dart';
 
 class SplashScreen extends ConsumerStatefulWidget {
   const SplashScreen({super.key});
@@ -14,7 +14,7 @@ class SplashScreen extends ConsumerStatefulWidget {
 class _SplashScreenState extends ConsumerState<SplashScreen> {
   late VideoPlayerController _videoController;
   bool _videoReady = false;
-  bool _navigated = false; // guard agar navigasi hanya dipanggil 1x
+  bool _navigated  = false;
 
   @override
   void initState() {
@@ -23,10 +23,7 @@ class _SplashScreenState extends ConsumerState<SplashScreen> {
   }
 
   Future<void> _initVideo() async {
-    _videoController = VideoPlayerController.asset(
-      'assets/videos/splash.mp4',
-    );
-
+    _videoController = VideoPlayerController.asset('assets/videos/splash.mp4');
     await _videoController.initialize();
 
     if (mounted) {
@@ -36,31 +33,26 @@ class _SplashScreenState extends ConsumerState<SplashScreen> {
       _videoController.play();
     }
 
-    // Navigasi setelah video selesai
     _videoController.addListener(() {
       if (!_navigated &&
           _videoController.value.duration > Duration.zero &&
           _videoController.value.position >= _videoController.value.duration) {
-        _navigateToMain();
+        _navigateToLogin();
       }
     });
 
-    // Fallback: navigasi max 5 detik kalau video lama
-    Future.delayed(const Duration(seconds: 5), () {
-      _navigateToMain();
-    });
+    // Fallback max 5 detik
+    Future.delayed(const Duration(seconds: 5), _navigateToLogin);
   }
 
-  void _navigateToMain() {
+  void _navigateToLogin() {
     if (!mounted || _navigated) return;
     _navigated = true;
     Navigator.of(context).pushReplacement(
       PageRouteBuilder(
-        pageBuilder: (_, __, ___) => const MainNavigation(),
-        transitionsBuilder: (_, anim, __, child) => FadeTransition(
-          opacity: anim,
-          child: child,
-        ),
+        pageBuilder: (_, __, ___) => const LoginScreen(),
+        transitionsBuilder: (_, anim, __, child) =>
+            FadeTransition(opacity: anim, child: child),
         transitionDuration: const Duration(milliseconds: 400),
       ),
     );
@@ -81,17 +73,14 @@ class _SplashScreenState extends ConsumerState<SplashScreen> {
               child: FittedBox(
                 fit: BoxFit.cover,
                 child: SizedBox(
-                  width: _videoController.value.size.width,
+                  width:  _videoController.value.size.width,
                   height: _videoController.value.size.height,
-                  child: VideoPlayer(_videoController),
+                  child:  VideoPlayer(_videoController),
                 ),
               ),
             )
           : const Center(
-              child: CircularProgressIndicator(
-                color: AppColors.primary,
-              ),
-            ),
+              child: CircularProgressIndicator(color: AppColors.primary)),
     );
   }
 }
