@@ -214,3 +214,37 @@ class PinNotifier extends StateNotifier<String?> {
 final pinProvider = StateNotifierProvider<PinNotifier, String?>(
   (ref) => PinNotifier(),
 );
+
+// ─── Biometric Settings ───────────────────────────────────────────────────────
+
+const _kBiometricKey = 'biometric_enabled';
+
+class BiometricNotifier extends StateNotifier<bool> {
+  BiometricNotifier() : super(false) {
+    _load();
+  }
+
+  Future<void> _load() async {
+    final prefs = await SharedPreferences.getInstance();
+    if (!mounted) return;
+    state = prefs.getBool(_kBiometricKey) ?? false;
+  }
+
+  Future<void> setEnabled(bool value) async {
+    if (!mounted) return;
+    state = value;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_kBiometricKey, value);
+  }
+
+  Future<void> disable() async {
+    if (!mounted) return;
+    state = false;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_kBiometricKey);
+  }
+}
+
+final biometricProvider = StateNotifierProvider<BiometricNotifier, bool>(
+  (ref) => BiometricNotifier(),
+);

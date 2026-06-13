@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:drift/drift.dart' hide Column; // <-- Baris import yang ditambahkan
+import 'package:drift/drift.dart' hide Column;
 
 import '../../../core/theme/app_theme.dart';
 import '../../../data/database/app_database.dart';
@@ -52,8 +52,6 @@ class KasirManagementScreen extends ConsumerWidget {
     );
   }
 
-  // ── Tambah / Edit kasir ───────────────────────────────────────────────────
-
   void _showAddEdit(BuildContext context, WidgetRef ref, User? user) {
     showModalBottomSheet(
       context: context,
@@ -66,8 +64,6 @@ class KasirManagementScreen extends ConsumerWidget {
     );
   }
 
-  // ── Reset PIN ─────────────────────────────────────────────────────────────
-
   void _showResetPin(BuildContext context, WidgetRef ref, User user) {
     showModalBottomSheet(
       context: context,
@@ -79,8 +75,6 @@ class KasirManagementScreen extends ConsumerWidget {
       ),
     );
   }
-
-  // ── Hapus kasir ───────────────────────────────────────────────────────────
 
   void _confirmDelete(BuildContext context, WidgetRef ref, User user) {
     showDialog(
@@ -134,7 +128,7 @@ class _UserCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isAdmin  = user.role == 'admin';
+    final isAdmin   = user.role == 'admin';
     final roleColor = isAdmin ? AppColors.primary : AppColors.success;
     final roleLabel = isAdmin ? 'Admin' : 'Kasir';
 
@@ -149,7 +143,6 @@ class _UserCard extends StatelessWidget {
         ),
       ),
       child: Row(children: [
-        // Avatar
         Container(
           width: 46, height: 46,
           decoration: BoxDecoration(
@@ -166,8 +159,6 @@ class _UserCard extends StatelessWidget {
           ),
         ),
         const SizedBox(width: 12),
-
-        // Info
         Expanded(
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Text(user.name,
@@ -206,15 +197,13 @@ class _UserCard extends StatelessWidget {
             ]),
           ]),
         ),
-
-        // Menu
         PopupMenuButton<String>(
           icon: Icon(Icons.more_vert_rounded,
               color: isDark ? const Color(0xFF94A3B8) : AppColors.textSecondary),
           onSelected: (v) {
-            if (v == 'edit')      onEdit();
-            if (v == 'pin')       onResetPin();
-            if (v == 'delete')    onDelete();
+            if (v == 'edit')   onEdit();
+            if (v == 'pin')    onResetPin();
+            if (v == 'delete') onDelete();
           },
           itemBuilder: (_) => [
             const PopupMenuItem(value: 'edit',
@@ -254,9 +243,12 @@ class _AddEditSheet extends ConsumerStatefulWidget {
 
 class _AddEditSheetState extends ConsumerState<_AddEditSheet> {
   final _nameCtrl = TextEditingController();
-  String _pin     = '';
-  String _role    = 'kasir';
-  bool _saving    = false;
+  String _pin  = '';
+  String _role = 'kasir';
+  bool _saving = false;
+
+  // FIX: PIN 4 digit
+  static const int _pinLength = 4;
 
   bool get isEdit => widget.user != null;
 
@@ -276,7 +268,7 @@ class _AddEditSheetState extends ConsumerState<_AddEditSheet> {
   }
 
   void _onKey(String d) {
-    if (_pin.length >= 6) return;
+    if (_pin.length >= _pinLength) return;
     setState(() => _pin += d);
   }
 
@@ -293,9 +285,9 @@ class _AddEditSheetState extends ConsumerState<_AddEditSheet> {
           backgroundColor: AppColors.danger));
       return;
     }
-    if (!isEdit && _pin.length < 4) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          content: Text('PIN minimal 4 digit'),
+    if (!isEdit && _pin.length < _pinLength) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('PIN harus $_pinLength digit'),
           backgroundColor: AppColors.danger));
       return;
     }
@@ -327,25 +319,23 @@ class _AddEditSheetState extends ConsumerState<_AddEditSheet> {
     final sheetBg = isDark ? AppColors.darkSurface : Colors.white;
     final handle  = isDark ? AppColors.darkBorder : Colors.grey.shade300;
     final text    = isDark ? Colors.white : AppColors.textPrimary;
+    final bottom  = MediaQuery.of(context).viewInsets.bottom;
 
-    return Padding(
-      padding: EdgeInsets.only(
-          bottom: MediaQuery.of(context).viewInsets.bottom),
-      child: Container(
-        decoration: BoxDecoration(
-          color: sheetBg,
-          borderRadius:
-              const BorderRadius.vertical(top: Radius.circular(24)),
-        ),
-        padding: const EdgeInsets.fromLTRB(24, 12, 24, 36),
+    return Container(
+      decoration: BoxDecoration(
+        color: sheetBg,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      // FIX: padding bottom ikut keyboard + SafeArea
+      padding: EdgeInsets.fromLTRB(24, 12, 24, bottom > 0 ? bottom + 16 : 36),
+      child: SingleChildScrollView(  // FIX: scroll agar tidak overflow
         child: Column(mainAxisSize: MainAxisSize.min, children: [
           // Handle
           Container(
             width: 40, height: 4,
             margin: const EdgeInsets.only(bottom: 20),
             decoration: BoxDecoration(
-                color: handle,
-                borderRadius: BorderRadius.circular(2)),
+                color: handle, borderRadius: BorderRadius.circular(2)),
           ),
           Text(isEdit ? 'Edit Kasir' : 'Tambah Kasir',
               style: TextStyle(
@@ -400,21 +390,23 @@ class _AddEditSheetState extends ConsumerState<_AddEditSheet> {
           // PIN (hanya saat tambah baru)
           if (!isEdit) ...[
             const SizedBox(height: 20),
-            Text('PIN (${_pin.length}/6)',
+            // FIX: label PIN (x/4)
+            Text('PIN (${_pin.length}/$_pinLength)',
                 style: TextStyle(
                     fontSize: 13, fontWeight: FontWeight.w700,
                     color: isDark
                         ? const Color(0xFF94A3B8)
                         : AppColors.textSecondary)),
             const SizedBox(height: 12),
+            // FIX: dot indikator 4 bulat
             Row(
               mainAxisAlignment: MainAxisAlignment.center,
-              children: List.generate(6, (i) {
+              children: List.generate(_pinLength, (i) {
                 final filled = i < _pin.length;
                 return AnimatedContainer(
                   duration: const Duration(milliseconds: 120),
-                  margin: const EdgeInsets.symmetric(horizontal: 6),
-                  width: 12, height: 12,
+                  margin: const EdgeInsets.symmetric(horizontal: 8),
+                  width: 14, height: 14,
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
                     color: filled ? AppColors.primary : Colors.transparent,
@@ -474,8 +466,11 @@ class _ResetPinSheetState extends ConsumerState<_ResetPinSheet> {
   String _pin  = '';
   bool _saving = false;
 
+  // FIX: PIN 4 digit
+  static const int _pinLength = 4;
+
   void _onKey(String d) {
-    if (_pin.length >= 6) return;
+    if (_pin.length >= _pinLength) return;
     setState(() => _pin += d);
   }
 
@@ -485,9 +480,9 @@ class _ResetPinSheetState extends ConsumerState<_ResetPinSheet> {
   }
 
   Future<void> _save() async {
-    if (_pin.length < 4) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          content: Text('PIN minimal 4 digit'),
+    if (_pin.length < _pinLength) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('PIN harus $_pinLength digit'),
           backgroundColor: AppColors.danger));
       return;
     }
@@ -511,80 +506,85 @@ class _ResetPinSheetState extends ConsumerState<_ResetPinSheet> {
     final sheetBg = isDark ? AppColors.darkSurface : Colors.white;
     final handle  = isDark ? AppColors.darkBorder : Colors.grey.shade300;
     final text    = isDark ? Colors.white : AppColors.textPrimary;
+    final bottom  = MediaQuery.of(context).viewInsets.bottom;
 
     return Container(
       decoration: BoxDecoration(
         color: sheetBg,
         borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
       ),
-      padding: const EdgeInsets.fromLTRB(24, 12, 24, 36),
-      child: Column(mainAxisSize: MainAxisSize.min, children: [
-        Container(
-          width: 40, height: 4,
-          margin: const EdgeInsets.only(bottom: 20),
-          decoration: BoxDecoration(
-              color: handle, borderRadius: BorderRadius.circular(2)),
-        ),
-        Text('Reset PIN — ${widget.user.name}',
-            style: TextStyle(
-                fontSize: 17, fontWeight: FontWeight.w800, color: text)),
-        const SizedBox(height: 20),
-        Text('PIN baru (${_pin.length}/6)',
-            style: TextStyle(
-                fontSize: 13,
-                color: isDark
-                    ? const Color(0xFF94A3B8) : AppColors.textSecondary)),
-        const SizedBox(height: 12),
-        Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: List.generate(6, (i) {
-            final filled = i < _pin.length;
-            return AnimatedContainer(
-              duration: const Duration(milliseconds: 120),
-              margin: const EdgeInsets.symmetric(horizontal: 6),
-              width: 12, height: 12,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: filled ? AppColors.primary : Colors.transparent,
-                border: Border.all(
-                  color: filled
-                      ? AppColors.primary
-                      : isDark
-                          ? const Color(0xFF475569) : Colors.grey.shade300,
-                  width: 2,
-                ),
-              ),
-            );
-          }),
-        ),
-        const SizedBox(height: 16),
-        _MiniNumpad(onKey: _onKey, onDel: _onDel),
-        const SizedBox(height: 24),
-        SizedBox(
-          width: double.infinity,
-          child: ElevatedButton(
-            onPressed: _saving ? null : _save,
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.primary,
-              foregroundColor: Colors.white,
-              padding: const EdgeInsets.symmetric(vertical: 14),
-              shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12)),
-            ),
-            child: _saving
-                ? const SizedBox(width: 20, height: 20,
-                    child: CircularProgressIndicator(
-                        color: Colors.white, strokeWidth: 2))
-                : const Text('Simpan PIN Baru',
-                    style: TextStyle(fontWeight: FontWeight.w700)),
+      padding: EdgeInsets.fromLTRB(24, 12, 24, bottom > 0 ? bottom + 16 : 36),
+      child: SingleChildScrollView(  // FIX: scroll agar tidak overflow
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          Container(
+            width: 40, height: 4,
+            margin: const EdgeInsets.only(bottom: 20),
+            decoration: BoxDecoration(
+                color: handle, borderRadius: BorderRadius.circular(2)),
           ),
-        ),
-      ]),
+          Text('Reset PIN — ${widget.user.name}',
+              style: TextStyle(
+                  fontSize: 17, fontWeight: FontWeight.w800, color: text)),
+          const SizedBox(height: 20),
+          // FIX: label PIN (x/4)
+          Text('PIN baru (${_pin.length}/$_pinLength)',
+              style: TextStyle(
+                  fontSize: 13,
+                  color: isDark
+                      ? const Color(0xFF94A3B8) : AppColors.textSecondary)),
+          const SizedBox(height: 12),
+          // FIX: dot indikator 4 bulat
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: List.generate(_pinLength, (i) {
+              final filled = i < _pin.length;
+              return AnimatedContainer(
+                duration: const Duration(milliseconds: 120),
+                margin: const EdgeInsets.symmetric(horizontal: 8),
+                width: 14, height: 14,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: filled ? AppColors.primary : Colors.transparent,
+                  border: Border.all(
+                    color: filled
+                        ? AppColors.primary
+                        : isDark
+                            ? const Color(0xFF475569) : Colors.grey.shade300,
+                    width: 2,
+                  ),
+                ),
+              );
+            }),
+          ),
+          const SizedBox(height: 16),
+          _MiniNumpad(onKey: _onKey, onDel: _onDel),
+          const SizedBox(height: 24),
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton(
+              onPressed: _saving ? null : _save,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.primary,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(vertical: 14),
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12)),
+              ),
+              child: _saving
+                  ? const SizedBox(width: 20, height: 20,
+                      child: CircularProgressIndicator(
+                          color: Colors.white, strokeWidth: 2))
+                  : const Text('Simpan PIN Baru',
+                      style: TextStyle(fontWeight: FontWeight.w700)),
+            ),
+          ),
+        ]),
+      ),
     );
   }
 }
 
-// ─── Mini numpad (untuk sheet) ────────────────────────────────────────────────
+// ─── Mini numpad ──────────────────────────────────────────────────────────────
 
 class _MiniNumpad extends StatelessWidget {
   final void Function(String) onKey;
@@ -621,6 +621,8 @@ class _MiniNumpad extends StatelessWidget {
     );
   }
 }
+
+// ─── Empty state ──────────────────────────────────────────────────────────────
 
 class _Empty extends StatelessWidget {
   final bool isDark;

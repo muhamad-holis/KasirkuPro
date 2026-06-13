@@ -20,11 +20,12 @@ class SettingsScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final isDark   = ref.watch(themeModeProvider);
-    final store    = ref.watch(storeSettingsProvider);
-    final printer  = ref.watch(printerSettingsProvider);
-    final pinValue = ref.watch(pinProvider);
-    final pinActive = pinValue != null && pinValue.isNotEmpty;
+    final isDark        = ref.watch(themeModeProvider);
+    final store         = ref.watch(storeSettingsProvider);
+    final printer       = ref.watch(printerSettingsProvider);
+    final pinValue      = ref.watch(pinProvider);
+    final pinActive     = pinValue != null && pinValue.isNotEmpty;
+    final biometricOn   = ref.watch(biometricProvider);
 
     return Scaffold(
       appBar: AppBar(
@@ -199,11 +200,15 @@ class SettingsScreen extends ConsumerWidget {
               color: pinActive ? AppColors.success : null,
               onTap: () => _showPinSetup(context, ref, isPinActive: pinActive),
             ),
-            _Tile(
+            _SwitchTile(
               icon: Icons.fingerprint_outlined,
               title: 'Biometrik',
-              subtitle: 'Fingerprint / Face ID',
-              onTap: () => _setupBiometric(context),
+              subtitle: biometricOn
+                  ? 'Aktif — login pakai fingerprint/Face ID'
+                  : 'Fingerprint / Face ID',
+              color: biometricOn ? AppColors.success : null,
+              value: biometricOn,
+              onChanged: (val) => _toggleBiometric(context, ref, val),
             ),
           ]),
 
@@ -616,16 +621,30 @@ class SettingsScreen extends ConsumerWidget {
     );
   }
 
-  // ── Biometric setup ────────────────────────────────────────────────────────
+  // ── Biometric toggle ───────────────────────────────────────────────────────
 
-  Future<void> _setupBiometric(BuildContext context) async {
+  Future<void> _toggleBiometric(
+      BuildContext context, WidgetRef ref, bool enable) async {
+    // Jika nonaktifkan — langsung simpan false
+    if (!enable) {
+      await ref.read(biometricProvider.notifier).setEnabled(false);
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Biometrik dinonaktifkan'),
+            backgroundColor: AppColors.warning,
+          ),
+        );
+      }
+      return;
+    }
+
+    // Jika aktifkan — verifikasi dulu
     final auth = LocalAuthentication();
+    final bool canCheck = await auth.canCheckBiometrics;
+    final bool isSupported = await auth.isDeviceSupported();
 
-    // Cek apakah perangkat mendukung biometrik
-    final bool canCheckBiometrics = await auth.canCheckBiometrics;
-    final bool isDeviceSupported = await auth.isDeviceSupported();
-
-    if (!canCheckBiometrics || !isDeviceSupported) {
+    if (!canCheck || !isSupported) {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
@@ -637,16 +656,13 @@ class SettingsScreen extends ConsumerWidget {
       return;
     }
 
-    // Cek jenis biometrik yang tersedia
-    final List<BiometricType> availableBiometrics =
-        await auth.getAvailableBiometrics();
-
-    if (availableBiometrics.isEmpty) {
+    final List<BiometricType> available = await auth.getAvailableBiometrics();
+    if (available.isEmpty) {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text(
-                'Belum ada data biometrik. Daftarkan fingerprint/Face ID di pengaturan perangkat terlebih dahulu.'),
+                'Belum ada data biometrik. Daftarkan fingerprint/Face ID di pengaturan HP terlebih dahulu.'),
             backgroundColor: AppColors.warning,
             duration: Duration(seconds: 4),
           ),
@@ -655,23 +671,16 @@ class SettingsScreen extends ConsumerWidget {
       return;
     }
 
-    // Tentukan label biometrik yang tersedia
-    final hasFace = availableBiometrics.contains(BiometricType.face);
-    final hasFingerprint =
-        availableBiometrics.contains(BiometricType.fingerprint);
-    String biometricLabel = 'Biometrik';
-    if (hasFace && hasFingerprint) {
-      biometricLabel = 'Fingerprint / Face ID';
-    } else if (hasFace) {
-      biometricLabel = 'Face ID';
-    } else if (hasFingerprint) {
-      biometricLabel = 'Fingerprint';
-    }
+    final hasFace        = available.contains(BiometricType.face);
+    final hasFingerprint = available.contains(BiometricType.fingerprint);
+    String label = 'Biometrik';
+    if (hasFace && hasFingerprint) label = 'Fingerprint / Face ID';
+    else if (hasFace) label = 'Face ID';
+    else if (hasFingerprint) label = 'Fingerprint';
 
-    // Autentikasi biometrik
     try {
-      final bool authenticated = await auth.authenticate(
-        localizedReason: 'Verifikasi $biometricLabel untuk mengaktifkan login biometrik',
+      final bool ok = await auth.authenticate(
+        localizedReason: 'Verifikasi $label untuk mengaktifkan login biometrik',
         options: const AuthenticationOptions(
           stickyAuth: true,
           biometricOnly: true,
@@ -680,17 +689,20 @@ class SettingsScreen extends ConsumerWidget {
 
       if (!context.mounted) return;
 
-      if (authenticated) {
+      if (ok) {
+        // Simpan status aktif ke SharedPreferences
+        await ref.read(biometricProvider.notifier).setEnabled(true);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('✅ $biometricLabel berhasil diverifikasi'),
+            content: Text('✅ $label aktif — login berikutnya pakai $label'),
             backgroundColor: AppColors.success,
+            duration: const Duration(seconds: 3),
           ),
         );
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('Verifikasi biometrik dibatalkan'),
+            content: Text('Verifikasi dibatalkan, biometrik tidak diaktifkan'),
             backgroundColor: AppColors.warning,
           ),
         );
@@ -1648,6 +1660,44 @@ class _Tile extends StatelessWidget {
               color: Colors.grey, size: 20)
           : null,
       onTap: onTap,
+    );
+  }
+}
+
+
+class _SwitchTile extends StatelessWidget {
+  final IconData icon;
+  final String title, subtitle;
+  final Color? color;
+  final bool value;
+  final ValueChanged<bool> onChanged;
+
+  const _SwitchTile({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.value,
+    required this.onChanged,
+    this.color,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final c = color ?? AppColors.primary;
+    return ListTile(
+      leading: _TileIcon(icon, c),
+      title: Text(title,
+          style: TextStyle(
+              fontWeight: FontWeight.w600,
+              fontSize: 14,
+              color: color)),
+      subtitle: Text(subtitle,
+          style: TextStyle(fontSize: 12, color: Colors.grey.shade500)),
+      trailing: Switch(
+        value: value,
+        onChanged: onChanged,
+        activeColor: AppColors.primary,
+      ),
     );
   }
 }

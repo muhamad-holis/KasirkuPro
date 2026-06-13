@@ -73,6 +73,15 @@ class AuthNotifier extends StateNotifier<ActiveUser?> {
     return null;
   }
 
+  /// Restore session dari SharedPreferences (dipakai setelah biometrik sukses)
+  void restoreSession({
+    required int id,
+    required String name,
+    required String role,
+  }) {
+    state = ActiveUser(id: id, name: name, role: role);
+  }
+
   Future<void> logout() async {
     state = null;
     final prefs = await SharedPreferences.getInstance();
