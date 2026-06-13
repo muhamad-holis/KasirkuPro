@@ -691,7 +691,7 @@ class _SetupWizardScreenState extends ConsumerState<SetupWizardScreen>
           LengthLimitingTextInputFormatter(_pinLength),
         ],
         textInputAction: TextInputAction.done,
-        onFieldSubmitted: (_) => _next(),
+        onSubmitted: (_) => _next(),
         onChanged: (_) => setState(() => _error = null),
         decoration: InputDecoration(
           hintText: '6 digit angka',
