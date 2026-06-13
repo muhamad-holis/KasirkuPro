@@ -19,7 +19,7 @@ class KasirKuApp extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final isDark = ref.watch(themeModeProvider);
     return MaterialApp(
-      title: 'KasirKu',
+      title: 'KasirKu Pro',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.light,
       darkTheme: AppTheme.dark,
