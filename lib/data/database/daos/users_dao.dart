@@ -158,7 +158,11 @@ class UsersDao extends DatabaseAccessor<AppDatabase> with _$UsersDaoMixin {
   static const int _maxAttempts  = 5;
   static const int _lockDuration = 5 * 60 * 1000; // 5 menit dalam ms
 
-  Future<LoginResult> attemptLogin(String username, String hashedPin) async {
+  /// [pin] adalah PIN MENTAH (plain text) dari input user — bukan hash.
+  /// Verifikasi dilakukan di sini dengan PinHasher.verifyPin(),
+  /// yang mendukung format hash lama (SHA-256) maupun baru (PBKDF2)
+  /// serta otomatis upgrade hash lama ke PBKDF2 saat login berhasil.
+  Future<LoginResult> attemptLogin(String username, String pin) async {
     final user = await getUserByUsername(username);
 
     if (user == null || !user.isActive) {
@@ -172,7 +176,9 @@ class UsersDao extends DatabaseAccessor<AppDatabase> with _$UsersDaoMixin {
           'Akun terkunci. Coba lagi dalam $sisaMenit menit.');
     }
 
-    if (user.pin != hashedPin) {
+    final verify = PinHasher.verifyPin(pin, user.pin);
+
+    if (!verify.match) {
       final attempts = user.failedAttempts + 1;
       final locked   = attempts >= _maxAttempts;
       await (update(users)..where((u) => u.id.equals(user.id))).write(
@@ -189,11 +195,14 @@ class UsersDao extends DatabaseAccessor<AppDatabase> with _$UsersDaoMixin {
       return LoginResult.failure('PIN salah. $sisa percobaan tersisa.');
     }
 
-    // Berhasil — reset counter
+    // Berhasil — reset counter, dan upgrade hash jika perlu (legacy SHA-256/iterasi lama)
     await (update(users)..where((u) => u.id.equals(user.id))).write(
-      const UsersCompanion(
-        failedAttempts: Value(0),
-        lockedUntil:    Value(null),
+      UsersCompanion(
+        failedAttempts: const Value(0),
+        lockedUntil:    const Value(null),
+        pin: verify.needsUpgrade
+            ? Value(PinHasher.hashPin(pin))
+            : const Value.absent(),
       ),
     );
 

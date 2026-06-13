@@ -49,7 +49,8 @@ class AuthNotifier extends StateNotifier<ActiveUser?> {
   final Ref _ref;
   AppDatabase get _db => _ref.read(databaseProvider);
 
-  /// Login via USERNAME + PIN (bukan via name).
+  /// Login via USERNAME + PIN mentah (bukan via name).
+  /// PIN diverifikasi terhadap hash PBKDF2 di attemptLogin().
   /// Return null = sukses. Return string = pesan error.
   Future<String?> login(String username, String pin) async {
     final result = await _db.usersDao.attemptLogin(username, pin);

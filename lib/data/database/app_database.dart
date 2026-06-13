@@ -3,6 +3,7 @@ import 'package:drift/drift.dart';
 import 'package:drift/native.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as p;
+import '../../core/utils/pin_hasher.dart';
 
 part 'tables/categories_table.dart';
 part 'tables/products_table.dart';
