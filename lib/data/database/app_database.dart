@@ -25,6 +25,7 @@ part 'daos/reports_dao.dart';
 part 'daos/sync_dao.dart';
 part 'daos/stock_movements_dao.dart';
 part 'daos/settings_dao.dart';
+part 'daos/users_dao.dart';
 
 part 'app_database.g.dart';
 
@@ -45,14 +46,14 @@ LazyDatabase _openConnection() {
   daos: [
     ProductsDao, CategoriesDao, TransactionsDao,
     CustomersDao, DebtsDao, ReportsDao, SyncDao,
-    StockMovementsDao, SettingsDao,
+    StockMovementsDao, SettingsDao, UsersDao,
   ],
 )
 class AppDatabase extends _$AppDatabase {
   AppDatabase() : super(_openConnection());
 
   @override
-  int get schemaVersion => 2;
+  int get schemaVersion => 3;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -61,7 +62,6 @@ class AppDatabase extends _$AppDatabase {
       await _insertDefaults();
     },
     onUpgrade: (Migrator m, int from, int to) async {
-      // v1 -> v2: gunakan raw SQL agar kompatibel dengan Drift 2.18
       if (from < 2) {
         await customStatement(
           "CREATE TABLE IF NOT EXISTS users ("
@@ -83,6 +83,22 @@ class AppDatabase extends _$AppDatabase {
           ")"
         );
       }
+      if (from < 3) {
+        await customStatement(
+          "ALTER TABLE transactions ADD COLUMN kasir_id INTEGER REFERENCES users(id)"
+        );
+        await customStatement(
+          "ALTER TABLE transactions ADD COLUMN kasir_name TEXT"
+        );
+        // SHA-256 dari '1234'
+        await customStatement(
+          "INSERT OR IGNORE INTO users (name, pin, role, is_active) "
+          "SELECT 'Admin',"
+          "'03ac674216f3e15c761ee1a5e255f067953623c8b388b4459e13f978d7c846f4',"
+          "'admin', 1 "
+          "WHERE NOT EXISTS (SELECT 1 FROM users LIMIT 1)"
+        );
+      }
     },
     beforeOpen: (details) async {
       await customStatement('PRAGMA foreign_keys = ON');
@@ -97,9 +113,14 @@ class AppDatabase extends _$AppDatabase {
     }
     await into(settings).insert(
       SettingsCompanion.insert(key: 'toko_nama', value: const Value('KasirKu')));
+    // Admin default PIN 1234 (SHA-256)
+    await into(users).insert(UsersCompanion.insert(
+      name: 'Admin',
+      pin: '03ac674216f3e15c761ee1a5e255f067953623c8b388b4459e13f978d7c846f4',
+      role: const Value('admin'),
+    ));
   }
 
-  /// Hapus semua data transaksi & stok, pertahankan produk & pengaturan
   Future<void> resetAllData() async {
     await transaction(() async {
       await delete(transactionItems).go();
