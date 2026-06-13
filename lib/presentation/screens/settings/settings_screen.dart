@@ -865,6 +865,7 @@ class SettingsScreen extends ConsumerWidget {
             backgroundColor: AppColors.danger));
       }
     }
+  }
 
   // ── Tentang Aplikasi ──────────────────────────────────────────────────────
 
