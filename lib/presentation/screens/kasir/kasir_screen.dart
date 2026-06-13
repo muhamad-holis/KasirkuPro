@@ -8,6 +8,7 @@ import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 import 'package:print_bluetooth_thermal/print_bluetooth_thermal.dart';
 import 'package:esc_pos_utils_plus/esc_pos_utils_plus.dart';
+import 'package:image/image.dart' as img;
 import 'package:intl/intl.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import '../../../core/utils/sound_service.dart';
@@ -2123,19 +2124,50 @@ class _SuccessDialogState extends ConsumerState<_SuccessDialog> {
     );
   }
 
+  // ── Helper load logo (sama dengan settings_screen) ─────────────────────────
+  Future<img.Image?> _loadLogoImage(int maxWidth) async {
+    try {
+      final ByteData data =
+          await rootBundle.load('assets/images/ic_launcher.png');
+      final Uint8List bytes = data.buffer.asUint8List();
+      img.Image? original = img.decodeImage(bytes);
+      if (original == null) return null;
+      if (original.width > maxWidth) {
+        original = img.copyResize(original, width: maxWidth);
+      }
+      return img.grayscale(original);
+    } catch (_) {
+      return null;
+    }
+  }
+
   Future<void> _doPrint() async {
-    final settings = ref.read(storeSettingsProvider);
-    final storeName    = settings.storeName;
-    final storeAddress = settings.storeAddress ?? '';
+    final settings    = ref.read(storeSettingsProvider);
+    final storeName   = settings.storeName.isEmpty ? 'KasirKu' : settings.storeName;
+    final storeAddress = settings.storeAddress;
+    final storePhone  = settings.storePhone;
+    final storeNote   = settings.storeNote;
+    final paperSize   = settings.receiptSize == '80mm'
+        ? PaperSize.mm80 : PaperSize.mm58;
+    final logoMaxWidth = settings.receiptSize == '80mm' ? 300 : 200;
 
     final profile = await CapabilityProfile.load();
-    final generator = Generator(PaperSize.mm58, profile);
+    final generator = Generator(paperSize, profile);
     var bytes = <int>[];
 
     final now = DateTime.now();
     final dateStr = DateFormat('dd/MM/yyyy HH:mm').format(now);
 
-    // Header
+    // ── Logo ────────────────────────────────────────────────────────────────
+    if (settings.showLogo) {
+      final logoImg = await _loadLogoImage(logoMaxWidth);
+      if (logoImg != null) {
+        bytes += generator.image(logoImg);
+        bytes += generator.feed(1);
+      }
+    }
+
+    // ── Header toko ─────────────────────────────────────────────────────────
     bytes += generator.text(storeName,
       styles: const PosStyles(
         align: PosAlign.center,
@@ -2147,6 +2179,10 @@ class _SuccessDialogState extends ConsumerState<_SuccessDialog> {
       bytes += generator.text(storeAddress,
         styles: const PosStyles(align: PosAlign.center));
     }
+    if (storePhone.isNotEmpty) {
+      bytes += generator.text('Telp: $storePhone',
+        styles: const PosStyles(align: PosAlign.center));
+    }
     bytes += generator.hr();
     bytes += generator.text('No: ${widget.invoiceNumber}',
       styles: const PosStyles(align: PosAlign.center));
@@ -2154,7 +2190,7 @@ class _SuccessDialogState extends ConsumerState<_SuccessDialog> {
       styles: const PosStyles(align: PosAlign.center));
     bytes += generator.hr();
 
-    // Items
+    // ── Items ────────────────────────────────────────────────────────────────
     for (final item in widget.cart.items) {
       bytes += generator.text(item.product.name,
         styles: const PosStyles(bold: true));
@@ -2171,7 +2207,7 @@ class _SuccessDialogState extends ConsumerState<_SuccessDialog> {
     }
     bytes += generator.hr();
 
-    // Summary
+    // ── Summary ──────────────────────────────────────────────────────────────
     if (widget.cart.discountTotal > 0) {
       bytes += generator.row([
         PosColumn(text: 'Diskon', width: 6,
@@ -2210,11 +2246,11 @@ class _SuccessDialogState extends ConsumerState<_SuccessDialog> {
     }
     bytes += generator.hr();
 
-    // Footer
-    bytes += generator.text('Terima kasih!',
-      styles: const PosStyles(align: PosAlign.center, bold: true));
-    bytes += generator.text('Simpan struk ini sebagai bukti pembelian',
-      styles: const PosStyles(align: PosAlign.center));
+    // ── Footer dari pengaturan ───────────────────────────────────────────────
+    if (storeNote.isNotEmpty) {
+      bytes += generator.text(storeNote,
+        styles: const PosStyles(align: PosAlign.center, bold: true));
+    }
     bytes += generator.feed(3);
     bytes += generator.cut();
 
