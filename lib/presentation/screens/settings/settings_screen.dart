@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -8,6 +9,7 @@ import 'package:share_plus/share_plus.dart';
 import 'package:local_auth/local_auth.dart';
 import 'package:print_bluetooth_thermal/print_bluetooth_thermal.dart';
 import 'package:esc_pos_utils_plus/esc_pos_utils_plus.dart';
+import 'package:image/image.dart' as img;
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/currency.dart';
 import '../../providers/settings_provider.dart';
@@ -115,7 +117,7 @@ class SettingsScreen extends ConsumerWidget {
             ),
             SwitchListTile(
               title: const Text('Tampilkan Logo'),
-              subtitle: const Text('Logo toko di struk'),
+              subtitle: const Text('Cetak logo toko di bagian atas struk'),
               value: store.showLogo,
               onChanged: (v) =>
                   ref.read(storeSettingsProvider.notifier)
@@ -403,6 +405,24 @@ class SettingsScreen extends ConsumerWidget {
     );
   }
 
+  // ── Helper: load & konversi logo asset ke bitmap ESC/POS ──────────────────
+
+  Future<img.Image?> _loadLogoImage(int maxWidth) async {
+    try {
+      final ByteData data =
+          await rootBundle.load('assets/images/ic_launcher.png');
+      final Uint8List bytes = data.buffer.asUint8List();
+      img.Image? original = img.decodeImage(bytes);
+      if (original == null) return null;
+      if (original.width > maxWidth) {
+        original = img.copyResize(original, width: maxWidth);
+      }
+      return img.grayscale(original);
+    } catch (_) {
+      return null;
+    }
+  }
+
   // ── Test print ─────────────────────────────────────────────────────────────
 
   Future<void> _testPrint(
@@ -439,13 +459,21 @@ class SettingsScreen extends ConsumerWidget {
         }
       }
 
-      // Generate ESC/POS bytes untuk struk test
       final profile = await CapabilityProfile.load();
-      final paperSize = store.receiptSize == '80mm'
-          ? PaperSize.mm80
-          : PaperSize.mm58;
+      final paperSize =
+          store.receiptSize == '80mm' ? PaperSize.mm80 : PaperSize.mm58;
+      final logoMaxWidth = store.receiptSize == '80mm' ? 300 : 200;
       final generator = Generator(paperSize, profile);
       var bytes = <int>[];
+
+      // ── Logo ────────────────────────────────────────────────────────────
+      if (store.showLogo) {
+        final logoImg = await _loadLogoImage(logoMaxWidth);
+        if (logoImg != null) {
+          bytes += generator.image(logoImg);
+          bytes += generator.feed(1);
+        }
+      }
 
       final storeName = store.storeName.isEmpty ? 'KasirKu' : store.storeName;
       final now = DateTime.now();
@@ -453,7 +481,7 @@ class SettingsScreen extends ConsumerWidget {
           '${now.day.toString().padLeft(2, '0')}/${now.month.toString().padLeft(2, '0')}/${now.year} '
           '${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}';
 
-      // Header
+      // ── Header toko ─────────────────────────────────────────────────────
       bytes += generator.text(storeName,
           styles: const PosStyles(
               align: PosAlign.center,
@@ -837,7 +865,6 @@ class SettingsScreen extends ConsumerWidget {
             backgroundColor: AppColors.danger));
       }
     }
-  } // <--- KURUNG KURAWAL PENUTUP INI YANG HILANG SEBELUMNYA
 
   // ── Tentang Aplikasi ──────────────────────────────────────────────────────
 
@@ -1041,6 +1068,20 @@ class _ReceiptPreview extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
+          // ── Logo ──────────────────────────────────────────────────────────
+          if (store.showLogo) ...[
+            ClipRRect(
+              borderRadius: BorderRadius.circular(4),
+              child: Image.asset(
+                'assets/images/ic_launcher.png',
+                width: 56,
+                height: 56,
+                fit: BoxFit.contain,
+                errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+              ),
+            ),
+            const SizedBox(height: 6),
+          ],
           // Header
           Text(store.storeName,
               style: bold.copyWith(fontSize: 14),
