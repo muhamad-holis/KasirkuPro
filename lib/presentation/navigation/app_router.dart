@@ -11,6 +11,8 @@ import '../screens/hutang/hutang_screen.dart';
 import '../screens/notifikasi/notifikasi_screen.dart';
 import '../screens/kas/kas_screen.dart';
 import '../../core/theme/app_theme.dart';
+import '../providers/auth_provider.dart';
+import '../screens/kasir_management/kasir_management_screen.dart';
 
 final currentNavIndexProvider = StateProvider<int>((ref) => 0);
 
@@ -98,7 +100,8 @@ class _MainNavigationState extends ConsumerState<MainNavigation> {
 
   @override
   Widget build(BuildContext context) {
-    final idx = ref.watch(currentNavIndexProvider);
+    final idx      = ref.watch(currentNavIndexProvider);
+    final aktifUser = ref.watch(authProvider);
 
     return PopScope(
       canPop: false,
@@ -114,6 +117,42 @@ class _MainNavigationState extends ConsumerState<MainNavigation> {
         bottomNavigationBar: _BottomNavBar(currentIndex: idx, ref: ref),
       ),
     );
+  }
+
+  Future<void> _doLogout() async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Row(children: [
+          Icon(Icons.logout_rounded, color: AppColors.danger, size: 22),
+          SizedBox(width: 8),
+          Text('Logout', style: TextStyle(fontWeight: FontWeight.w700)),
+        ]),
+        content: const Text('Yakin ingin logout dari akun ini?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Batal'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.danger,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Logout'),
+          ),
+        ],
+      ),
+    );
+    if (confirm == true && mounted) {
+      await ref.read(authProvider.notifier).logout();
+      Navigator.of(context).pushAndRemoveUntil(
+        MaterialPageRoute(builder: (_) => const LoginScreen()),
+        (_) => false,
+      );
+    }
   }
 }
 
@@ -138,41 +177,84 @@ class _LainnyaTab extends StatelessWidget {
 
 // ─── Halaman utama tab Lainnya (grid menu) ────────────────────────────────────
 
-class _LainnyaHomeScreen extends StatelessWidget {
+class _LainnyaHomeScreen extends ConsumerWidget {
   const _LainnyaHomeScreen();
 
   @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
+  Widget build(BuildContext context, WidgetRef ref) {
+    final isDark    = Theme.of(context).brightness == Brightness.dark;
+    final aktifUser = ref.watch(authProvider);
+    final isAdmin   = aktifUser?.isAdmin ?? false;
     final titleColor = isDark ? Colors.white : AppColors.textPrimary;
-    final subtitleColor = isDark ? const Color(0xFF94A3B8) : AppColors.textSecondary;
+    final subColor   = isDark ? const Color(0xFF94A3B8) : AppColors.textSecondary;
 
     return Scaffold(
       body: SafeArea(
         child: CustomScrollView(
           slivers: [
-            // ── Header ────────────────────────────────────────────────────────
+            // ── Header ──────────────────────────────────────────────────────
             SliverToBoxAdapter(
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(20, 20, 20, 8),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Text(
-                      'Menu Lainnya',
-                      style: TextStyle(
-                        fontSize: 22,
-                        fontWeight: FontWeight.w800,
-                        color: titleColor,
-                      ),
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('Menu Lainnya',
+                            style: TextStyle(fontSize: 22,
+                                fontWeight: FontWeight.w800,
+                                color: titleColor)),
+                        const SizedBox(height: 4),
+                        if (aktifUser != null)
+                          Row(children: [
+                            Icon(Icons.person_rounded,
+                                size: 13, color: AppColors.primary),
+                            const SizedBox(width: 4),
+                            Text(aktifUser.name,
+                                style: TextStyle(
+                                    fontSize: 12, color: AppColors.primary,
+                                    fontWeight: FontWeight.w600)),
+                            const SizedBox(width: 6),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 6, vertical: 1),
+                              decoration: BoxDecoration(
+                                color: isAdmin
+                                    ? AppColors.primary.withOpacity(0.1)
+                                    : AppColors.success.withOpacity(0.1),
+                                borderRadius: BorderRadius.circular(20),
+                              ),
+                              child: Text(isAdmin ? 'Admin' : 'Kasir',
+                                  style: TextStyle(
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.w700,
+                                      color: isAdmin
+                                          ? AppColors.primary
+                                          : AppColors.success)),
+                            ),
+                          ]),
+                      ],
                     ),
-                    const SizedBox(height: 4),
-                    Text(
-                      'Kelola pelanggan, hutang, dan pengaturan',
-                      style: TextStyle(
-                        fontSize: 13,
-                        color: subtitleColor,
+                    // Tombol logout
+                    GestureDetector(
+                      onTap: () => _doLogout(context, ref),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 12, vertical: 8),
+                        decoration: BoxDecoration(
+                          color: AppColors.danger.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: const Row(children: [
+                          Icon(Icons.logout_rounded,
+                              size: 16, color: AppColors.danger),
+                          SizedBox(width: 4),
+                          Text('Logout', style: TextStyle(
+                              fontSize: 12, color: AppColors.danger,
+                              fontWeight: FontWeight.w700)),
+                        ]),
                       ),
                     ),
                   ],
@@ -180,7 +262,7 @@ class _LainnyaHomeScreen extends StatelessWidget {
               ),
             ),
 
-            // ── Grid menu ─────────────────────────────────────────────────────
+            // ── Grid menu ────────────────────────────────────────────────────
             SliverPadding(
               padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
               sliver: SliverGrid(
@@ -196,61 +278,54 @@ class _LainnyaHomeScreen extends StatelessWidget {
                     label: 'Pelanggan',
                     description: 'Kelola data pelanggan',
                     color: AppColors.primary,
-                    onTap: () => Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => ProviderScope(
+                    onTap: () => Navigator.push(context,
+                        MaterialPageRoute(builder: (_) => ProviderScope(
                           parent: ProviderScope.containerOf(context),
-                          child: const PelangganScreen(),
-                        ),
-                      ),
-                    ),
+                          child: const PelangganScreen()))),
                   ),
                   _MenuCard(
                     icon: Icons.account_balance_wallet_rounded,
                     label: 'Hutang',
                     description: 'Catat hutang piutang',
                     color: AppColors.warning,
-                    onTap: () => Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => ProviderScope(
+                    onTap: () => Navigator.push(context,
+                        MaterialPageRoute(builder: (_) => ProviderScope(
                           parent: ProviderScope.containerOf(context),
-                          child: const HutangScreen(),
-                        ),
-                      ),
-                    ),
+                          child: const HutangScreen()))),
                   ),
                   _MenuCard(
                     icon: Icons.notifications_rounded,
                     label: 'Notifikasi',
                     description: 'Stok & jatuh tempo',
                     color: AppColors.info,
-                    onTap: () => Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => ProviderScope(
+                    onTap: () => Navigator.push(context,
+                        MaterialPageRoute(builder: (_) => ProviderScope(
                           parent: ProviderScope.containerOf(context),
-                          child: const NotifikasiScreen(),
-                        ),
-                      ),
-                    ),
+                          child: const NotifikasiScreen()))),
                   ),
-                  _MenuCard(
-                    icon: Icons.settings_rounded,
-                    label: 'Pengaturan',
-                    description: 'Toko, struk & printer',
-                    color: AppColors.textSecondary,
-                    onTap: () => Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => ProviderScope(
-                          parent: ProviderScope.containerOf(context),
-                          child: const SettingsScreen(),
-                        ),
-                      ),
+                  // Pengaturan & Kelola Kasir hanya untuk Admin
+                  if (isAdmin) ...[
+                    _MenuCard(
+                      icon: Icons.people_alt_rounded,
+                      label: 'Kelola Kasir',
+                      description: 'Tambah & atur akun',
+                      color: AppColors.success,
+                      onTap: () => Navigator.push(context,
+                          MaterialPageRoute(builder: (_) => ProviderScope(
+                            parent: ProviderScope.containerOf(context),
+                            child: const KasirManagementScreen()))),
                     ),
-                  ),
+                    _MenuCard(
+                      icon: Icons.settings_rounded,
+                      label: 'Pengaturan',
+                      description: 'Toko, struk & printer',
+                      color: AppColors.textSecondary,
+                      onTap: () => Navigator.push(context,
+                          MaterialPageRoute(builder: (_) => ProviderScope(
+                            parent: ProviderScope.containerOf(context),
+                            child: const SettingsScreen()))),
+                    ),
+                  ],
                 ]),
               ),
             ),
@@ -258,6 +333,41 @@ class _LainnyaHomeScreen extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  Future<void> _doLogout(BuildContext context, WidgetRef ref) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Row(children: [
+          Icon(Icons.logout_rounded, color: AppColors.danger, size: 22),
+          SizedBox(width: 8),
+          Text('Logout', style: TextStyle(fontWeight: FontWeight.w700)),
+        ]),
+        content: const Text('Yakin ingin logout dari akun ini?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Batal'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.danger,
+                foregroundColor: Colors.white),
+            child: const Text('Logout'),
+          ),
+        ],
+      ),
+    );
+    if (confirm == true && context.mounted) {
+      await ref.read(authProvider.notifier).logout();
+      Navigator.of(context).pushAndRemoveUntil(
+        MaterialPageRoute(builder: (_) => const LoginScreen()),
+        (_) => false,
+      );
+    }
   }
 }
 
