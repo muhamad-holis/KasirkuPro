@@ -19,6 +19,7 @@ import '../../providers/products_provider.dart';
 import '../../providers/database_provider.dart';
 import '../../providers/settings_provider.dart';
 import '../../../data/database/app_database.dart';
+import '../dashboard/dashboard_screen.dart' show dashboardStatsProvider;
 
 class KasirScreen extends ConsumerWidget {
   const KasirScreen({super.key});
@@ -1885,6 +1886,12 @@ class _PaymentSheetState extends ConsumerState<_PaymentSheet> {
       }
 
       ref.read(kasirProvider.notifier).clear();
+
+      // FIX: Invalidate dashboardStatsProvider agar kartu ringkasan di
+      // Dashboard langsung refresh setelah transaksi selesai.
+      // StreamProvider sudah reaktif via watchTodayTransactions, tapi
+      // invalidate ini memastikan data kemarin juga ikut diperbarui.
+      ref.invalidate(dashboardStatsProvider);
 
       if (context.mounted) {
         Navigator.pop(context);
