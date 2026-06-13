@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:drift/drift.dart' hide Column; // <-- Baris import yang ditambahkan
+
 import '../../../core/theme/app_theme.dart';
 import '../../../data/database/app_database.dart';
 import '../../providers/auth_provider.dart';
