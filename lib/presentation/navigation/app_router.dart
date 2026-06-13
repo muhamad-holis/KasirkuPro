@@ -10,6 +10,7 @@ import '../screens/pelanggan/pelanggan_screen.dart';
 import '../screens/hutang/hutang_screen.dart';
 import '../screens/notifikasi/notifikasi_screen.dart';
 import '../screens/kas/kas_screen.dart';
+import '../screens/login/login_screen.dart'; // <-- Import tambahan untuk LoginScreen()
 import '../../core/theme/app_theme.dart';
 import '../providers/auth_provider.dart';
 import '../screens/kasir_management/kasir_management_screen.dart';
@@ -146,6 +147,7 @@ class _MainNavigationState extends ConsumerState<MainNavigation> {
         ],
       ),
     );
+
     if (confirm == true && mounted) {
       await ref.read(authProvider.notifier).logout();
       Navigator.of(context).pushAndRemoveUntil(
@@ -209,11 +211,11 @@ class _LainnyaHomeScreen extends ConsumerWidget {
                         const SizedBox(height: 4),
                         if (aktifUser != null)
                           Row(children: [
-                            Icon(Icons.person_rounded,
+                            const Icon(Icons.person_rounded,
                                 size: 13, color: AppColors.primary),
                             const SizedBox(width: 4),
                             Text(aktifUser.name,
-                                style: TextStyle(
+                                style: const TextStyle(
                                     fontSize: 12, color: AppColors.primary,
                                     fontWeight: FontWeight.w600)),
                             const SizedBox(width: 6),
@@ -532,8 +534,7 @@ class _BottomNavBar extends StatelessWidget {
                 // Jika sudah di tab Lainnya & tap lagi → pop ke grid home
                 onRetap: () {
                   if (_lainnyaNavKey.currentState?.canPop() ?? false) {
-                    _lainnyaNavKey.currentState!
-                        .popUntil((route) => route.isFirst);
+                    _lainnyaNavKey.currentState!.popUntil((route) => route.isFirst);
                   }
                 },
               ),
