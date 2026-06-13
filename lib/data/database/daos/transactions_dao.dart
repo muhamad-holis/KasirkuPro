@@ -12,12 +12,20 @@ class TransactionsDao extends DatabaseAccessor<AppDatabase>
     TransactionsCompanion transaction,
     List<TransactionItemsCompanion> items, {
     int? customerId,
+    int? kasirId,
+    String? kasirName,
   }) async {
     return db.transaction(() async {
-      // Sisipkan customerId ke companion jika ada
-      final txCompanion = customerId != null
-          ? transaction.copyWith(customerId: Value(customerId))
-          : transaction;
+      var txCompanion = transaction;
+      if (customerId != null) {
+        txCompanion = txCompanion.copyWith(customerId: Value(customerId));
+      }
+      if (kasirId != null) {
+        txCompanion = txCompanion.copyWith(kasirId: Value(kasirId));
+      }
+      if (kasirName != null) {
+        txCompanion = txCompanion.copyWith(kasirName: Value(kasirName));
+      }
 
       final txId = await into(transactions).insert(txCompanion);
 
