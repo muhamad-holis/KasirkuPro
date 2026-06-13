@@ -15,6 +15,7 @@ part 'tables/cash_flows_table.dart';
 part 'tables/settings_table.dart';
 part 'tables/sync_queue_table.dart';
 part 'tables/users_table.dart';
+part 'tables/audit_logs_table.dart';
 
 part 'daos/products_dao.dart';
 part 'daos/categories_dao.dart';
@@ -41,7 +42,7 @@ LazyDatabase _openConnection() {
   tables: [
     Categories, Products, Customers, Transactions,
     TransactionItems, Debts, StockMovements,
-    CashFlows, Settings, SyncQueue, Users,
+    CashFlows, Settings, SyncQueue, Users, AuditLogs,
   ],
   daos: [
     ProductsDao, CategoriesDao, TransactionsDao,
@@ -53,7 +54,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase() : super(_openConnection());
 
   @override
-  int get schemaVersion => 3;
+  int get schemaVersion => 4;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -90,13 +91,32 @@ class AppDatabase extends _$AppDatabase {
         await customStatement(
           "ALTER TABLE transactions ADD COLUMN kasir_name TEXT"
         );
-        // SHA-256 dari '1234'
+      }
+      if (from < 4) {
+        // Migrasi kolom baru di tabel users
+        await customStatement("ALTER TABLE users ADD COLUMN username TEXT");
+        await customStatement("ALTER TABLE users ADD COLUMN display_name TEXT");
         await customStatement(
-          "INSERT OR IGNORE INTO users (name, pin, role, is_active) "
-          "SELECT 'Admin',"
-          "'03ac674216f3e15c761ee1a5e255f067953623c8b388b4459e13f978d7c846f4',"
-          "'admin', 1 "
-          "WHERE NOT EXISTS (SELECT 1 FROM users LIMIT 1)"
+            "ALTER TABLE users ADD COLUMN failed_attempts INTEGER NOT NULL DEFAULT 0");
+        await customStatement(
+            "ALTER TABLE users ADD COLUMN locked_until INTEGER");
+        await customStatement(
+            "ALTER TABLE users ADD COLUMN must_change_pin INTEGER NOT NULL DEFAULT 0");
+
+        // Isi username dari name yang lama (fallback)
+        await customStatement(
+            "UPDATE users SET username = lower(replace(name,' ','_')), "
+            "display_name = name WHERE username IS NULL");
+
+        // Buat tabel audit_logs
+        await customStatement(
+          "CREATE TABLE IF NOT EXISTS audit_logs ("
+          "id INTEGER PRIMARY KEY AUTOINCREMENT,"
+          "user_id INTEGER REFERENCES users(id),"
+          "action TEXT NOT NULL,"
+          "description TEXT,"
+          "created_at INTEGER NOT NULL DEFAULT (strftime('%s','now') * 1000)"
+          ")"
         );
       }
     },
@@ -105,20 +125,18 @@ class AppDatabase extends _$AppDatabase {
     },
   );
 
+  /// Cek apakah DB belum ada user (dipakai oleh needsSetupProvider)
+  Future<bool> needsSetup() => usersDao.needsSetup();
+
   Future<void> _insertDefaults() async {
     final cats = ['Makanan', 'Minuman', 'Snack', 'Rokok',
                   'Sembako', 'Kebersihan', 'Kesehatan', 'Lainnya'];
-    for (final name in cats) {
-      await into(categories).insert(CategoriesCompanion.insert(name: name));
+    for (final cat in cats) {
+      await into(categories).insert(CategoriesCompanion.insert(name: cat));
     }
     await into(settings).insert(
       SettingsCompanion.insert(key: 'toko_nama', value: const Value('KasirKu')));
-    // Admin default PIN 1234 (SHA-256)
-    await into(users).insert(UsersCompanion.insert(
-      name: 'Admin',
-      pin: '03ac674216f3e15c761ee1a5e255f067953623c8b388b4459e13f978d7c846f4',
-      role: const Value('admin'),
-    ));
+    // TIDAK ada insert admin default — admin pertama dibuat via SetupWizardScreen
   }
 
   Future<void> resetAllData() async {
