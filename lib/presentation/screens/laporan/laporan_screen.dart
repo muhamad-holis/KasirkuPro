@@ -558,22 +558,49 @@ class _Chip extends StatelessWidget {
 // TAB 1 — PENJUALAN
 // ─────────────────────────────────────────────────────────────────────────────
 
+// FIX: Provider ini menggunakan StreamProvider + watchDailySalesChart agar
+// data penjualan di tab Laporan langsung update real-time setiap ada
+// transaksi baru, tanpa perlu restart aplikasi.
+final _salesChartProvider =
+    StreamProvider.autoDispose.family<List<Map<String, dynamic>>, _DateRange>(
+  (ref, range) => ref
+      .watch(databaseProvider)
+      .reportsDao
+      .watchDailySalesChart(range.start, range.end),
+);
+
+// Helper class untuk key di .family (DateTime tidak bisa langsung dipakai)
+class _DateRange {
+  final DateTime start, end;
+  const _DateRange(this.start, this.end);
+
+  @override
+  bool operator ==(Object other) =>
+      other is _DateRange &&
+      other.start.isAtSameMomentAs(start) &&
+      other.end.isAtSameMomentAs(end);
+
+  @override
+  int get hashCode => Object.hash(start, end);
+}
+
 class _SalesTab extends ConsumerWidget {
   final DateTime start, end;
   const _SalesTab({required this.start, required this.end});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    return FutureBuilder<List<Map<String, dynamic>>>(
-      future: ref
-          .read(databaseProvider)
-          .reportsDao
-          .getDailySalesChart(start, end),
-      builder: (_, snap) {
-        if (!snap.hasData) {
-          return const Center(child: CircularProgressIndicator());
-        }
-        final data = snap.data!;
+    // FIX: ref.watch + StreamProvider menggantikan ref.read + FutureBuilder
+    // sehingga UI otomatis rebuild setiap ada transaksi baru masuk ke DB.
+    final salesAsync = ref.watch(_salesChartProvider(_DateRange(start, end)));
+
+    return salesAsync.when(
+      loading: () => const Center(child: CircularProgressIndicator()),
+      error: (e, _) => Center(
+        child: Text('Error: $e',
+            style: const TextStyle(color: AppColors.danger)),
+      ),
+      data: (data) {
         final omzet =
             data.fold<double>(0, (s, r) => s + (r['omzet'] as num));
         final count =
@@ -717,7 +744,7 @@ class _SalesTab extends ConsumerWidget {
               ] else
                 const Padding(
                   padding: EdgeInsets.all(40),
-                  child: Text('Belum ada data transaksi',
+                  child: Text('Belum ada data penjualan',
                       style: TextStyle(color: Colors.grey)),
                 ),
             ],
