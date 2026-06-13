@@ -18,6 +18,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   String? _error;
   bool _loading   = false;
 
+  static const int _pinLength = 4; // PIN 4 digit
+
   @override
   void dispose() {
     _nameCtrl.dispose();
@@ -25,9 +27,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   }
 
   void _onKey(String digit) {
-    if (_pin.length >= 6) return;
+    if (_pin.length >= _pinLength) return;
     setState(() { _pin += digit; _error = null; });
-    if (_pin.length == 6) _doLogin();
   }
 
   void _onDelete() {
@@ -39,6 +40,10 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     final name = _nameCtrl.text.trim();
     if (name.isEmpty) {
       setState(() { _error = 'Masukkan nama kasir terlebih dahulu'; _pin = ''; });
+      return;
+    }
+    if (_pin.length < _pinLength) {
+      setState(() { _error = 'PIN harus $_pinLength digit'; });
       return;
     }
     setState(() { _loading = true; _error = null; });
@@ -127,16 +132,16 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                   fontSize: 13, fontWeight: FontWeight.w700, color: sub)),
               const SizedBox(height: 16),
 
-              // Dot indikator
+              // Dot indikator (4 digit)
               Row(
                 mainAxisAlignment: MainAxisAlignment.center,
-                children: List.generate(6, (i) {
+                children: List.generate(_pinLength, (i) {
                   final filled  = i < _pin.length;
                   final isError = _error != null;
                   return AnimatedContainer(
                     duration: const Duration(milliseconds: 150),
-                    margin: const EdgeInsets.symmetric(horizontal: 7),
-                    width: 14, height: 14,
+                    margin: const EdgeInsets.symmetric(horizontal: 10),
+                    width: 16, height: 16,
                     decoration: BoxDecoration(
                       shape: BoxShape.circle,
                       color: isError
@@ -187,7 +192,34 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                     )
                   : _Numpad(onKey: _onKey, onDelete: _onDelete),
 
-              const SizedBox(height: 32),
+              const SizedBox(height: 20),
+
+              // Tombol Masuk
+              SizedBox(
+                width: double.infinity,
+                height: 52,
+                child: ElevatedButton(
+                  onPressed: _loading ? null : _doLogin,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.primary,
+                    foregroundColor: Colors.white,
+                    disabledBackgroundColor: AppColors.primary.withOpacity(0.5),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                    elevation: 0,
+                  ),
+                  child: const Text(
+                    'Masuk',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+              ),
+
+              const SizedBox(height: 20),
 
               // Info default
               Container(
