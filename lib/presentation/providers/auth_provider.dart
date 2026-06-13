@@ -1,93 +1,121 @@
-import 'dart:convert';
-import 'package:crypto/crypto.dart';
-import 'package:drift/drift.dart'; // <-- Import tambahan untuk Value()
+// lib/presentation/providers/auth_provider.dart
+//
+// SECURITY PATCH:
+// - HAPUS _initDefaultAdmin() yang membuat admin dengan PIN 1234
+// - Login via username unik (bukan name), pakai attemptLogin() yang rate-limited
+// - Session disimpan di flutter_secure_storage, bukan SharedPreferences
+// - needsSetupProvider: trigger Setup Wizard saat DB kosong
+// - allUsersProvider: provider-level admin check
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import '../../data/database/app_database.dart';
+import '../../core/utils/secure_session.dart';
+import '../../core/utils/pin_hasher.dart';
 import 'database_provider.dart';
 
-// ─── Helper hash PIN ──────────────────────────────────────────────────────────
+/// Re-export agar screen lain tidak perlu import pin_hasher langsung
+String hashPin(String pin) => PinHasher.hashPin(pin);
 
-String hashPin(String pin) =>
-    sha256.convert(utf8.encode(pin)).toString();
-
-// ─── Model user aktif ─────────────────────────────────────────────────────────
+// ─── Model user aktif ──────────────────────────────────────────────────────────
 
 class ActiveUser {
   final int id;
-  final String name;
+  final String username;
+  final String displayName;
   final String role;
+  final bool mustChangePin;
 
   const ActiveUser({
     required this.id,
-    required this.name,
+    required this.username,
+    required this.displayName,
     required this.role,
+    this.mustChangePin = false,
   });
 
   bool get isAdmin => role == 'admin';
 
-  @override
-  String toString() => name;
+  /// Nama tampilan untuk UI
+  String get name => displayName;
 }
 
-// ─── Auth Notifier ────────────────────────────────────────────────────────────
+// ─── Auth Notifier ─────────────────────────────────────────────────────────────
 
 class AuthNotifier extends StateNotifier<ActiveUser?> {
-  AuthNotifier(this._ref) : super(null) {
-    _initDefaultAdmin();
-  }
+  AuthNotifier(this._ref) : super(null);
+  // KODE DIHAPUS: _initDefaultAdmin() → tidak ada lagi admin default PIN 1234
+  // Admin pertama dibuat via SetupWizardScreen
 
   final Ref _ref;
   AppDatabase get _db => _ref.read(databaseProvider);
 
-  /// Pastikan ada minimal 1 admin saat app pertama kali dipakai
-  Future<void> _initDefaultAdmin() async {
-    final users = await _db.usersDao.getAllUsers();
-    if (users.isEmpty) {
-      await _db.usersDao.insertUser(UsersCompanion.insert(
-        name: 'Admin',
-        pin: hashPin('1234'),
-        role: const Value('admin'),
-      ));
-    }
-  }
+  /// Login via USERNAME + PIN (bukan via name).
+  /// Return null = sukses. Return string = pesan error.
+  Future<String?> login(String username, String pin) async {
+    final result = await _db.usersDao.attemptLogin(username, pin);
+    if (!result.isSuccess) return result.errorMessage;
 
-  /// Login. Return null = sukses, string = pesan error.
-  Future<String?> login(String name, String pin) async {
-    final users = await _db.usersDao.getActiveUsers();
-    final hashed = hashPin(pin);
-    final match = users.where((u) =>
-        u.name.toLowerCase() == name.toLowerCase().trim() &&
-        u.pin == hashed).toList();
+    final user = result.user!;
+    state = ActiveUser(
+      id: user.id,
+      username: user.username,
+      displayName: user.displayName,
+      role: user.role,
+      mustChangePin: user.mustChangePin,
+    );
 
-    if (match.isEmpty) return 'Nama atau PIN salah';
-
-    final user = match.first;
-    state = ActiveUser(id: user.id, name: user.name, role: user.role);
-
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setInt('last_user_id', user.id);
-    await prefs.setString('last_user_name', user.name);
-    await prefs.setString('last_user_role', user.role);
-
+    // Simpan session ke SecureStorage (bukan SharedPreferences)
+    await SecureSession.saveSession(
+      userId: user.id,
+      username: user.username,
+      displayName: user.displayName,
+      role: user.role,
+    );
     return null;
   }
 
-  /// Restore session dari SharedPreferences (dipakai setelah biometrik sukses)
-  void restoreSession({
-    required int id,
-    required String name,
-    required String role,
-  }) {
-    state = ActiveUser(id: id, name: name, role: role);
+  /// Restore session setelah biometrik berhasil.
+  /// WAJIB verifikasi ke DB (cegah session stale / user sudah dinonaktifkan).
+  Future<bool> restoreSession(SavedSession saved) async {
+    final user = await _db.usersDao.getUserById(saved.userId);
+    if (user == null || !user.isActive) {
+      await SecureSession.clearSession();
+      return false;
+    }
+    state = ActiveUser(
+      id: user.id,
+      username: user.username,
+      displayName: user.displayName,
+      role: user.role,
+      mustChangePin: user.mustChangePin,
+    );
+    return true;
   }
 
   Future<void> logout() async {
+    final userId = state?.id;
     state = null;
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.remove('last_user_id');
-    await prefs.remove('last_user_name');
-    await prefs.remove('last_user_role');
+    await SecureSession.clearSession();
+    if (userId != null) {
+      try {
+        await _db.customStatement(
+          "INSERT INTO audit_logs (user_id, action, description) "
+          "VALUES ($userId, 'logout', 'User logout')",
+        );
+      } catch (_) {}
+    }
+  }
+
+  /// Clear flag mustChangePin setelah user berhasil ganti PIN sendiri.
+  void clearMustChangePin() {
+    if (state == null) return;
+    state = ActiveUser(
+      id: state!.id,
+      username: state!.username,
+      displayName: state!.displayName,
+      role: state!.role,
+      mustChangePin: false,
+    );
   }
 }
 
@@ -95,7 +123,25 @@ final authProvider = StateNotifierProvider<AuthNotifier, ActiveUser?>(
   (ref) => AuthNotifier(ref),
 );
 
-// ─── Provider list semua user (untuk halaman kelola kasir) ────────────────────
+// ─── Derived providers ─────────────────────────────────────────────────────────
 
-final allUsersProvider = FutureProvider.autoDispose<List<User>>((ref) =>
-    ref.watch(databaseProvider).usersDao.getAllUsers());
+/// Shortcut: apakah user yang login adalah admin?
+final isAdminProvider = Provider<bool>((ref) {
+  return ref.watch(authProvider)?.isAdmin ?? false;
+});
+
+/// Apakah DB butuh Setup Wizard? (tidak ada user sama sekali)
+final needsSetupProvider = FutureProvider<bool>((ref) {
+  return ref.read(databaseProvider).needsSetup();
+});
+
+/// Daftar semua user. DIPROTEKSI: hanya admin yang dapat mengakses.
+/// Jika kasir mengakses, throw UnauthorizedException.
+final allUsersProvider = FutureProvider.autoDispose<List<User>>((ref) async {
+  final isAdmin = ref.watch(isAdminProvider);
+  if (!isAdmin) {
+    throw UnauthorizedException(
+        'allUsersProvider: hanya dapat diakses oleh admin');
+  }
+  return ref.read(databaseProvider).usersDao.getAllUsers();
+});

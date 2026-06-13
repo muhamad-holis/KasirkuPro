@@ -1,3 +1,11 @@
+// lib/presentation/screens/splash/splash_screen.dart
+//
+// SECURITY PATCH:
+// - Baca session dari flutter_secure_storage (bukan SharedPreferences)
+// - Verifikasi session ke DB (cek user masih aktif)
+// - Cek needsSetup → redirect ke SetupWizard jika DB kosong
+// - Migrasi one-time dari SharedPrefs lama ke SecureStorage
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:local_auth/local_auth.dart';
@@ -5,14 +13,11 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:video_player/video_player.dart';
 import '../../../core/theme/app_theme.dart';
 import '../login/login_screen.dart';
+import '../setup_wizard/setup_wizard_screen.dart';
 import '../../navigation/app_router.dart';
 import '../../providers/database_provider.dart';
 import '../../providers/auth_provider.dart';
-
-const _kBiometricKey  = 'biometric_enabled';
-const _kLastUserId    = 'last_user_id';
-const _kLastUserName  = 'last_user_name';
-const _kLastUserRole  = 'last_user_role';
+import '../../../core/utils/secure_session.dart';
 
 class SplashScreen extends ConsumerStatefulWidget {
   const SplashScreen({super.key});
@@ -33,8 +38,7 @@ class _SplashScreenState extends ConsumerState<SplashScreen> {
   }
 
   Future<void> _initVideo() async {
-    _videoController =
-        VideoPlayerController.asset('assets/videos/splash.mp4');
+    _videoController = VideoPlayerController.asset('assets/videos/splash.mp4');
     await _videoController.initialize();
 
     if (mounted) {
@@ -53,92 +57,105 @@ class _SplashScreenState extends ConsumerState<SplashScreen> {
       }
     });
 
-    // Fallback max 5 detik
     Future.delayed(const Duration(seconds: 5), _afterSplash);
   }
 
-  /// Dipanggil setelah video selesai — cek biometrik / session
   Future<void> _afterSplash() async {
     if (!mounted || _navigated) return;
     _navigated = true;
 
-    final prefs          = await SharedPreferences.getInstance();
-    final biometricOn    = prefs.getBool(_kBiometricKey) ?? false;
-    final lastUserId     = prefs.getInt(_kLastUserId);
-    final lastUserName   = prefs.getString(_kLastUserName);
-    final lastUserRole   = prefs.getString(_kLastUserRole);
-
-    final hasSession = lastUserId != null &&
-        lastUserName != null &&
-        lastUserRole != null;
-
-    // Jika biometrik aktif DAN ada session sebelumnya → coba fingerprint
-    if (biometricOn && hasSession) {
-      final success = await _tryBiometric();
-      if (!mounted) return;
-
-      if (success) {
-        // Restore session ke provider
-        ref.read(authProvider.notifier).restoreSession(
-          id:   lastUserId!,
-          name: lastUserName!,
-          role: lastUserRole!,
-        );
-        _goToMain();
-        return;
-      }
-      // Gagal biometrik → tetap ke login
+    // ── 1. Cek apakah DB perlu setup ──────────────────────────────────────
+    final db = ref.read(databaseProvider);
+    final needsSetup = await db.needsSetup();
+    if (needsSetup && mounted) {
+      _navigate(const SetupWizardScreen());
+      return;
     }
 
-    _goToLogin();
+    // ── 2. Migrasi SharedPrefs → SecureStorage (one-time) ─────────────────
+    await _migrateSharedPrefsIfNeeded();
+
+    // ── 3. Baca session dari SecureStorage ────────────────────────────────
+    final session = await SecureSession.getSession();
+
+    // ── 4. Cek biometrik ──────────────────────────────────────────────────
+    if (session != null) {
+      final biometricOn = await _getBiometricSetting();
+      if (biometricOn) {
+        final ok = await _tryBiometric();
+        if (!mounted) return;
+        if (ok) {
+          final restored = await ref.read(authProvider.notifier)
+              .restoreSession(session);
+          if (restored) { _navigate(const MainNavigation()); return; }
+        }
+      }
+    }
+
+    if (mounted) _navigate(const LoginScreen());
+  }
+
+  Future<bool> _getBiometricSetting() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool('biometric_enabled') ?? false;
+  }
+
+  /// One-time migration: pindahkan last_user_* dari SharedPrefs ke SecureStorage
+  Future<void> _migrateSharedPrefsIfNeeded() async {
+    try {
+      final existing = await SecureSession.getSession();
+      if (existing != null) return; // sudah ada di secure storage
+
+      final prefs      = await SharedPreferences.getInstance();
+      final lastId     = prefs.getInt('last_user_id');
+      final lastName   = prefs.getString('last_user_name');
+      final lastRole   = prefs.getString('last_user_role');
+
+      if (lastId != null && lastName != null && lastRole != null) {
+        await SecureSession.saveSession(
+          userId:      lastId,
+          username:    lastName.toLowerCase().replaceAll(' ', '_'),
+          displayName: lastName,
+          role:        lastRole,
+        );
+        // Hapus dari SharedPrefs
+        await prefs.remove('last_user_id');
+        await prefs.remove('last_user_name');
+        await prefs.remove('last_user_role');
+      }
+    } catch (_) {
+      // Migrasi gagal tidak fatal
+    }
   }
 
   Future<bool> _tryBiometric() async {
     try {
       final auth = LocalAuthentication();
-      final bool canCheck   = await auth.canCheckBiometrics;
-      final bool isSupported = await auth.isDeviceSupported();
-      if (!canCheck || !isSupported) return false;
-
+      if (!await auth.canCheckBiometrics) return false;
+      if (!await auth.isDeviceSupported()) return false;
       final available = await auth.getAvailableBiometrics();
       if (available.isEmpty) return false;
 
-      final hasFace        = available.contains(BiometricType.face);
-      final hasFingerprint = available.contains(BiometricType.fingerprint);
-      String label = 'Biometrik';
-      if (hasFace && hasFingerprint) label = 'Fingerprint / Face ID';
-      else if (hasFace) label = 'Face ID';
-      else if (hasFingerprint) label = 'Fingerprint';
+      final hasFace = available.contains(BiometricType.face);
+      final hasFP   = available.contains(BiometricType.fingerprint);
+      String label = hasFace && hasFP
+          ? 'Fingerprint / Face ID' : hasFace ? 'Face ID' : 'Fingerprint';
 
       return await auth.authenticate(
         localizedReason: 'Gunakan $label untuk masuk ke KasirKu',
         options: const AuthenticationOptions(
-          stickyAuth: true,
-          biometricOnly: true,
-        ),
+            stickyAuth: true, biometricOnly: true),
       );
     } catch (_) {
       return false;
     }
   }
 
-  void _goToMain() {
+  void _navigate(Widget screen) {
     if (!mounted) return;
     Navigator.of(context).pushReplacement(
       PageRouteBuilder(
-        pageBuilder: (_, __, ___) => const MainNavigation(),
-        transitionsBuilder: (_, anim, __, child) =>
-            FadeTransition(opacity: anim, child: child),
-        transitionDuration: const Duration(milliseconds: 400),
-      ),
-    );
-  }
-
-  void _goToLogin() {
-    if (!mounted) return;
-    Navigator.of(context).pushReplacement(
-      PageRouteBuilder(
-        pageBuilder: (_, __, ___) => const LoginScreen(),
+        pageBuilder: (_, __, ___) => screen,
         transitionsBuilder: (_, anim, __, child) =>
             FadeTransition(opacity: anim, child: child),
         transitionDuration: const Duration(milliseconds: 400),

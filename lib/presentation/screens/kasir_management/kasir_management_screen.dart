@@ -1,8 +1,18 @@
+// lib/presentation/screens/kasir_management/kasir_management_screen.dart
+//
+// SECURITY PATCH:
+// - Guard: redirect ke AccessDeniedWidget jika bukan admin
+// - insertUser/updateUser/softDeleteUser sekarang passing actorId
+// - PIN minimum 6 digit (naik dari 4)
+// - Cegah hapus admin terakhir (ditangani di DAO, tapi UI juga kasih info)
+// - Username field untuk membedakan user dengan nama sama
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:drift/drift.dart' hide Column;
 
 import '../../../core/theme/app_theme.dart';
+import '../../../core/utils/pin_hasher.dart';
 import '../../../data/database/app_database.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/database_provider.dart';
@@ -12,6 +22,10 @@ class KasirManagementScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    // ── SECURITY GUARD: hanya admin ──────────────────────────────────────────
+    final isAdmin = ref.watch(isAdminProvider);
+    if (!isAdmin) return const _AccessDenied();
+
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final users  = ref.watch(allUsersProvider);
 
@@ -31,9 +45,13 @@ class KasirManagementScreen extends ConsumerWidget {
         ],
       ),
       body: users.when(
-        loading: () => const Center(child: CircularProgressIndicator(
-            color: AppColors.primary)),
-        error: (e, _) => Center(child: Text('Error: $e')),
+        loading: () => const Center(
+            child: CircularProgressIndicator(color: AppColors.primary)),
+        error: (e, _) {
+          // Unauthorized: tampilkan akses ditolak
+          if (e is UnauthorizedException) return const _AccessDenied();
+          return Center(child: Text('Error: $e'));
+        },
         data: (list) => list.isEmpty
             ? _Empty(isDark: isDark)
             : ListView.separated(
@@ -43,8 +61,8 @@ class KasirManagementScreen extends ConsumerWidget {
                 itemBuilder: (_, i) => _UserCard(
                   user: list[i],
                   isDark: isDark,
-                  onEdit: () => _showAddEdit(context, ref, list[i]),
-                  onDelete: () => _confirmDelete(context, ref, list[i]),
+                  onEdit:     () => _showAddEdit(context, ref, list[i]),
+                  onDelete:   () => _confirmDelete(context, ref, list[i]),
                   onResetPin: () => _showResetPin(context, ref, list[i]),
                 ),
               ),
@@ -84,7 +102,7 @@ class KasirManagementScreen extends ConsumerWidget {
         title: const Text('Hapus Kasir',
             style: TextStyle(fontWeight: FontWeight.w700)),
         content: Text(
-            'Hapus akun "${user.name}"? Data transaksinya tetap tersimpan.'),
+            'Hapus akun "${user.displayName}"? Data transaksinya tetap tersimpan.'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
@@ -93,15 +111,7 @@ class KasirManagementScreen extends ConsumerWidget {
           ElevatedButton(
             onPressed: () async {
               Navigator.pop(ctx);
-              await ref.read(databaseProvider).usersDao
-                  .softDeleteUser(user.id);
-              ref.invalidate(allUsersProvider);
-              if (context.mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-                  content: Text('Kasir dihapus'),
-                  backgroundColor: AppColors.success,
-                ));
-              }
+              await _doDelete(context, ref, user);
             },
             style: ElevatedButton.styleFrom(
                 backgroundColor: AppColors.danger,
@@ -109,6 +119,61 @@ class KasirManagementScreen extends ConsumerWidget {
             child: const Text('Hapus'),
           ),
         ],
+      ),
+    );
+  }
+
+  Future<void> _doDelete(
+      BuildContext context, WidgetRef ref, User user) async {
+    final actorId = ref.read(authProvider)!.id;
+    try {
+      await ref.read(databaseProvider).usersDao
+          .softDeleteUser(user.id, actorId: actorId);
+      ref.invalidate(allUsersProvider);
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Kasir dihapus'),
+          backgroundColor: AppColors.success,
+        ));
+      }
+    } on LastAdminException {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Minimal harus ada satu admin aktif'),
+          backgroundColor: AppColors.danger,
+        ));
+      }
+    } on UnauthorizedException catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(e.message),
+          backgroundColor: AppColors.danger,
+        ));
+      }
+    }
+  }
+}
+
+// ─── Access Denied Widget ─────────────────────────────────────────────────────
+
+class _AccessDenied extends StatelessWidget {
+  const _AccessDenied();
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('Akses Ditolak')),
+      body: const Center(
+        child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+          Icon(Icons.block_rounded, size: 64, color: AppColors.danger),
+          SizedBox(height: 16),
+          Text('Akses Ditolak',
+              style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800,
+                  color: AppColors.danger)),
+          SizedBox(height: 8),
+          Text('Halaman ini hanya dapat diakses oleh Admin.',
+              style: TextStyle(color: AppColors.textSecondary)),
+        ]),
       ),
     );
   }
@@ -146,26 +211,27 @@ class _UserCard extends StatelessWidget {
         Container(
           width: 46, height: 46,
           decoration: BoxDecoration(
-            color: roleColor.withOpacity(0.12),
-            shape: BoxShape.circle,
-          ),
+            color: roleColor.withOpacity(0.12), shape: BoxShape.circle),
           child: Center(
             child: Text(
-              user.name.isNotEmpty ? user.name[0].toUpperCase() : '?',
-              style: TextStyle(
-                  fontSize: 18, fontWeight: FontWeight.w800,
+              user.displayName.isNotEmpty
+                  ? user.displayName[0].toUpperCase() : '?',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800,
                   color: roleColor),
             ),
           ),
         ),
         const SizedBox(width: 12),
         Expanded(
-          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text(user.name,
-                style: TextStyle(
-                  fontSize: 15, fontWeight: FontWeight.w700,
-                  color: isDark ? Colors.white : AppColors.textPrimary,
-                )),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+            Text(user.displayName,
+                style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700,
+                    color: isDark ? Colors.white : AppColors.textPrimary)),
+            const SizedBox(height: 2),
+            Text('@${user.username}',
+                style: const TextStyle(
+                    fontSize: 12, color: AppColors.textSecondary)),
             const SizedBox(height: 4),
             Row(children: [
               Container(
@@ -174,24 +240,34 @@ class _UserCard extends StatelessWidget {
                   color: roleColor.withOpacity(0.1),
                   borderRadius: BorderRadius.circular(20),
                 ),
-                child: Text(roleLabel,
-                    style: TextStyle(
-                        fontSize: 11, color: roleColor,
-                        fontWeight: FontWeight.w700)),
+                child: Text(roleLabel, style: TextStyle(
+                    fontSize: 11, color: roleColor,
+                    fontWeight: FontWeight.w700)),
               ),
               if (!user.isActive) ...[
                 const SizedBox(width: 6),
                 Container(
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 8, vertical: 2),
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                   decoration: BoxDecoration(
                     color: AppColors.danger.withOpacity(0.1),
                     borderRadius: BorderRadius.circular(20),
                   ),
-                  child: const Text('Nonaktif',
-                      style: TextStyle(
-                          fontSize: 11, color: AppColors.danger,
-                          fontWeight: FontWeight.w700)),
+                  child: const Text('Nonaktif', style: TextStyle(
+                      fontSize: 11, color: AppColors.danger,
+                      fontWeight: FontWeight.w700)),
+                ),
+              ],
+              if (user.mustChangePin) ...[
+                const SizedBox(width: 6),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: AppColors.warning.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: const Text('Ganti PIN', style: TextStyle(
+                      fontSize: 11, color: AppColors.warning,
+                      fontWeight: FontWeight.w700)),
                 ),
               ],
             ]),
@@ -199,28 +275,28 @@ class _UserCard extends StatelessWidget {
         ),
         PopupMenuButton<String>(
           icon: Icon(Icons.more_vert_rounded,
-              color: isDark ? const Color(0xFF94A3B8) : AppColors.textSecondary),
+              color: isDark
+                  ? const Color(0xFF94A3B8) : AppColors.textSecondary),
           onSelected: (v) {
             if (v == 'edit')   onEdit();
             if (v == 'pin')    onResetPin();
             if (v == 'delete') onDelete();
           },
-          itemBuilder: (_) => [
-            const PopupMenuItem(value: 'edit',
+          itemBuilder: (_) => const [
+            PopupMenuItem(value: 'edit',
                 child: Row(children: [
                   Icon(Icons.edit_outlined, size: 18, color: AppColors.primary),
                   SizedBox(width: 8), Text('Edit nama & role'),
                 ])),
-            const PopupMenuItem(value: 'pin',
+            PopupMenuItem(value: 'pin',
                 child: Row(children: [
                   Icon(Icons.lock_reset_rounded, size: 18,
                       color: AppColors.warning),
                   SizedBox(width: 8), Text('Reset PIN'),
                 ])),
-            const PopupMenuItem(value: 'delete',
+            PopupMenuItem(value: 'delete',
                 child: Row(children: [
-                  Icon(Icons.delete_outline, size: 18,
-                      color: AppColors.danger),
+                  Icon(Icons.delete_outline, size: 18, color: AppColors.danger),
                   SizedBox(width: 8),
                   Text('Hapus', style: TextStyle(color: AppColors.danger)),
                 ])),
@@ -242,13 +318,14 @@ class _AddEditSheet extends ConsumerStatefulWidget {
 }
 
 class _AddEditSheetState extends ConsumerState<_AddEditSheet> {
-  final _nameCtrl = TextEditingController();
+  final _usernameCtrl    = TextEditingController();
+  final _displayNameCtrl = TextEditingController();
   String _pin  = '';
   String _role = 'kasir';
-  bool _saving = false;
+  bool   _saving = false;
 
-  // FIX: PIN 4 digit
-  static const int _pinLength = 4;
+  // SECURITY: PIN min 6 digit
+  static const int _pinLength = 6;
 
   bool get isEdit => widget.user != null;
 
@@ -256,14 +333,16 @@ class _AddEditSheetState extends ConsumerState<_AddEditSheet> {
   void initState() {
     super.initState();
     if (isEdit) {
-      _nameCtrl.text = widget.user!.name;
+      _usernameCtrl.text    = widget.user!.username;
+      _displayNameCtrl.text = widget.user!.displayName;
       _role = widget.user!.role;
     }
   }
 
   @override
   void dispose() {
-    _nameCtrl.dispose();
+    _usernameCtrl.dispose();
+    _displayNameCtrl.dispose();
     super.dispose();
   }
 
@@ -278,46 +357,72 @@ class _AddEditSheetState extends ConsumerState<_AddEditSheet> {
   }
 
   Future<void> _save() async {
-    final name = _nameCtrl.text.trim();
-    if (name.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          content: Text('Nama tidak boleh kosong'),
-          backgroundColor: AppColors.danger));
-      return;
+    final username    = _usernameCtrl.text.trim().toLowerCase();
+    final displayName = _displayNameCtrl.text.trim();
+
+    if (username.length < 3) {
+      _snack('Username minimal 3 karakter'); return;
+    }
+    if (!RegExp(r'^[a-z0-9_]+$').hasMatch(username)) {
+      _snack('Username hanya boleh huruf kecil, angka, underscore'); return;
+    }
+    if (displayName.isEmpty) {
+      _snack('Nama tampilan tidak boleh kosong'); return;
     }
     if (!isEdit && _pin.length < _pinLength) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text('PIN harus $_pinLength digit'),
-          backgroundColor: AppColors.danger));
-      return;
+      _snack('PIN harus $_pinLength digit'); return;
     }
 
     setState(() => _saving = true);
-    final db = ref.read(databaseProvider);
+    final db      = ref.read(databaseProvider);
+    final actorId = ref.read(authProvider)!.id;
 
-    if (isEdit) {
-      await db.usersDao.updateUser(UsersCompanion(
-        id:   Value(widget.user!.id),
-        name: Value(name),
-        role: Value(_role),
-      ));
-    } else {
-      await db.usersDao.insertUser(UsersCompanion.insert(
-        name: name,
-        pin:  hashPin(_pin),
-        role: Value(_role),
-      ));
+    try {
+      if (isEdit) {
+        await db.usersDao.updateUser(
+          UsersCompanion(
+            id:          Value(widget.user!.id),
+            username:    Value(username),
+            displayName: Value(displayName),
+            role:        Value(_role),
+          ),
+          actorId: actorId,
+        );
+      } else {
+        await db.usersDao.insertUser(
+          UsersCompanion.insert(
+            username:    username,
+            displayName: displayName,
+            pin:         PinHasher.hashPin(_pin),
+            role:        Value(_role),
+          ),
+          actorId: actorId,
+        );
+      }
+      ref.invalidate(allUsersProvider);
+      if (mounted) Navigator.pop(context);
+    } on UsernameTakenException {
+      _snack('Username "@$username" sudah dipakai');
+    } on LastAdminException {
+      _snack('Minimal harus ada satu admin aktif');
+    } on UnauthorizedException catch (e) {
+      _snack(e.message);
+    } catch (e) {
+      _snack('Gagal menyimpan: $e');
+    } finally {
+      if (mounted) setState(() => _saving = false);
     }
+  }
 
-    ref.invalidate(allUsersProvider);
-    if (mounted) Navigator.pop(context);
+  void _snack(String msg) {
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Text(msg), backgroundColor: AppColors.danger));
   }
 
   @override
   Widget build(BuildContext context) {
     final isDark  = Theme.of(context).brightness == Brightness.dark;
     final sheetBg = isDark ? AppColors.darkSurface : Colors.white;
-    final handle  = isDark ? AppColors.darkBorder : Colors.grey.shade300;
     final text    = isDark ? Colors.white : AppColors.textPrimary;
     final bottom  = MediaQuery.of(context).viewInsets.bottom;
 
@@ -326,32 +431,45 @@ class _AddEditSheetState extends ConsumerState<_AddEditSheet> {
         color: sheetBg,
         borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
       ),
-      // FIX: padding bottom ikut keyboard + SafeArea
       padding: EdgeInsets.fromLTRB(24, 12, 24, bottom > 0 ? bottom + 16 : 36),
-      child: SingleChildScrollView(  // FIX: scroll agar tidak overflow
+      child: SingleChildScrollView(
         child: Column(mainAxisSize: MainAxisSize.min, children: [
-          // Handle
           Container(
             width: 40, height: 4,
             margin: const EdgeInsets.only(bottom: 20),
             decoration: BoxDecoration(
-                color: handle, borderRadius: BorderRadius.circular(2)),
-          ),
+                color: isDark ? AppColors.darkBorder : Colors.grey.shade300,
+                borderRadius: BorderRadius.circular(2))),
           Text(isEdit ? 'Edit Kasir' : 'Tambah Kasir',
-              style: TextStyle(
-                  fontSize: 18, fontWeight: FontWeight.w800, color: text)),
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800,
+                  color: text)),
           const SizedBox(height: 20),
 
-          // Nama
+          // Username
           TextField(
-            controller: _nameCtrl,
+            controller: _usernameCtrl,
+            autocorrect: false,
+            enabled: !isEdit, // username tidak boleh diubah setelah dibuat
+            decoration: InputDecoration(
+              labelText: 'Username (unik)',
+              hintText: 'contoh: budi_kasir',
+              helperText: isEdit ? 'Username tidak dapat diubah' : null,
+              prefixIcon: const Icon(Icons.alternate_email_rounded,
+                  color: AppColors.primary),
+              border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+            ),
+          ),
+          const SizedBox(height: 12),
+
+          // Display name
+          TextField(
+            controller: _displayNameCtrl,
             textCapitalization: TextCapitalization.words,
             decoration: InputDecoration(
-              labelText: 'Nama kasir',
+              labelText: 'Nama tampilan',
               prefixIcon: const Icon(Icons.person_outline_rounded,
                   color: AppColors.primary),
-              border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12)),
+              border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
             ),
           ),
           const SizedBox(height: 16),
@@ -364,48 +482,39 @@ class _AddEditSheetState extends ConsumerState<_AddEditSheet> {
               borderRadius: BorderRadius.circular(12),
             ),
             child: Row(children: [
-              Expanded(
-                child: RadioListTile<String>(
-                  title: const Text('Kasir', style: TextStyle(fontSize: 14)),
-                  value: 'kasir',
-                  groupValue: _role,
-                  activeColor: AppColors.primary,
-                  onChanged: (v) => setState(() => _role = v!),
-                  dense: true,
-                ),
-              ),
-              Expanded(
-                child: RadioListTile<String>(
-                  title: const Text('Admin', style: TextStyle(fontSize: 14)),
-                  value: 'admin',
-                  groupValue: _role,
-                  activeColor: AppColors.primary,
-                  onChanged: (v) => setState(() => _role = v!),
-                  dense: true,
-                ),
-              ),
+              Expanded(child: RadioListTile<String>(
+                title: const Text('Kasir', style: TextStyle(fontSize: 14)),
+                value: 'kasir', groupValue: _role,
+                activeColor: AppColors.primary,
+                onChanged: (v) => setState(() => _role = v!),
+                dense: true,
+              )),
+              Expanded(child: RadioListTile<String>(
+                title: const Text('Admin', style: TextStyle(fontSize: 14)),
+                value: 'admin', groupValue: _role,
+                activeColor: AppColors.primary,
+                onChanged: (v) => setState(() => _role = v!),
+                dense: true,
+              )),
             ]),
           ),
 
-          // PIN (hanya saat tambah baru)
+          // PIN hanya saat tambah baru
           if (!isEdit) ...[
             const SizedBox(height: 20),
-            // FIX: label PIN (x/4)
-            Text('PIN (${_pin.length}/$_pinLength)',
-                style: TextStyle(
-                    fontSize: 13, fontWeight: FontWeight.w700,
+            Text('PIN (${_pin.length}/$_pinLength digit)',
+                style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700,
                     color: isDark
                         ? const Color(0xFF94A3B8)
                         : AppColors.textSecondary)),
             const SizedBox(height: 12),
-            // FIX: dot indikator 4 bulat
             Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: List.generate(_pinLength, (i) {
                 final filled = i < _pin.length;
                 return AnimatedContainer(
                   duration: const Duration(milliseconds: 120),
-                  margin: const EdgeInsets.symmetric(horizontal: 8),
+                  margin: const EdgeInsets.symmetric(horizontal: 6),
                   width: 14, height: 14,
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
@@ -414,8 +523,7 @@ class _AddEditSheetState extends ConsumerState<_AddEditSheet> {
                       color: filled
                           ? AppColors.primary
                           : isDark
-                              ? const Color(0xFF475569)
-                              : Colors.grey.shade300,
+                              ? const Color(0xFF475569) : Colors.grey.shade300,
                       width: 2,
                     ),
                   ),
@@ -466,8 +574,8 @@ class _ResetPinSheetState extends ConsumerState<_ResetPinSheet> {
   String _pin  = '';
   bool _saving = false;
 
-  // FIX: PIN 4 digit
-  static const int _pinLength = 4;
+  // SECURITY: PIN min 6 digit
+  static const int _pinLength = 6;
 
   void _onKey(String d) {
     if (_pin.length >= _pinLength) return;
@@ -487,16 +595,33 @@ class _ResetPinSheetState extends ConsumerState<_ResetPinSheet> {
       return;
     }
     setState(() => _saving = true);
-    await ref.read(databaseProvider).usersDao.updateUser(UsersCompanion(
-      id:  Value(widget.user.id),
-      pin: Value(hashPin(_pin)),
-    ));
-    if (mounted) {
-      Navigator.pop(context);
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text('PIN ${widget.user.name} berhasil direset'),
-        backgroundColor: AppColors.success,
-      ));
+    try {
+      final actorId = ref.read(authProvider)!.id;
+      await ref.read(databaseProvider).usersDao.adminResetPin(
+        widget.user.id,
+        PinHasher.hashPin(_pin),
+        actorId: actorId,
+      );
+      if (mounted) {
+        Navigator.pop(context);
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(
+              'PIN ${widget.user.displayName} direset. User wajib ganti PIN saat login berikutnya.'),
+          backgroundColor: AppColors.success,
+        ));
+      }
+    } on UnauthorizedException catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(e.message), backgroundColor: AppColors.danger));
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('Gagal: $e'), backgroundColor: AppColors.danger));
+      }
+    } finally {
+      if (mounted) setState(() => _saving = false);
     }
   }
 
@@ -504,7 +629,6 @@ class _ResetPinSheetState extends ConsumerState<_ResetPinSheet> {
   Widget build(BuildContext context) {
     final isDark  = Theme.of(context).brightness == Brightness.dark;
     final sheetBg = isDark ? AppColors.darkSurface : Colors.white;
-    final handle  = isDark ? AppColors.darkBorder : Colors.grey.shade300;
     final text    = isDark ? Colors.white : AppColors.textPrimary;
     final bottom  = MediaQuery.of(context).viewInsets.bottom;
 
@@ -514,33 +638,34 @@ class _ResetPinSheetState extends ConsumerState<_ResetPinSheet> {
         borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
       ),
       padding: EdgeInsets.fromLTRB(24, 12, 24, bottom > 0 ? bottom + 16 : 36),
-      child: SingleChildScrollView(  // FIX: scroll agar tidak overflow
+      child: SingleChildScrollView(
         child: Column(mainAxisSize: MainAxisSize.min, children: [
           Container(
             width: 40, height: 4,
             margin: const EdgeInsets.only(bottom: 20),
             decoration: BoxDecoration(
-                color: handle, borderRadius: BorderRadius.circular(2)),
-          ),
-          Text('Reset PIN — ${widget.user.name}',
-              style: TextStyle(
-                  fontSize: 17, fontWeight: FontWeight.w800, color: text)),
+                color: isDark ? AppColors.darkBorder : Colors.grey.shade300,
+                borderRadius: BorderRadius.circular(2))),
+          Text('Reset PIN — ${widget.user.displayName}',
+              style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800,
+                  color: text)),
+          const SizedBox(height: 4),
+          const Text('User akan diwajibkan ganti PIN saat login berikutnya.',
+              style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
+              textAlign: TextAlign.center),
           const SizedBox(height: 20),
-          // FIX: label PIN (x/4)
           Text('PIN baru (${_pin.length}/$_pinLength)',
-              style: TextStyle(
-                  fontSize: 13,
+              style: TextStyle(fontSize: 13,
                   color: isDark
                       ? const Color(0xFF94A3B8) : AppColors.textSecondary)),
           const SizedBox(height: 12),
-          // FIX: dot indikator 4 bulat
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: List.generate(_pinLength, (i) {
               final filled = i < _pin.length;
               return AnimatedContainer(
                 duration: const Duration(milliseconds: 120),
-                margin: const EdgeInsets.symmetric(horizontal: 8),
+                margin: const EdgeInsets.symmetric(horizontal: 6),
                 width: 14, height: 14,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
@@ -631,8 +756,7 @@ class _Empty extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Center(
     child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-      Icon(Icons.people_outline_rounded,
-          size: 64,
+      Icon(Icons.people_outline_rounded, size: 64,
           color: (isDark
               ? const Color(0xFF94A3B8) : AppColors.textSecondary)
                   .withOpacity(0.4)),

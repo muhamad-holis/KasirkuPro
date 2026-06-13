@@ -29,7 +29,9 @@ dependencies:
   connectivity_plus: ^6.0.3
   intl: ^0.19.0
   uuid: ^4.4.0
-  shared_preferences: ^2.2.3
+  # PATCHED: ganti shared_preferences dengan flutter_secure_storage untuk data sensitif
+  shared_preferences: ^2.2.3           # tetap untuk preferensi non-sensitif (theme, dll)
+  flutter_secure_storage: ^9.2.2       # NEW: untuk session/auth storage
   permission_handler: ^11.3.1
   local_auth: ^2.3.0
   share_plus: ^9.0.0
@@ -37,6 +39,7 @@ dependencies:
   collection: ^1.18.0
   image: ^4.2.0
   crypto: ^3.0.3
+  pointycastle: ^3.9.1                 # NEW: untuk PBKDF2 (PIN hashing dengan salt)
   audioplayers: ^6.0.0
   video_player: ^2.9.2
   freezed_annotation: ^2.4.4
