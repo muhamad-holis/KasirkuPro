@@ -263,7 +263,12 @@ class SettingsScreen extends ConsumerWidget {
     final ctrl = TextEditingController(text: value);
     showDialog(
       context: context,
-      builder: (_) => AlertDialog(
+      // FIX: Gunakan 'dialogCtx' (context milik dialog itu sendiri) untuk
+      // Navigator.pop, bukan 'context' dari luar (Settings screen).
+      // Bug sebelumnya: Simpan memanggil pop pada context yang salah sehingga
+      // dialog tidak tertutup, seolah tidak terjadi apapun padahal data
+      // sudah tersimpan ke database.
+      builder: (dialogCtx) => AlertDialog(
         title: Text(label,
             style: const TextStyle(fontWeight: FontWeight.w700)),
         content: TextField(
@@ -275,12 +280,12 @@ class SettingsScreen extends ConsumerWidget {
         ),
         actions: [
           TextButton(
-              onPressed: () => Navigator.pop(context),
+              onPressed: () => Navigator.pop(dialogCtx),
               child: const Text('Batal')),
           ElevatedButton(
               onPressed: () async {
                 await onSave(ctrl.text.trim());
-                if (context.mounted) Navigator.pop(context);
+                if (dialogCtx.mounted) Navigator.pop(dialogCtx);
               },
               child: const Text('Simpan')),
         ],
@@ -887,121 +892,209 @@ class _AboutSheet extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final sheetBg = isDark ? AppColors.darkSurface : Colors.white;
-    final handleColor = isDark ? AppColors.darkBorder : Colors.grey.shade300;
-    final textColor = isDark ? Colors.white : AppColors.textPrimary;
-    final subColor = isDark ? const Color(0xFF94A3B8) : AppColors.textSecondary;
-    final divColor = isDark ? AppColors.darkBorder : AppColors.border;
+    final sheetBg     = isDark ? AppColors.darkSurface : Colors.white;
+    final handleColor = isDark ? AppColors.darkBorder   : Colors.grey.shade300;
+    final textColor   = isDark ? Colors.white           : AppColors.textPrimary;
+    final subColor    = isDark ? const Color(0xFF94A3B8): AppColors.textSecondary;
+    final divColor    = isDark ? AppColors.darkBorder   : AppColors.border;
+    final cardBg      = isDark ? AppColors.darkBg       : AppColors.bg;
+    final offlineBg   = isDark
+        ? AppColors.primary.withOpacity(0.12)
+        : AppColors.primary.withOpacity(0.07);
 
-    return Container(
-      decoration: BoxDecoration(
-        color: sheetBg,
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
-      ),
-      padding: const EdgeInsets.fromLTRB(24, 12, 24, 40),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          // Handle bar
-          Container(
-            width: 40,
-            height: 4,
-            margin: const EdgeInsets.only(bottom: 24),
-            decoration: BoxDecoration(
-              color: handleColor,
-              borderRadius: BorderRadius.circular(2),
+    return SingleChildScrollView(
+      child: Container(
+        decoration: BoxDecoration(
+          color: sheetBg,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+        ),
+        padding: const EdgeInsets.fromLTRB(24, 12, 24, 40),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // ── Handle bar ──────────────────────────────────────────────────
+            Container(
+              width: 40,
+              height: 4,
+              margin: const EdgeInsets.only(bottom: 24),
+              decoration: BoxDecoration(
+                color: handleColor,
+                borderRadius: BorderRadius.circular(2),
+              ),
             ),
-          ),
 
-          // Logo + nama
-          Container(
-            width: 72,
-            height: 72,
-            decoration: BoxDecoration(
-              color: AppColors.primaryLight,
-              borderRadius: BorderRadius.circular(20),
+            // ── Logo + nama ─────────────────────────────────────────────────
+            Container(
+              width: 76,
+              height: 76,
+              decoration: BoxDecoration(
+                color: AppColors.primaryLight,
+                borderRadius: BorderRadius.circular(22),
+              ),
+              child: const Icon(
+                Icons.point_of_sale_rounded,
+                color: AppColors.primary,
+                size: 40,
+              ),
             ),
-            child: const Icon(
-              Icons.point_of_sale_rounded,
-              color: AppColors.primary,
-              size: 38,
+            const SizedBox(height: 14),
+            Text(
+              'KasirKu',
+              style: TextStyle(
+                fontSize: 24,
+                fontWeight: FontWeight.w800,
+                color: textColor,
+              ),
             ),
-          ),
-          const SizedBox(height: 14),
-          Text(
-            'KasirKu',
-            style: TextStyle(
-              fontSize: 22,
-              fontWeight: FontWeight.w800,
-              color: textColor,
+            const SizedBox(height: 4),
+            Text(
+              'Solusi Kasir Praktis untuk Bisnismu',
+              style: TextStyle(fontSize: 13, color: subColor),
+              textAlign: TextAlign.center,
             ),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            'Solusi Kasir Praktis untuk Bisnismu',
-            style: TextStyle(fontSize: 13, color: subColor),
-            textAlign: TextAlign.center,
-          ),
-          const SizedBox(height: 20),
+            const SizedBox(height: 6),
+            // Badge developer
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+              decoration: BoxDecoration(
+                color: AppColors.primary.withOpacity(0.12),
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: const Text(
+                'by Artholic Studio',
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.primary,
+                ),
+              ),
+            ),
+            const SizedBox(height: 20),
 
-          // Info rows
-          Container(
-            decoration: BoxDecoration(
-              color: isDark ? AppColors.darkBg : AppColors.bg,
-              borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: divColor, width: 0.5),
+            // ── Info Offline Mode ───────────────────────────────────────────
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: offlineBg,
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(
+                    color: AppColors.primary.withOpacity(0.25), width: 0.8),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(children: [
+                    const Icon(Icons.wifi_off_rounded,
+                        color: AppColors.primary, size: 16),
+                    const SizedBox(width: 6),
+                    Text(
+                      'Aplikasi Offline Mode',
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
+                        color: isDark ? Colors.white : AppColors.textPrimary,
+                      ),
+                    ),
+                  ]),
+                  const SizedBox(height: 8),
+                  Text(
+                    '• Semua data tersimpan di perangkat secara lokal — '
+                    'tidak memerlukan koneksi internet untuk beroperasi.\n'
+                    '• Data tidak dikirim ke server manapun, '
+                    'privasi transaksi sepenuhnya terjaga.\n'
+                    '• Gunakan fitur Backup Data secara rutin untuk '
+                    'menghindari kehilangan data jika perangkat rusak atau hilang.\n'
+                    '• Tidak ada sinkronisasi antar perangkat. '
+                    'Data hanya ada di HP yang digunakan.',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: subColor,
+                      height: 1.6,
+                    ),
+                  ),
+                ],
+              ),
             ),
-            child: Column(
-              children: [
-                _AboutRow(
-                  label: 'Versi',
-                  value: '1.0.0',
-                  icon: Icons.tag_rounded,
-                  isDark: isDark,
-                ),
-                Divider(height: 1, color: divColor),
-                _AboutRow(
-                  label: 'Package',
-                  value: 'com.kasirku.app',
-                  icon: Icons.inventory_2_outlined,
-                  isDark: isDark,
-                ),
-                Divider(height: 1, color: divColor),
-                _AboutRow(
-                  label: 'Platform',
-                  value: 'Android',
-                  icon: Icons.phone_android_rounded,
-                  isDark: isDark,
-                ),
-                Divider(height: 1, color: divColor),
-                _AboutRow(
-                  label: 'Dibuat dengan',
-                  value: 'Flutter',
-                  icon: Icons.flutter_dash_rounded,
-                  isDark: isDark,
-                ),
-                Divider(height: 1, color: divColor),
-                _AboutRow(
-                  label: 'Lisensi',
-                  value: 'Proprietary',
-                  icon: Icons.shield_outlined,
-                  isDark: isDark,
-                ),
-              ],
-            ),
-          ),
+            const SizedBox(height: 16),
 
-          const SizedBox(height: 20),
-          Text(
-            '© 2025 KasirKu. All rights reserved.',
-            style: TextStyle(fontSize: 11, color: subColor),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            'Versi ini hanya untuk penggunaan internal.',
-            style: TextStyle(fontSize: 11, color: subColor),
-          ),
-        ],
+            // ── Info rows ───────────────────────────────────────────────────
+            Container(
+              decoration: BoxDecoration(
+                color: cardBg,
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: divColor, width: 0.5),
+              ),
+              child: Column(
+                children: [
+                  _AboutRow(
+                    label: 'Versi',
+                    value: '1.0.0',
+                    icon: Icons.tag_rounded,
+                    isDark: isDark,
+                  ),
+                  Divider(height: 1, color: divColor),
+                  _AboutRow(
+                    label: 'Developer',
+                    value: 'Artholic Studio',
+                    icon: Icons.business_rounded,
+                    isDark: isDark,
+                  ),
+                  Divider(height: 1, color: divColor),
+                  _AboutRow(
+                    label: 'Platform',
+                    value: 'Android',
+                    icon: Icons.phone_android_rounded,
+                    isDark: isDark,
+                  ),
+                  Divider(height: 1, color: divColor),
+                  _AboutRow(
+                    label: 'Mode',
+                    value: 'Offline',
+                    icon: Icons.wifi_off_rounded,
+                    isDark: isDark,
+                  ),
+                  Divider(height: 1, color: divColor),
+                  _AboutRow(
+                    label: 'Database',
+                    value: 'SQLite (Lokal)',
+                    icon: Icons.storage_rounded,
+                    isDark: isDark,
+                  ),
+                  Divider(height: 1, color: divColor),
+                  _AboutRow(
+                    label: 'Dibuat dengan',
+                    value: 'Flutter',
+                    icon: Icons.flutter_dash_rounded,
+                    isDark: isDark,
+                  ),
+                  Divider(height: 1, color: divColor),
+                  _AboutRow(
+                    label: 'Lisensi',
+                    value: 'Proprietary',
+                    icon: Icons.shield_outlined,
+                    isDark: isDark,
+                  ),
+                ],
+              ),
+            ),
+
+            const SizedBox(height: 20),
+            Text(
+              '© 2025 Artholic Studio. All rights reserved.',
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+                color: subColor,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'KasirKu — Kasir offline untuk usahamu.',
+              style: TextStyle(fontSize: 11, color: subColor),
+            ),
+          ],
+        ),
       ),
     );
   }
