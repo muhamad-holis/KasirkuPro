@@ -43,45 +43,54 @@ class DashboardStats {
 }
 
 // ─── DashboardStats Provider ──────────────────────────────────────────────────
+// FIX: Menggunakan StreamProvider yang meng-watch todayTransactionsProvider
+// agar data dashboard otomatis update setiap ada transaksi baru,
+// tanpa perlu restart aplikasi (bug: data tidak real-time di mode offline).
 
-final dashboardStatsProvider = FutureProvider<DashboardStats>((ref) async {
-  final db = ref.watch(databaseProvider);
+final dashboardStatsProvider = StreamProvider<DashboardStats>((ref) async* {
+  final db  = ref.watch(databaseProvider);
   final now = DateTime.now();
-  final startOfToday    = DateTime(now.year, now.month, now.day);
-  final endOfToday      = startOfToday.add(const Duration(days: 1));
+  final startOfToday     = DateTime(now.year, now.month, now.day);
+  final endOfToday       = startOfToday.add(const Duration(days: 1));
   final startOfYesterday = startOfToday.subtract(const Duration(days: 1));
 
-  final todayTx     = await db.transactionsDao.getTransactionsByDate(startOfToday, endOfToday);
-  final yesterdayTx = await db.transactionsDao.getTransactionsByDate(startOfYesterday, startOfToday);
+  // Watch stream transaksi hari ini — setiap ada insert baru, stream ini
+  // emit ulang dan seluruh blok async* dieksekusi ulang otomatis.
+  final todayStream = db.transactionsDao.watchTodayTransactions();
 
-  final omzetToday     = todayTx.fold<double>(0, (sum, t) => sum + t.total);
-  final omzetYesterday = yesterdayTx.fold<double>(0, (sum, t) => sum + t.total);
+  await for (final todayTx in todayStream) {
+    final yesterdayTx = await db.transactionsDao
+        .getTransactionsByDate(startOfYesterday, startOfToday);
 
-  double pctChange(double today, double yesterday) {
-    if (yesterday == 0) return today > 0 ? 100.0 : 0.0;
-    return ((today - yesterday) / yesterday) * 100;
+    final omzetToday     = todayTx.fold<double>(0, (sum, t) => sum + t.total);
+    final omzetYesterday = yesterdayTx.fold<double>(0, (sum, t) => sum + t.total);
+
+    double pctChange(double today, double yesterday) {
+      if (yesterday == 0) return today > 0 ? 100.0 : 0.0;
+      return ((today - yesterday) / yesterday) * 100;
+    }
+
+    final txToday      = todayTx.length;
+    final txYesterday  = yesterdayTx.length;
+    final avgToday     = txToday > 0 ? omzetToday / txToday : 0.0;
+    final avgYesterday = txYesterday > 0 ? omzetYesterday / txYesterday : 0.0;
+
+    int productsSold = 0;
+    for (final tx in todayTx) {
+      final items = await db.transactionsDao.getTransactionItems(tx.id);
+      productsSold += items.fold<int>(0, (sum, item) => sum + item.quantity);
+    }
+
+    yield DashboardStats(
+      omzetToday:   omzetToday,
+      omzetChange:  pctChange(omzetToday, omzetYesterday),
+      txToday:      txToday,
+      txChange:     pctChange(txToday.toDouble(), txYesterday.toDouble()),
+      avgToday:     avgToday,
+      avgChange:    pctChange(avgToday, avgYesterday),
+      productsSold: productsSold,
+    );
   }
-
-  final txToday     = todayTx.length;
-  final txYesterday = yesterdayTx.length;
-  final avgToday    = txToday > 0 ? omzetToday / txToday : 0.0;
-  final avgYesterday = txYesterday > 0 ? omzetYesterday / txYesterday : 0.0;
-
-  int productsSold = 0;
-  for (final tx in todayTx) {
-    final items = await db.transactionsDao.getTransactionItems(tx.id);
-    productsSold += items.fold<int>(0, (sum, item) => sum + item.quantity);
-  }
-
-  return DashboardStats(
-    omzetToday:   omzetToday,
-    omzetChange:  pctChange(omzetToday, omzetYesterday),
-    txToday:      txToday,
-    txChange:     pctChange(txToday.toDouble(), txYesterday.toDouble()),
-    avgToday:     avgToday,
-    avgChange:    pctChange(avgToday, avgYesterday),
-    productsSold: productsSold,
-  );
 });
 
 // ─── Provider items per transaction ──────────────────────────────────────────
