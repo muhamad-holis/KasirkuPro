@@ -85,6 +85,29 @@ class ReportsDao extends DatabaseAccessor<AppDatabase>
     return query.get().then((rows) => rows.map((r) => r.data).toList());
   }
 
+  // ─── Stream Grafik Penjualan Harian (reaktif) ───────────────────────────────
+  // Digunakan agar tab Penjualan di Laporan & Dashboard langsung update
+  // tanpa perlu restart aplikasi setiap kali ada transaksi baru.
+
+  Stream<List<Map<String, dynamic>>> watchDailySalesChart(
+      DateTime start, DateTime end) {
+    final query = db.customSelect(
+      '''
+      SELECT DATE(created_at / 1000, 'unixepoch', 'localtime') as tanggal,
+        SUM(total) as omzet, COUNT(*) as jumlah
+      FROM transactions
+      WHERE created_at BETWEEN ? AND ? AND status = 'completed'
+      GROUP BY DATE(created_at / 1000, 'unixepoch', 'localtime') ORDER BY tanggal ASC
+      ''',
+      variables: [
+        Variable<DateTime>(start),
+        Variable<DateTime>(end),
+      ],
+      readsFrom: {transactions},
+    );
+    return query.watch().map((rows) => rows.map((r) => r.data).toList());
+  }
+
   // ─── Ringkasan Kas (Masuk, Keluar, Saldo) ──────────────────────────────────
   // FIX: Gunakan single-quotes untuk string literal SQLite (bukan double-quotes)
   // FIX: Gunakan Variable<DateTime> agar Drift mengkonversi ke integer epoch
