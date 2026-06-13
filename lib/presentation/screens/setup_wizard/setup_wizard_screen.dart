@@ -1,13 +1,7 @@
 // lib/presentation/screens/setup_wizard/setup_wizard_screen.dart
-//
-// NEW SCREEN: Tampil saat aplikasi pertama kali dijalankan (DB kosong).
-// Memaksa membuat akun admin pertama dengan:
-//   - Username unik (min 3 karakter)
-//   - Display name
-//   - PIN minimal 6 digit
-//   - Konfirmasi PIN
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:drift/drift.dart' hide Column;
 import '../../../core/theme/app_theme.dart';
@@ -24,113 +18,127 @@ class SetupWizardScreen extends ConsumerStatefulWidget {
   ConsumerState<SetupWizardScreen> createState() => _SetupWizardScreenState();
 }
 
-class _SetupWizardScreenState extends ConsumerState<SetupWizardScreen> {
-  final _usernameCtrl    = TextEditingController();
-  final _displayNameCtrl = TextEditingController();
-  String _pin        = '';
-  String _pinConfirm = '';
-  bool   _saving     = false;
-  String? _error;
+class _SetupWizardScreenState extends ConsumerState<SetupWizardScreen>
+    with TickerProviderStateMixin {
+  final _usernameCtrl     = TextEditingController();
+  final _displayNameCtrl  = TextEditingController();
+  final _pinCtrl          = TextEditingController();
+  final _pinConfirmCtrl   = TextEditingController();
 
-  // Step: 0=info, 1=data, 2=pin, 3=confirm
-  int _step = 0;
+  bool    _saving           = false;
+  bool    _pinVisible       = false;
+  bool    _pinConfirmVisible = false;
+  String? _error;
+  int     _step             = 0;
 
   static const int _pinLength = 6;
 
+  late final AnimationController _fadeCtrl;
+  late final Animation<double>    _fadeAnim;
+
+  @override
+  void initState() {
+    super.initState();
+    _fadeCtrl = AnimationController(
+        vsync: this, duration: const Duration(milliseconds: 350));
+    _fadeAnim = CurvedAnimation(parent: _fadeCtrl, curve: Curves.easeInOut);
+    _fadeCtrl.forward();
+  }
+
   @override
   void dispose() {
+    _fadeCtrl.dispose();
     _usernameCtrl.dispose();
     _displayNameCtrl.dispose();
+    _pinCtrl.dispose();
+    _pinConfirmCtrl.dispose();
     super.dispose();
   }
 
   // ─── Validasi ──────────────────────────────────────────────────────────────
 
   String? _validateStep1() {
-    final username    = _usernameCtrl.text.trim().toLowerCase();
-    final displayName = _displayNameCtrl.text.trim();
-    if (username.length < 3) {
-      return 'Username minimal 3 karakter';
-    }
-    if (!RegExp(r'^[a-z0-9_]+$').hasMatch(username)) {
+    final u = _usernameCtrl.text.trim().toLowerCase();
+    final d = _displayNameCtrl.text.trim();
+    if (u.length < 3) return 'Username minimal 3 karakter';
+    if (!RegExp(r'^[a-z0-9_]+$').hasMatch(u))
       return 'Username hanya boleh huruf kecil, angka, dan underscore';
-    }
-    if (displayName.isEmpty) {
-      return 'Nama tampilan tidak boleh kosong';
-    }
+    if (d.isEmpty) return 'Nama tampilan tidak boleh kosong';
     return null;
   }
 
-  // ─── Navigasi step ─────────────────────────────────────────────────────────
+  String? _validateStep2() {
+    if (_pinCtrl.text.trim().length < _pinLength)
+      return 'PIN harus $_pinLength digit';
+    return null;
+  }
+
+  String? _validateStep3() {
+    if (_pinConfirmCtrl.text.trim().length < _pinLength)
+      return 'Konfirmasi PIN harus $_pinLength digit';
+    if (_pinCtrl.text.trim() != _pinConfirmCtrl.text.trim())
+      return 'Konfirmasi PIN tidak cocok';
+    return null;
+  }
+
+  // ─── Navigasi ──────────────────────────────────────────────────────────────
 
   void _next() {
     setState(() => _error = null);
     if (_step == 1) {
-      final err = _validateStep1();
-      if (err != null) {
-        setState(() => _error = err);
-        return;
-      }
+      final e = _validateStep1();
+      if (e != null) { setState(() => _error = e); return; }
     }
-    if (_step == 2 && _pin.length < _pinLength) {
-      setState(() => _error = 'PIN harus $_pinLength digit');
-      return;
+    if (_step == 2) {
+      final e = _validateStep2();
+      if (e != null) { setState(() => _error = e); return; }
     }
     if (_step == 3) {
+      final e = _validateStep3();
+      if (e != null) { setState(() => _error = e); return; }
       _saveAdmin();
       return;
     }
+    FocusScope.of(context).unfocus();
+    _fadeCtrl.reset();
     setState(() => _step++);
+    _fadeCtrl.forward();
   }
 
   void _back() {
     if (_step == 0) return;
+    FocusScope.of(context).unfocus();
+    _fadeCtrl.reset();
     setState(() {
       _step--;
       _error = null;
-      if (_step == 2) { _pin = ''; _pinConfirm = ''; }
+      if (_step == 2) { _pinCtrl.clear(); _pinConfirmCtrl.clear(); }
     });
+    _fadeCtrl.forward();
   }
 
-  // ─── Simpan admin ──────────────────────────────────────────────────────────
+  // ─── Simpan ────────────────────────────────────────────────────────────────
 
   Future<void> _saveAdmin() async {
-    if (_pin != _pinConfirm) {
-      setState(() => _error = 'Konfirmasi PIN tidak cocok');
-      return;
-    }
-    if (_pin.length < _pinLength) {
-      setState(() => _error = 'PIN harus $_pinLength digit');
-      return;
-    }
-
     setState(() { _saving = true; _error = null; });
-
     try {
       final db = ref.read(databaseProvider);
-      final username    = _usernameCtrl.text.trim().toLowerCase();
-      final displayName = _displayNameCtrl.text.trim();
-
       await db.usersDao.insertFirstAdmin(UsersCompanion.insert(
-        username:    username,
-        displayName: displayName,
-        pin:         PinHasher.hashPin(_pin),
+        username:    _usernameCtrl.text.trim().toLowerCase(),
+        displayName: _displayNameCtrl.text.trim(),
+        pin:         PinHasher.hashPin(_pinCtrl.text.trim()),
         role:        const Value('admin'),
       ));
-
       if (!mounted) return;
-
-      // Navigasi ke login — user harus login dengan akun yang baru dibuat
       Navigator.of(context).pushReplacement(
         MaterialPageRoute(builder: (_) => const LoginScreen()),
       );
-
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
         content: Text('Akun admin berhasil dibuat. Silakan login.'),
         backgroundColor: AppColors.success,
       ));
     } on UsernameTakenException {
-      setState(() => _error = 'Username sudah dipakai');
+      setState(() => _error = 'Username sudah dipakai, coba yang lain');
     } on UnauthorizedException catch (e) {
       setState(() => _error = e.message);
     } catch (e) {
@@ -140,123 +148,239 @@ class _SetupWizardScreenState extends ConsumerState<SetupWizardScreen> {
     }
   }
 
-  // ─── Numpad helpers ────────────────────────────────────────────────────────
-
-  void _onPinKey(String d) {
-    if (_step == 2) {
-      if (_pin.length >= _pinLength) return;
-      setState(() => _pin += d);
-      if (_pin.length == _pinLength) {
-        // Auto-advance ke step konfirmasi
-        Future.delayed(const Duration(milliseconds: 200),
-            () => setState(() => _step = 3));
-      }
-    } else if (_step == 3) {
-      if (_pinConfirm.length >= _pinLength) return;
-      setState(() => _pinConfirm += d);
-    }
-  }
-
-  void _onPinDel() {
-    if (_step == 2) {
-      if (_pin.isEmpty) return;
-      setState(() => _pin = _pin.substring(0, _pin.length - 1));
-    } else if (_step == 3) {
-      if (_pinConfirm.isEmpty) return;
-      setState(() => _pinConfirm = _pinConfirm.substring(0, _pinConfirm.length - 1));
-    }
-  }
-
   // ─── Build ─────────────────────────────────────────────────────────────────
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppColors.bg,
-      body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            children: [
-              // Progress indicator
-              _buildProgress(),
-              const SizedBox(height: 32),
-
-              Expanded(
-                child: SingleChildScrollView(
-                  child: _buildStep(),
-                ),
+      body: Stack(
+        children: [
+          // ── Gradient background ──
+          Container(
+            decoration: const BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [
+                  Color(0xFF0D9488),
+                  Color(0xFF0F766E),
+                  Color(0xFF134E4A),
+                ],
               ),
+            ),
+          ),
 
-              // Error
-              if (_error != null) ...[
-                const SizedBox(height: 12),
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: AppColors.danger.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(10),
+          // ── Decorative circles ──
+          Positioned(
+            top: -60, right: -60,
+            child: Container(
+              width: 220, height: 220,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: Colors.white.withOpacity(0.06),
+              ),
+            ),
+          ),
+          Positioned(
+            bottom: 100, left: -80,
+            child: Container(
+              width: 280, height: 280,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: Colors.white.withOpacity(0.04),
+              ),
+            ),
+          ),
+
+          // ── Content ──
+          SafeArea(
+            child: Column(
+              children: [
+                // Header
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(24, 20, 24, 0),
+                  child: Column(
+                    children: [
+                      // Logo
+                      Container(
+                        width: 56, height: 56,
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.15),
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(
+                              color: Colors.white.withOpacity(0.3), width: 1),
+                        ),
+                        child: const Icon(Icons.storefront_rounded,
+                            color: Colors.white, size: 30),
+                      ),
+                      const SizedBox(height: 12),
+                      const Text('KasirKu',
+                          style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 20,
+                              fontWeight: FontWeight.w800,
+                              letterSpacing: 0.5)),
+                      const SizedBox(height: 4),
+                      Text('Setup Awal',
+                          style: TextStyle(
+                              color: Colors.white.withOpacity(0.7),
+                              fontSize: 13)),
+                      const SizedBox(height: 24),
+                      _buildStepper(),
+                    ],
                   ),
-                  child: Row(children: [
-                    const Icon(Icons.error_outline,
-                        color: AppColors.danger, size: 18),
-                    const SizedBox(width: 8),
-                    Expanded(child: Text(_error!,
-                        style: const TextStyle(
-                            color: AppColors.danger, fontSize: 13))),
-                  ]),
+                ),
+
+                const SizedBox(height: 20),
+
+                // Card body
+                Expanded(
+                  child: Container(
+                    decoration: const BoxDecoration(
+                      color: Color(0xFFF0FAFA),
+                      borderRadius: BorderRadius.only(
+                        topLeft: Radius.circular(32),
+                        topRight: Radius.circular(32),
+                      ),
+                    ),
+                    child: ClipRRect(
+                      borderRadius: const BorderRadius.only(
+                        topLeft: Radius.circular(32),
+                        topRight: Radius.circular(32),
+                      ),
+                      child: Column(
+                        children: [
+                          // Drag handle
+                          const SizedBox(height: 12),
+                          Container(
+                            width: 40, height: 4,
+                            decoration: BoxDecoration(
+                              color: Colors.grey.shade300,
+                              borderRadius: BorderRadius.circular(2),
+                            ),
+                          ),
+                          const SizedBox(height: 20),
+
+                          Expanded(
+                            child: SingleChildScrollView(
+                              padding: const EdgeInsets.symmetric(horizontal: 24),
+                              child: FadeTransition(
+                                opacity: _fadeAnim,
+                                child: _buildStep(),
+                              ),
+                            ),
+                          ),
+
+                          // Error
+                          if (_error != null)
+                            Padding(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 24, vertical: 8),
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 14, vertical: 10),
+                                decoration: BoxDecoration(
+                                  color: AppColors.danger.withOpacity(0.08),
+                                  borderRadius: BorderRadius.circular(12),
+                                  border: Border.all(
+                                      color: AppColors.danger.withOpacity(0.3)),
+                                ),
+                                child: Row(children: [
+                                  const Icon(Icons.error_outline_rounded,
+                                      color: AppColors.danger, size: 18),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: Text(_error!,
+                                        style: const TextStyle(
+                                            color: AppColors.danger,
+                                            fontSize: 13)),
+                                  ),
+                                ]),
+                              ),
+                            ),
+
+                          // Actions
+                          Padding(
+                            padding: const EdgeInsets.fromLTRB(24, 8, 24, 24),
+                            child: _buildActions(),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
                 ),
               ],
-
-              const SizedBox(height: 16),
-              _buildActions(),
-            ],
+            ),
           ),
-        ),
+        ],
       ),
     );
   }
 
-  Widget _buildProgress() {
-    const steps = ['Mulai', 'Akun', 'PIN', 'Konfirmasi'];
+  // ─── Stepper ───────────────────────────────────────────────────────────────
+
+  Widget _buildStepper() {
+    const labels = ['Mulai', 'Akun', 'PIN', 'Konfirmasi'];
     return Row(
-      children: List.generate(steps.length, (i) {
-        final isActive = i == _step;
-        final isDone   = i < _step;
+      children: List.generate(labels.length, (i) {
+        final done   = i < _step;
+        final active = i == _step;
         return Expanded(
           child: Row(children: [
             Expanded(
               child: Column(children: [
                 AnimatedContainer(
-                  duration: const Duration(milliseconds: 200),
-                  width: 28, height: 28,
+                  duration: const Duration(milliseconds: 300),
+                  curve: Curves.easeInOut,
+                  width: 30, height: 30,
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
-                    color: isDone
-                        ? AppColors.success
-                        : isActive
-                            ? AppColors.primary
-                            : Colors.grey.shade200,
+                    color: done
+                        ? Colors.white
+                        : active
+                            ? Colors.white
+                            : Colors.white.withOpacity(0.2),
+                    border: Border.all(
+                      color: done || active
+                          ? Colors.white
+                          : Colors.white.withOpacity(0.3),
+                      width: 2,
+                    ),
                   ),
                   child: Center(
-                    child: isDone
-                        ? const Icon(Icons.check, color: Colors.white, size: 14)
-                        : Text('${i + 1}', style: TextStyle(
-                            fontSize: 12, fontWeight: FontWeight.w700,
-                            color: isActive ? Colors.white : Colors.grey)),
+                    child: done
+                        ? const Icon(Icons.check_rounded,
+                            color: AppColors.primary, size: 16)
+                        : Text('${i + 1}',
+                            style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w800,
+                                color: active
+                                    ? AppColors.primary
+                                    : Colors.white.withOpacity(0.6))),
                   ),
                 ),
                 const SizedBox(height: 4),
-                Text(steps[i], style: TextStyle(
-                    fontSize: 10,
-                    color: isActive ? AppColors.primary : Colors.grey,
-                    fontWeight: isActive ? FontWeight.w700 : FontWeight.normal)),
+                Text(labels[i],
+                    style: TextStyle(
+                        fontSize: 10,
+                        fontWeight: active
+                            ? FontWeight.w700 : FontWeight.normal,
+                        color: active
+                            ? Colors.white
+                            : Colors.white.withOpacity(0.6))),
               ]),
             ),
-            if (i < steps.length - 1)
+            if (i < labels.length - 1)
               Expanded(
-                child: Container(height: 2,
-                    color: isDone ? AppColors.success : Colors.grey.shade200),
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 300),
+                  height: 2,
+                  margin: const EdgeInsets.only(bottom: 20),
+                  color: i < _step
+                      ? Colors.white
+                      : Colors.white.withOpacity(0.25),
+                ),
               ),
           ]),
         );
@@ -264,81 +388,152 @@ class _SetupWizardScreenState extends ConsumerState<SetupWizardScreen> {
     );
   }
 
+  // ─── Step content ──────────────────────────────────────────────────────────
+
   Widget _buildStep() {
     switch (_step) {
-      case 0:
-        return _buildStepInfo();
-      case 1:
-        return _buildStepData();
-      case 2:
-        return _buildStepPin('Buat PIN Admin', _pin);
-      case 3:
-        return _buildStepPin('Konfirmasi PIN', _pinConfirm);
-      default:
-        return const SizedBox();
+      case 0:  return _buildStepInfo();
+      case 1:  return _buildStepData();
+      case 2:  return _buildStepPin();
+      case 3:  return _buildStepConfirm();
+      default: return const SizedBox();
     }
   }
 
   Widget _buildStepInfo() {
-    return Column(children: [
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      // Banner
       Container(
-        width: 80, height: 80,
+        width: double.infinity,
+        padding: const EdgeInsets.all(20),
         decoration: BoxDecoration(
-          color: AppColors.primary.withOpacity(0.1),
-          shape: BoxShape.circle,
+          gradient: const LinearGradient(
+            colors: [Color(0xFF0D9488), Color(0xFF0F766E)],
+          ),
+          borderRadius: BorderRadius.circular(20),
+          boxShadow: [
+            BoxShadow(
+              color: AppColors.primary.withOpacity(0.3),
+              blurRadius: 16,
+              offset: const Offset(0, 6),
+            ),
+          ],
         ),
-        child: const Icon(Icons.admin_panel_settings_rounded,
-            color: AppColors.primary, size: 42),
+        child: Row(children: [
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: Colors.white.withOpacity(0.15),
+              borderRadius: BorderRadius.circular(14),
+            ),
+            child: const Icon(Icons.admin_panel_settings_rounded,
+                color: Colors.white, size: 32),
+          ),
+          const SizedBox(width: 16),
+          const Expanded(
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text('Selamat Datang!',
+                  style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 18,
+                      fontWeight: FontWeight.w800)),
+              SizedBox(height: 4),
+              Text('Buat akun Admin utama\nuntuk mulai menggunakan KasirKu.',
+                  style: TextStyle(
+                      color: Colors.white70, fontSize: 12, height: 1.5)),
+            ]),
+          ),
+        ]),
       ),
       const SizedBox(height: 24),
-      const Text('Selamat Datang di KasirKu!',
-          style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800),
-          textAlign: TextAlign.center),
+
+      const Text('Yang perlu kamu siapkan',
+          style: TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w700,
+              color: AppColors.textSecondary)),
       const SizedBox(height: 12),
-      const Text(
-        'Ini adalah pertama kali aplikasi dijalankan.\n'
-        'Buat akun Admin utama untuk memulai.\n\n'
-        'Admin dapat mengelola kasir, produk, dan pengaturan toko.',
-        style: TextStyle(fontSize: 14, color: AppColors.textSecondary, height: 1.6),
-        textAlign: TextAlign.center,
+
+      _featureCard(
+        Icons.person_rounded,
+        'Username Unik',
+        'Dipakai untuk login, min. 3 karakter',
+        AppColors.info,
       ),
-      const SizedBox(height: 24),
-      _infoTile(Icons.lock_rounded, 'PIN minimal 6 digit'),
+      const SizedBox(height: 10),
+      _featureCard(
+        Icons.lock_rounded,
+        'PIN 6 Digit',
+        'Lebih aman dari PIN 4 digit biasa',
+        AppColors.primary,
+      ),
+      const SizedBox(height: 10),
+      _featureCard(
+        Icons.security_rounded,
+        'Tidak Ada Akun Bawaan',
+        'Kamu yang tentukan credential-nya',
+        AppColors.success,
+      ),
+      const SizedBox(height: 10),
+      _featureCard(
+        Icons.history_rounded,
+        'Audit Log Otomatis',
+        'Semua aksi tercatat secara otomatis',
+        AppColors.warning,
+      ),
       const SizedBox(height: 8),
-      _infoTile(Icons.person_rounded, 'Username harus unik'),
-      const SizedBox(height: 8),
-      _infoTile(Icons.security_rounded, 'Tidak ada akun bawaan'),
     ]);
   }
 
-  Widget _infoTile(IconData icon, String text) {
+  Widget _featureCard(IconData icon, String title, String sub, Color color) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       decoration: BoxDecoration(
-        color: AppColors.primaryLight,
-        borderRadius: BorderRadius.circular(10),
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: AppColors.border),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.03),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
       ),
       child: Row(children: [
-        Icon(icon, color: AppColors.primary, size: 18),
-        const SizedBox(width: 10),
-        Text(text, style: const TextStyle(
-            fontSize: 13, color: AppColors.primary, fontWeight: FontWeight.w600)),
+        Container(
+          padding: const EdgeInsets.all(8),
+          decoration: BoxDecoration(
+            color: color.withOpacity(0.1),
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: Icon(icon, color: color, size: 20),
+        ),
+        const SizedBox(width: 14),
+        Expanded(
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(title,
+                style: const TextStyle(
+                    fontSize: 13, fontWeight: FontWeight.w700)),
+            const SizedBox(height: 2),
+            Text(sub,
+                style: const TextStyle(
+                    fontSize: 12, color: AppColors.textSecondary)),
+          ]),
+        ),
+        Icon(Icons.check_circle_rounded,
+            color: color.withOpacity(0.6), size: 18),
       ]),
     );
   }
 
   Widget _buildStepData() {
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      const Text('Data Akun Admin',
-          style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800)),
-      const SizedBox(height: 8),
-      const Text('Informasi ini digunakan untuk login.',
-          style: TextStyle(color: AppColors.textSecondary)),
+      _stepHeader(Icons.person_outline_rounded, 'Data Akun Admin',
+          'Informasi ini digunakan untuk login setiap hari.'),
       const SizedBox(height: 24),
 
-      // Username
-      const Text('Username',
-          style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+      _fieldLabel('Username', required: true),
       const SizedBox(height: 6),
       TextField(
         controller: _usernameCtrl,
@@ -349,147 +544,326 @@ class _SetupWizardScreenState extends ConsumerState<SetupWizardScreen> {
         decoration: InputDecoration(
           hintText: 'Contoh: admin_toko',
           prefixIcon: const Icon(Icons.alternate_email_rounded,
-              color: AppColors.primary),
-          helperText: 'Huruf kecil, angka, dan underscore',
-          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-          focusedBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12),
-            borderSide: const BorderSide(color: AppColors.primary, width: 2),
-          ),
+              color: AppColors.primary, size: 20),
+          helperText: 'Huruf kecil, angka, dan underscore saja',
+          helperStyle: const TextStyle(fontSize: 11),
         ),
       ),
-      const SizedBox(height: 16),
+      const SizedBox(height: 20),
 
-      // Display name
-      const Text('Nama Tampilan',
-          style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+      _fieldLabel('Nama Tampilan', required: true),
       const SizedBox(height: 6),
       TextField(
         controller: _displayNameCtrl,
         textCapitalization: TextCapitalization.words,
         textInputAction: TextInputAction.done,
         onChanged: (_) => setState(() => _error = null),
-        decoration: InputDecoration(
+        decoration: const InputDecoration(
           hintText: 'Contoh: Budi Santoso',
-          prefixIcon: const Icon(Icons.person_outline_rounded,
-              color: AppColors.primary),
-          helperText: 'Nama yang ditampilkan di UI',
-          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-          focusedBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12),
-            borderSide: const BorderSide(color: AppColors.primary, width: 2),
-          ),
+          prefixIcon: Icon(Icons.badge_rounded,
+              color: AppColors.primary, size: 20),
+          helperText: 'Nama yang muncul di tampilan aplikasi',
+          helperStyle: TextStyle(fontSize: 11),
         ),
       ),
-    ]);
-  }
-
-  Widget _buildStepPin(String title, String currentPin) {
-    return Column(children: [
-      Text(title,
-          style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w800)),
       const SizedBox(height: 8),
-      Text(
-        _step == 2
-            ? 'PIN digunakan untuk login setiap hari.\nGunakan minimal 6 digit yang mudah diingat tapi sulit ditebak.'
-            : 'Masukkan kembali PIN yang sama untuk konfirmasi.',
-        style: const TextStyle(color: AppColors.textSecondary, height: 1.5),
-        textAlign: TextAlign.center,
-      ),
-      const SizedBox(height: 24),
 
-      // Dot indicator
-      Row(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: List.generate(_pinLength, (i) {
-          final filled = i < currentPin.length;
-          return AnimatedContainer(
-            duration: const Duration(milliseconds: 120),
-            margin: const EdgeInsets.symmetric(horizontal: 8),
-            width: 16, height: 16,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: filled ? AppColors.primary : Colors.transparent,
-              border: Border.all(
-                color: filled ? AppColors.primary : Colors.grey.shade300,
-                width: 2,
-              ),
+      // Tips box
+      Container(
+        margin: const EdgeInsets.only(top: 8),
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: AppColors.info.withOpacity(0.07),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: AppColors.info.withOpacity(0.2)),
+        ),
+        child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          const Icon(Icons.lightbulb_outline_rounded,
+              color: AppColors.info, size: 16),
+          const SizedBox(width: 8),
+          const Expanded(
+            child: Text(
+              'Username tidak bisa diubah setelah dibuat. Pilih yang mudah diingat.',
+              style: TextStyle(
+                  fontSize: 12, color: AppColors.info, height: 1.5),
             ),
-          );
-        }),
+          ),
+        ]),
       ),
-      const SizedBox(height: 24),
-
-      // Numpad
-      _buildNumpad(),
     ]);
   }
 
-  Widget _buildNumpad() {
-    const rows = [
-      ['1', '2', '3'],
-      ['4', '5', '6'],
-      ['7', '8', '9'],
-      ['', '0', '⌫'],
-    ];
-    return Column(
-      children: rows.map((row) => Row(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: row.map((k) {
-          if (k.isEmpty) return const SizedBox(width: 88, height: 60);
-          return GestureDetector(
-            onTap: k == '⌫' ? _onPinDel : () => _onPinKey(k),
-            child: Container(
-              width: 88, height: 60,
-              alignment: Alignment.center,
-              child: k == '⌫'
-                  ? const Icon(Icons.backspace_outlined,
-                      color: AppColors.primary, size: 22)
-                  : Text(k, style: const TextStyle(
-                      fontSize: 22, fontWeight: FontWeight.w700)),
+  Widget _buildStepPin() {
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      _stepHeader(Icons.lock_outline_rounded, 'Buat PIN Admin',
+          'PIN digunakan untuk login setiap hari. Jangan bagikan ke siapapun.'),
+      const SizedBox(height: 24),
+
+      _fieldLabel('PIN', required: true),
+      const SizedBox(height: 6),
+      TextField(
+        controller: _pinCtrl,
+        keyboardType: TextInputType.number,
+        obscureText: !_pinVisible,
+        inputFormatters: [
+          FilteringTextInputFormatter.digitsOnly,
+          LengthLimitingTextInputFormatter(_pinLength),
+        ],
+        textInputAction: TextInputAction.done,
+        onChanged: (_) => setState(() => _error = null),
+        decoration: InputDecoration(
+          hintText: '6 digit angka',
+          prefixIcon: const Icon(Icons.pin_rounded,
+              color: AppColors.primary, size: 20),
+          suffixIcon: IconButton(
+            icon: Icon(
+              _pinVisible
+                  ? Icons.visibility_off_rounded
+                  : Icons.visibility_rounded,
+              color: AppColors.textSecondary, size: 20,
             ),
-          );
-        }).toList(),
-      )).toList(),
+            onPressed: () => setState(() => _pinVisible = !_pinVisible),
+          ),
+          helperText: 'Minimal $_pinLength digit angka',
+          helperStyle: const TextStyle(fontSize: 11),
+        ),
+      ),
+      const SizedBox(height: 20),
+
+      // Security tips
+      Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: AppColors.warning.withOpacity(0.07),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: AppColors.warning.withOpacity(0.25)),
+        ),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          const Row(children: [
+            Icon(Icons.shield_rounded, color: AppColors.warning, size: 16),
+            SizedBox(width: 6),
+            Text('Tips Keamanan PIN',
+                style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.warning)),
+          ]),
+          const SizedBox(height: 10),
+          _tipItem('Jangan gunakan tanggal lahir atau nomor HP'),
+          _tipItem('Jangan bagikan PIN ke siapapun termasuk kasir'),
+          _tipItem('Ganti PIN secara berkala untuk keamanan'),
+        ]),
+      ),
+    ]);
+  }
+
+  Widget _tipItem(String text) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 6),
+      child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        const Text('• ',
+            style: TextStyle(color: AppColors.warning, fontSize: 13)),
+        Expanded(
+          child: Text(text,
+              style: const TextStyle(
+                  fontSize: 12,
+                  color: AppColors.warning,
+                  height: 1.4)),
+        ),
+      ]),
     );
   }
 
+  Widget _buildStepConfirm() {
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      _stepHeader(Icons.verified_user_rounded, 'Konfirmasi PIN',
+          'Masukkan kembali PIN yang sama untuk memastikan tidak ada typo.'),
+      const SizedBox(height: 24),
+
+      _fieldLabel('Konfirmasi PIN', required: true),
+      const SizedBox(height: 6),
+      TextField(
+        controller: _pinConfirmCtrl,
+        keyboardType: TextInputType.number,
+        obscureText: !_pinConfirmVisible,
+        inputFormatters: [
+          FilteringTextInputFormatter.digitsOnly,
+          LengthLimitingTextInputFormatter(_pinLength),
+        ],
+        textInputAction: TextInputAction.done,
+        onFieldSubmitted: (_) => _next(),
+        onChanged: (_) => setState(() => _error = null),
+        decoration: InputDecoration(
+          hintText: '6 digit angka',
+          prefixIcon: const Icon(Icons.pin_rounded,
+              color: AppColors.primary, size: 20),
+          suffixIcon: IconButton(
+            icon: Icon(
+              _pinConfirmVisible
+                  ? Icons.visibility_off_rounded
+                  : Icons.visibility_rounded,
+              color: AppColors.textSecondary, size: 20,
+            ),
+            onPressed: () =>
+                setState(() => _pinConfirmVisible = !_pinConfirmVisible),
+          ),
+          helperText: 'Harus sama dengan PIN yang dibuat tadi',
+          helperStyle: const TextStyle(fontSize: 11),
+        ),
+      ),
+      const SizedBox(height: 20),
+
+      // Summary card
+      Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: AppColors.border),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.04),
+              blurRadius: 12,
+              offset: const Offset(0, 4),
+            ),
+          ],
+        ),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          const Row(children: [
+            Icon(Icons.summarize_rounded,
+                color: AppColors.primary, size: 16),
+            SizedBox(width: 6),
+            Text('Ringkasan Akun',
+                style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.textPrimary)),
+          ]),
+          const Divider(height: 16),
+          _summaryRow('Username',
+              '@${_usernameCtrl.text.trim().toLowerCase()}'),
+          const SizedBox(height: 8),
+          _summaryRow('Nama Tampilan', _displayNameCtrl.text.trim()),
+          const SizedBox(height: 8),
+          _summaryRow('Role', 'Admin'),
+          const SizedBox(height: 8),
+          _summaryRow('PIN', '••••••'),
+        ]),
+      ),
+    ]);
+  }
+
+  Widget _summaryRow(String label, String value) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Text(label,
+            style: const TextStyle(
+                fontSize: 13, color: AppColors.textSecondary)),
+        Text(value,
+            style: const TextStyle(
+                fontSize: 13, fontWeight: FontWeight.w700)),
+      ],
+    );
+  }
+
+  // ─── Helpers ───────────────────────────────────────────────────────────────
+
+  Widget _stepHeader(IconData icon, String title, String subtitle) {
+    return Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Container(
+        padding: const EdgeInsets.all(10),
+        decoration: BoxDecoration(
+          color: AppColors.primary.withOpacity(0.1),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Icon(icon, color: AppColors.primary, size: 24),
+      ),
+      const SizedBox(width: 14),
+      Expanded(
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text(title,
+              style: const TextStyle(
+                  fontSize: 18, fontWeight: FontWeight.w800)),
+          const SizedBox(height: 4),
+          Text(subtitle,
+              style: const TextStyle(
+                  fontSize: 13,
+                  color: AppColors.textSecondary,
+                  height: 1.4)),
+        ]),
+      ),
+    ]);
+  }
+
+  Widget _fieldLabel(String label, {bool required = false}) {
+    return Row(children: [
+      Text(label,
+          style: const TextStyle(
+              fontSize: 13, fontWeight: FontWeight.w700)),
+      if (required)
+        const Text(' *',
+            style: TextStyle(color: AppColors.danger, fontSize: 13)),
+    ]);
+  }
+
+  // ─── Actions ───────────────────────────────────────────────────────────────
+
   Widget _buildActions() {
     return Row(children: [
-      if (_step > 0)
+      if (_step > 0) ...[
         Expanded(
-          child: OutlinedButton(
+          child: OutlinedButton.icon(
             onPressed: _saving ? null : _back,
+            icon: const Icon(Icons.arrow_back_rounded, size: 16),
+            label: const Text('Kembali'),
             style: OutlinedButton.styleFrom(
               padding: const EdgeInsets.symmetric(vertical: 14),
+              foregroundColor: AppColors.primary,
+              side: const BorderSide(color: AppColors.primary),
               shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12)),
+                  borderRadius: BorderRadius.circular(14)),
             ),
-            child: const Text('Kembali'),
           ),
         ),
-      if (_step > 0) const SizedBox(width: 12),
+        const SizedBox(width: 12),
+      ],
       Expanded(
         flex: 2,
         child: ElevatedButton(
-          onPressed: (_saving || (_step == 2 || _step == 3)) ? null : _next,
-          onLongPress: (_step == 2 || _step == 3) ? null : null,
+          onPressed: _saving ? null : _next,
           style: ElevatedButton.styleFrom(
             backgroundColor: AppColors.primary,
             foregroundColor: Colors.white,
             padding: const EdgeInsets.symmetric(vertical: 14),
+            elevation: 0,
             shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12)),
+                borderRadius: BorderRadius.circular(14)),
           ),
           child: _saving
               ? const SizedBox(
                   width: 20, height: 20,
                   child: CircularProgressIndicator(
-                      color: Colors.white, strokeWidth: 2))
-              : Text(
-                  _step == 0 ? 'Mulai Setup' :
-                  _step == 1 ? 'Lanjut ke PIN' : 'Simpan',
-                  style: const TextStyle(fontWeight: FontWeight.w700)),
+                      color: Colors.white, strokeWidth: 2.5))
+              : Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Text(
+                      _step == 0 ? 'Mulai Setup' :
+                      _step == 1 ? 'Lanjut ke PIN' :
+                      _step == 2 ? 'Lanjut' : 'Buat Akun Admin',
+                      style: const TextStyle(
+                          fontWeight: FontWeight.w700, fontSize: 15),
+                    ),
+                    const SizedBox(width: 6),
+                    Icon(
+                      _step == 3
+                          ? Icons.check_rounded
+                          : Icons.arrow_forward_rounded,
+                      size: 18,
+                    ),
+                  ],
+                ),
         ),
       ),
     ]);
