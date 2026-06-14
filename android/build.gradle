@@ -6,7 +6,6 @@ buildscript {
     }
 
     dependencies {
-        // Menggunakan AGP 8.3.2 sesuai dengan konfigurasi Gradle Wrapper 8.6 Anda
         classpath 'com.android.tools.build:gradle:8.3.2'
         classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:$kotlin_version"
     }
@@ -31,16 +30,14 @@ tasks.register("clean", Delete) {
     delete rootProject.buildDir
 }
 
-// --- BLOK KODE WAJIB: MENGATASI ERROR LSTAR ---
-// Script ini akan memaksa package 'printing' dan semua plugin Flutter lainnya 
-// untuk dikompilasi menggunakan SDK 34 agar mengenali atribut Material3.
+// --- BLOK KODE WAJIB: MENGATASI ERROR LSTAR DENGAN CARA AMAN ---
+// Mengganti afterEvaluate dengan plugins.withId agar terhindar 
+// dari error "project is already evaluated".
 subprojects {
-    afterEvaluate { project ->
-        if (project.hasProperty('android')) {
-            project.android {
-                compileSdkVersion 34
-                buildToolsVersion "34.0.0"
-            }
+    project.plugins.withId("com.android.library") {
+        android {
+            compileSdkVersion 34
+            buildToolsVersion "34.0.0"
         }
     }
 }
