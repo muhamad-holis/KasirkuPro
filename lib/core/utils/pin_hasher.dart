@@ -129,3 +129,32 @@ class VerifyResult {
 
   const VerifyResult({required this.match, this.needsUpgrade = false});
 }
+
+// ─── Helper untuk dijalankan di isolate terpisah via compute() ────────────────
+//
+// PBKDF2 100.000 iterasi (pure-Dart, via pointycastle) cukup berat secara CPU
+// dan jika dijalankan langsung di main thread akan membuat UI freeze sesaat
+// (terasa seperti "buffering") saat user menekan tombol Masuk / Simpan PIN.
+// Dengan compute(), komputasi ini dipindah ke isolate terpisah sehingga UI
+// tetap responsif (misal menampilkan loading indicator).
+
+/// Argumen untuk verifikasi PIN di isolate terpisah.
+class PinVerifyArgs {
+  final String pin;
+  final String storedHash;
+  const PinVerifyArgs(this.pin, this.storedHash);
+}
+
+/// Top-level function — wajib top-level/static agar bisa dipakai dengan compute().
+/// Panggil dengan: `await compute(verifyPinIsolate, PinVerifyArgs(pin, storedHash))`
+VerifyResult verifyPinIsolate(PinVerifyArgs args) =>
+    PinHasher.verifyPin(args.pin, args.storedHash);
+
+/// Argumen untuk hashing PIN baru di isolate terpisah.
+class PinHashArgs {
+  final String pin;
+  const PinHashArgs(this.pin);
+}
+
+/// Panggil dengan: `await compute(hashPinIsolate, PinHashArgs(pin))`
+String hashPinIsolate(PinHashArgs args) => PinHasher.hashPin(args.pin);

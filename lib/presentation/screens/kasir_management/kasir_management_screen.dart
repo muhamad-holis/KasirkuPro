@@ -389,11 +389,12 @@ class _AddEditSheetState extends ConsumerState<_AddEditSheet> {
           actorId: actorId,
         );
       } else {
+        final hashedPin = await compute(hashPinIsolate, PinHashArgs(_pin));
         await db.usersDao.insertUser(
           UsersCompanion.insert(
             username:    username,
             displayName: displayName,
-            pin:         PinHasher.hashPin(_pin),
+            pin:         hashedPin,
             role:        Value(_role),
           ),
           actorId: actorId,
@@ -597,9 +598,10 @@ class _ResetPinSheetState extends ConsumerState<_ResetPinSheet> {
     setState(() => _saving = true);
     try {
       final actorId = ref.read(authProvider)!.id;
+      final hashedPin = await compute(hashPinIsolate, PinHashArgs(_pin));
       await ref.read(databaseProvider).usersDao.adminResetPin(
         widget.user.id,
-        PinHasher.hashPin(_pin),
+        hashedPin,
         actorId: actorId,
       );
       if (mounted) {

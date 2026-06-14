@@ -123,10 +123,11 @@ class _SetupWizardScreenState extends ConsumerState<SetupWizardScreen>
     setState(() { _saving = true; _error = null; });
     try {
       final db = ref.read(databaseProvider);
+      final hashedPin = await compute(hashPinIsolate, PinHashArgs(_pinCtrl.text.trim()));
       await db.usersDao.insertFirstAdmin(UsersCompanion.insert(
         username:    _usernameCtrl.text.trim().toLowerCase(),
         displayName: _displayNameCtrl.text.trim(),
-        pin:         PinHasher.hashPin(_pinCtrl.text.trim()),
+        pin:         hashedPin,
         role:        const Value('admin'),
       ));
       if (!mounted) return;

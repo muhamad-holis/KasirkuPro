@@ -74,9 +74,10 @@ class _ChangePinScreenState extends ConsumerState<ChangePinScreen> {
       final db   = ref.read(databaseProvider);
 
       // Update PIN + hapus flag mustChangePin
+      final hashedPin = await compute(hashPinIsolate, PinHashArgs(_pin));
       await (db.update(db.users)..where((u) => u.id.equals(user.id))).write(
         UsersCompanion(
-          pin: Value(PinHasher.hashPin(_pin)),
+          pin: Value(hashedPin),
           mustChangePin: const Value(false),
           // Reset failed attempts juga
           failedAttempts: const Value(0),

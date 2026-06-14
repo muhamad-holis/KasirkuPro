@@ -176,7 +176,10 @@ class UsersDao extends DatabaseAccessor<AppDatabase> with _$UsersDaoMixin {
           'Akun terkunci. Coba lagi dalam $sisaMenit menit.');
     }
 
-    final verify = PinHasher.verifyPin(pin, user.pin);
+    // PBKDF2 (100.000 iterasi) cukup berat secara CPU — jalankan di isolate
+    // terpisah lewat compute() agar UI tidak freeze/terasa "buffering"
+    // saat tombol Masuk ditekan.
+    final verify = await compute(verifyPinIsolate, PinVerifyArgs(pin, user.pin));
 
     if (!verify.match) {
       final attempts = user.failedAttempts + 1;
@@ -201,7 +204,7 @@ class UsersDao extends DatabaseAccessor<AppDatabase> with _$UsersDaoMixin {
         failedAttempts: const Value(0),
         lockedUntil:    const Value(null),
         pin: verify.needsUpgrade
-            ? Value(PinHasher.hashPin(pin))
+            ? Value(await compute(hashPinIsolate, PinHashArgs(pin)))
             : const Value.absent(),
       ),
     );
