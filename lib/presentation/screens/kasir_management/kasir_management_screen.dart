@@ -8,6 +8,7 @@
 // - Username field untuk membedakan user dengan nama sama
 
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show compute;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:drift/drift.dart' hide Column;
 

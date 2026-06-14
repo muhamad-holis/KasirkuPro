@@ -5,6 +5,7 @@
 // Tidak ada tombol "Lewati".
 
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show compute;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:drift/drift.dart' hide Column;
 import '../../../core/theme/app_theme.dart';
