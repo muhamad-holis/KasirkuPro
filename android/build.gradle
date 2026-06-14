@@ -13,6 +13,28 @@ subprojects {
     project.evaluationDependsOn(":app")
 }
 
+// ============================================================
+// FIX: android:attr/lStar not found
+//
+// Plugin "printing" (dan plugin lain) dikompilasi sebagai
+// Gradle subproject TERPISAH dengan compileSdk mereka sendiri.
+// Attribute lStar butuh API 31+, sedangkan beberapa plugin
+// masih pakai compileSdkVersion lama (30 atau lebih rendah).
+//
+// Solusi: setelah tiap plugin subproject selesai dievaluasi,
+// paksa compileSdkVersion ke 35 agar AAPT punya akses ke
+// semua framework attributes termasuk lStar.
+// ============================================================
+subprojects {
+    afterEvaluate { project ->
+        if (project.hasProperty('android')) {
+            project.android {
+                compileSdkVersion 35
+            }
+        }
+    }
+}
+
 tasks.register("clean", Delete) {
     delete rootProject.buildDir
 }
