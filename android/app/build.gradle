@@ -7,7 +7,6 @@ plugins {
 android {
     namespace "com.kasirku.app"
     compileSdk 35
-    buildToolsVersion "35.0.0"
 
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_17
@@ -38,30 +37,6 @@ android {
             shrinkResources false
         }
     }
-
-    // AAPT Options dikembalikan ke standar normal karena masalah lStar
-    // sudah diatasi melalui penyesuaian compileSdk dan dependensi AndroidX
-    aaptOptions {
-        noCompress "tflite"
-    }
-
-    lintOptions {
-        disable 'InvalidPackage'
-        checkReleaseBuilds false
-        abortOnError false
-    }
-
-    packagingOptions {
-        resources {
-            excludes += [
-                'META-INF/DEPENDENCIES',
-                'META-INF/LICENSE',
-                'META-INF/LICENSE.txt',
-                'META-INF/NOTICE',
-                'META-INF/NOTICE.txt',
-            ]
-        }
-    }
 }
 
 flutter {
@@ -71,8 +46,4 @@ flutter {
 dependencies {
     implementation "org.jetbrains.kotlin:kotlin-stdlib-jdk8:1.9.10"
     implementation 'androidx.multidex:multidex:2.0.1'
-    
-    // Core AndroidX dependencies - required for SDK 35 compatibility
-    implementation 'androidx.core:core-ktx:1.15.0'
-    implementation 'androidx.appcompat:appcompat:1.7.0'
 }
