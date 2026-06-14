@@ -56,7 +56,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase() : super(_openConnection());
 
   @override
-  int get schemaVersion => 4;
+  int get schemaVersion => 5;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -120,6 +120,19 @@ class AppDatabase extends _$AppDatabase {
           "created_at INTEGER NOT NULL DEFAULT (strftime('%s','now') * 1000)"
           ")"
         );
+      }
+      if (from < 5) {
+        // Fix cash_flows: pastikan kolom type dan category ada
+        try {
+          await customStatement(
+            "ALTER TABLE cash_flows ADD COLUMN type TEXT NOT NULL DEFAULT 'income'"
+          );
+        } catch (_) {}
+        try {
+          await customStatement(
+            "ALTER TABLE cash_flows ADD COLUMN category TEXT NOT NULL DEFAULT 'Lainnya'"
+          );
+        } catch (_) {}
       }
     },
     beforeOpen: (details) async {

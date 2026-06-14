@@ -10,6 +10,7 @@ import 'package:print_bluetooth_thermal/print_bluetooth_thermal.dart';
 import 'package:esc_pos_utils_plus/esc_pos_utils_plus.dart';
 import 'package:image/image.dart' as img;
 import 'package:intl/intl.dart';
+import 'package:intl/date_symbol_data_local.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import '../../../core/utils/sound_service.dart';
 import '../../../core/theme/app_theme.dart';
@@ -2308,6 +2309,7 @@ class _SuccessDialogState extends ConsumerState<_SuccessDialog> {
   }
 
   Future<Uint8List> _buildPdf(String storeName, String storeAddress) async {
+    await initializeDateFormatting('id', null);
     final doc = pw.Document();
     final now = DateTime.now();
     final dateStr = DateFormat('dd MMMM yyyy, HH:mm', 'id').format(now);
