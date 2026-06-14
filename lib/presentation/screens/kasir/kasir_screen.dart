@@ -5,12 +5,13 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:drift/drift.dart' show Value;
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
-import 'package:printing/printing.dart';
+import 'dart:io';
+import 'package:path_provider/path_provider.dart';
+import 'package:share_plus/share_plus.dart';
 import 'package:print_bluetooth_thermal/print_bluetooth_thermal.dart';
 import 'package:esc_pos_utils_plus/esc_pos_utils_plus.dart';
 import 'package:image/image.dart' as img;
 import 'package:intl/intl.dart';
-import 'package:intl/date_symbol_data_local.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import '../../../core/utils/sound_service.dart';
 import '../../../core/theme/app_theme.dart';
@@ -2293,10 +2294,10 @@ class _SuccessDialogState extends ConsumerState<_SuccessDialog> {
       final storeAddress = settings.storeAddress ?? '';
 
       final pdfBytes = await _buildPdf(storeName, storeAddress);
-      await Printing.sharePdf(
-        bytes: pdfBytes,
-        filename: '${widget.invoiceNumber}.pdf',
-      );
+      final dir = await getTemporaryDirectory();
+      final file = File('${dir.path}/${widget.invoiceNumber}.pdf');
+      await file.writeAsBytes(pdfBytes);
+      await Share.shareXFiles([XFile(file.path)], text: 'Struk ${widget.invoiceNumber}');
     } catch (e) {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -2309,7 +2310,6 @@ class _SuccessDialogState extends ConsumerState<_SuccessDialog> {
   }
 
   Future<Uint8List> _buildPdf(String storeName, String storeAddress) async {
-    await initializeDateFormatting('id', null);
     final doc = pw.Document();
     final now = DateTime.now();
     final dateStr = DateFormat('dd MMMM yyyy, HH:mm', 'id').format(now);
