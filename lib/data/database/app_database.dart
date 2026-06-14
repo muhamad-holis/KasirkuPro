@@ -161,6 +161,8 @@ class AppDatabase extends _$AppDatabase {
       await delete(debts).go();
       await delete(stockMovements).go();
       await delete(syncQueue).go();
+      await delete(cashFlows).go();
+      await delete(auditLogs).go();
       await (update(products)).write(const ProductsCompanion(stock: Value(0)));
       await (update(customers)).write(const CustomersCompanion(points: Value(0)));
     });

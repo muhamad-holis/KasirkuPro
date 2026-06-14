@@ -1,5 +1,9 @@
+import 'dart:convert';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../../data/database/app_database.dart';
+
+const _kDraftKey = 'kasir_draft';
 
 class CartItem {
   final Product product;
@@ -24,6 +28,7 @@ class KasirState {
   final String paymentMethod;
   final double amountPaid;
   final String notes;
+  final int redeemPoints; // poin yang akan ditukar jadi diskon
 
   const KasirState({
     this.items = const [],
@@ -32,11 +37,14 @@ class KasirState {
     this.paymentMethod = 'tunai',
     this.amountPaid = 0,
     this.notes = '',
+    this.redeemPoints = 0,
   });
 
   double get subtotal => items.fold(0, (s, i) => s + i.subtotal);
   double get taxAmount => subtotal * (taxPercent / 100);
-  double get total => subtotal - discountTotal + taxAmount;
+  // 1 poin = Rp 100 diskon
+  double get pointDiscount => redeemPoints * 100;
+  double get total => subtotal - discountTotal - pointDiscount + taxAmount;
   double get change => amountPaid - total;
   bool get isEmpty => items.isEmpty;
   int get totalItems => items.fold(0, (s, i) => s + i.quantity);
@@ -48,6 +56,7 @@ class KasirState {
     String? paymentMethod,
     double? amountPaid,
     String? notes,
+    int? redeemPoints,
   }) => KasirState(
     items: items ?? this.items,
     discountTotal: discountTotal ?? this.discountTotal,
@@ -55,6 +64,7 @@ class KasirState {
     paymentMethod: paymentMethod ?? this.paymentMethod,
     amountPaid: amountPaid ?? this.amountPaid,
     notes: notes ?? this.notes,
+    redeemPoints: redeemPoints ?? this.redeemPoints,
   );
 }
 
@@ -100,7 +110,99 @@ class KasirNotifier extends StateNotifier<KasirState> {
   void setPaymentMethod(String v) => state = state.copyWith(paymentMethod: v);
   void setAmountPaid(double v)    => state = state.copyWith(amountPaid: v);
   void setNotes(String v)         => state = state.copyWith(notes: v);
+  void setRedeemPoints(int v)     => state = state.copyWith(redeemPoints: v);
   void clear() => state = const KasirState();
+
+  // ── Draft ───────────────────────────────────────────────────────────────────
+  Future<void> saveDraft() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final items = state.items.map((i) => {
+        'productId': i.product.id,
+        'productName': i.product.name,
+        'sellPrice': i.product.sellPrice,
+        'unit': i.product.unit,
+        'stock': i.product.stock,
+        'minStock': i.product.minStock,
+        'quantity': i.quantity,
+        'discount': i.discount,
+      }).toList();
+      final draft = {
+        'items': items,
+        'discountTotal': state.discountTotal,
+        'taxPercent': state.taxPercent,
+        'notes': state.notes,
+        'savedAt': DateTime.now().millisecondsSinceEpoch,
+      };
+      await prefs.setString(_kDraftKey, jsonEncode(draft));
+    } catch (_) {}
+  }
+
+  Future<bool> hasDraft() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      return prefs.containsKey(_kDraftKey);
+    } catch (_) {
+      return false;
+    }
+  }
+
+  Future<DateTime?> getDraftTime() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final raw = prefs.getString(_kDraftKey);
+      if (raw == null) return null;
+      final data = jsonDecode(raw) as Map<String, dynamic>;
+      final ts = data['savedAt'] as int?;
+      if (ts == null) return null;
+      return DateTime.fromMillisecondsSinceEpoch(ts);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<void> loadDraft() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final raw = prefs.getString(_kDraftKey);
+      if (raw == null) return;
+      final data = jsonDecode(raw) as Map<String, dynamic>;
+      final items = (data['items'] as List).map((e) {
+        final p = Product(
+          id: e['productId'],
+          name: e['productName'],
+          sellPrice: (e['sellPrice'] as num).toDouble(),
+          unit: e['unit'] ?? 'pcs',
+          stock: e['stock'] ?? 0,
+          minStock: e['minStock'] ?? 5,
+          categoryId: 0,
+          buyPrice: 0,
+          isActive: true,
+          createdAt: DateTime.now(),
+          updatedAt: DateTime.now(),
+        );
+        return CartItem(
+          product: p,
+          quantity: e['quantity'],
+          discount: (e['discount'] as num).toDouble(),
+        );
+      }).toList();
+      state = KasirState(
+        items: items,
+        discountTotal: (data['discountTotal'] as num).toDouble(),
+        taxPercent: (data['taxPercent'] as num).toDouble(),
+        notes: data['notes'] ?? '',
+      );
+      await clearDraft();
+    } catch (_) {}
+  }
+
+  Future<void> clearDraft() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove(_kDraftKey);
+    } catch (_) {}
+  }
 }
 
 final kasirProvider =

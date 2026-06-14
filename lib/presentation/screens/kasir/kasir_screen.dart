@@ -12,6 +12,7 @@ import 'package:print_bluetooth_thermal/print_bluetooth_thermal.dart';
 import 'package:esc_pos_utils_plus/esc_pos_utils_plus.dart';
 import 'package:image/image.dart' as img;
 import 'package:intl/intl.dart';
+import 'package:intl/date_symbol_data_local.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import '../../../core/utils/sound_service.dart';
 import '../../../core/theme/app_theme.dart';
@@ -24,11 +25,94 @@ import '../../providers/auth_provider.dart';
 import '../../../data/database/app_database.dart';
 import '../dashboard/dashboard_screen.dart' show dashboardStatsProvider;
 
-class KasirScreen extends ConsumerWidget {
+class KasirScreen extends ConsumerStatefulWidget {
   const KasirScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<KasirScreen> createState() => _KasirScreenState();
+}
+
+class _KasirScreenState extends ConsumerState<KasirScreen> {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (!mounted) return;
+      // Cek draft tersimpan
+      final notifier = ref.read(kasirProvider.notifier);
+      final has = await notifier.hasDraft();
+      if (has && mounted) {
+        final draftTime = await notifier.getDraftTime();
+        final timeStr = draftTime != null
+            ? DateFormat('HH:mm, dd MMM').format(draftTime)
+            : '';
+        if (!mounted) return;
+        final load = await showDialog<bool>(
+          context: context,
+          builder: (_) => AlertDialog(
+            title: const Text('Ada Draft Tersimpan'),
+            content: Text('Draft transaksi dari $timeStr ditemukan. Lanjutkan?'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context, false),
+                child: const Text('Mulai Baru')),
+              ElevatedButton(
+                onPressed: () => Navigator.pop(context, true),
+                child: const Text('Lanjutkan')),
+            ],
+          ),
+        );
+        if (load == true) {
+          await notifier.loadDraft();
+        } else {
+          await notifier.clearDraft();
+        }
+      }
+      // Auto buka scanner
+      if (mounted) _openScanner();
+    });
+  }
+
+  void _openScanner() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => ProviderScope(
+        parent: ProviderScope.containerOf(context),
+        child: _BarcodeScannerSheet(
+          onDetected: (code) async {
+            final db = ref.read(databaseProvider);
+            final product = await db.productsDao.getByBarcode(code);
+            if (!mounted) return;
+            if (product != null) {
+              ref.read(kasirProvider.notifier).addProduct(product);
+              HapticFeedback.mediumImpact();
+              await SoundService.instance.beepScan();
+            } else {
+              await SoundService.instance.beepError();
+              if (!mounted) return;
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Row(children: [
+                    const Icon(Icons.warning_amber_rounded,
+                        color: Colors.white, size: 18),
+                    const SizedBox(width: 8),
+                    Text('Barcode "\$code" tidak ditemukan di produk'),
+                  ]),
+                  backgroundColor: AppColors.warning,
+                  duration: const Duration(seconds: 2),
+                ),
+              );
+            }
+          },
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final cart = ref.watch(kasirProvider);
 
     return Scaffold(
@@ -42,21 +126,367 @@ class KasirScreen extends ConsumerWidget {
                 color: Colors.white70, size: 18),
               label: const Text('Hapus',
                 style: TextStyle(color: Colors.white70, fontSize: 13)),
-              onPressed: () => _confirmClear(context, ref),
+              onPressed: () => _confirmClear(context),
             ),
         ],
       ),
       body: Column(
         children: [
-          _SearchBar(),
+          _SearchBar(onFocused: _onSearchFocused),
           _ProductResults(),
-          if (!cart.isEmpty) ...[
-            const Divider(height: 1),
-            _CartHeader(cart: cart),
-            Expanded(child: _CartList(cart: cart)),
-            _CheckoutPanel(cart: cart),
-          ] else
+          if (!cart.isEmpty)
+            Expanded(
+              child: _KasirBody(cart: cart),
+            )
+          else
             const Expanded(child: _EmptyCart()),
+        ],
+      ),
+    );
+  }
+
+  // Dipanggil saat search bar difokus → tutup scanner
+  void _onSearchFocused() {
+    Navigator.of(context).popUntil((route) {
+      return route.isFirst || !(route.settings.name == null);
+    });
+    // Tutup bottom sheet scanner jika terbuka
+    if (Navigator.of(context).canPop()) {
+      Navigator.of(context).pop();
+    }
+  }
+
+  void _confirmClear(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('Hapus Keranjang?'),
+        content: const Text('Semua item akan dihapus dari keranjang.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Batal')),
+          ElevatedButton(
+            onPressed: () {
+              ref.read(kasirProvider.notifier).clear();
+              Navigator.pop(context);
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.danger),
+            child: const Text('Hapus')),
+        ],
+      ),
+    );
+  }
+}
+
+// ─── Kasir Body (scroll: keranjang + ringkasan + bayar) ───────────────────────
+
+class _KasirBody extends ConsumerWidget {
+  final KasirState cart;
+  const _KasirBody({required this.cart});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final bgColor = isDark ? AppColors.darkBackground : const Color(0xFFF5F7FA);
+
+    return Container(
+      color: bgColor,
+      child: CustomScrollView(
+        slivers: [
+          // ── Header keranjang ──────────────────────────────────────────────
+          SliverToBoxAdapter(
+            child: Container(
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+              color: Theme.of(context).cardColor,
+              child: Row(
+                children: [
+                  Icon(Icons.shopping_cart_outlined,
+                    size: 16, color: AppColors.primary),
+                  const SizedBox(width: 6),
+                  Text('Keranjang (${cart.totalItems})',
+                    style: const TextStyle(
+                      fontSize: 14, fontWeight: FontWeight.w700)),
+                  const Spacer(),
+                  TextButton.icon(
+                    icon: const Icon(Icons.delete_outline,
+                      size: 14, color: AppColors.danger),
+                    label: const Text('Bersihkan',
+                      style: TextStyle(
+                        fontSize: 12, color: AppColors.danger)),
+                    onPressed: () => _confirmClear(context, ref),
+                    style: TextButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8, vertical: 4),
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+
+          // ── Daftar item keranjang ─────────────────────────────────────────
+          SliverPadding(
+            padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+            sliver: SliverList(
+              delegate: SliverChildBuilderDelegate(
+                (context, i) {
+                  final item = cart.items[i];
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: Dismissible(
+                      key: ValueKey(item.product.id),
+                      direction: DismissDirection.endToStart,
+                      background: Container(
+                        alignment: Alignment.centerRight,
+                        padding: const EdgeInsets.only(right: 16),
+                        decoration: BoxDecoration(
+                          color: AppColors.danger.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                        child: const Icon(Icons.delete_outline,
+                          color: AppColors.danger),
+                      ),
+                      onDismissed: (_) {
+                        ref.read(kasirProvider.notifier)
+                            .removeProduct(item.product.id);
+                        HapticFeedback.mediumImpact();
+                      },
+                      child: Card(
+                        margin: EdgeInsets.zero,
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12, vertical: 10),
+                          child: Row(children: [
+                            Container(
+                              width: 44,
+                              height: 44,
+                              decoration: BoxDecoration(
+                                color: AppColors.primaryLight,
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              child: const Icon(Icons.inventory_2_outlined,
+                                size: 22, color: AppColors.primary),
+                            ),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(item.product.name,
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.w600,
+                                      fontSize: 13),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    CurrencyFormatter.format(item.product.sellPrice),
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      color: Colors.grey.shade500),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            // Qty + harga kanan
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.end,
+                              children: [
+                                Row(children: [
+                                  _QtyBtn(
+                                    icon: Icons.remove,
+                                    onTap: () {
+                                      ref.read(kasirProvider.notifier)
+                                          .updateQuantity(item.product.id,
+                                              item.quantity - 1);
+                                      HapticFeedback.lightImpact();
+                                    },
+                                  ),
+                                  GestureDetector(
+                                    onTap: () => _editQty(context, ref, item),
+                                    child: SizedBox(
+                                      width: 32,
+                                      child: Text('${item.quantity}',
+                                        textAlign: TextAlign.center,
+                                        style: const TextStyle(
+                                          fontWeight: FontWeight.w700,
+                                          fontSize: 15)),
+                                    ),
+                                  ),
+                                  _QtyBtn(
+                                    icon: Icons.add,
+                                    onTap: () {
+                                      ref.read(kasirProvider.notifier)
+                                          .updateQuantity(item.product.id,
+                                              item.quantity + 1);
+                                      HapticFeedback.lightImpact();
+                                    },
+                                  ),
+                                ]),
+                                const SizedBox(height: 2),
+                                Text(
+                                  CurrencyFormatter.format(item.subtotal),
+                                  style: const TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w700,
+                                    color: AppColors.primary),
+                                ),
+                              ],
+                            ),
+                          ]),
+                        ),
+                      ),
+                    ),
+                  );
+                },
+                childCount: cart.items.length,
+              ),
+            ),
+          ),
+
+          // ── Ringkasan Pembayaran ──────────────────────────────────────────
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+              child: Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text('Ringkasan Pembayaran',
+                        style: TextStyle(
+                          fontSize: 14, fontWeight: FontWeight.w700)),
+                      const SizedBox(height: 12),
+                      _SummaryRow(
+                        label: 'Subtotal',
+                        value: CurrencyFormatter.format(cart.subtotal)),
+                      if (cart.discountTotal > 0) ...[
+                        const SizedBox(height: 6),
+                        _SummaryRow(
+                          label: 'Diskon',
+                          value: '- ${CurrencyFormatter.format(cart.discountTotal)}',
+                          valueColor: AppColors.danger),
+                      ],
+                      if (cart.taxAmount > 0) ...[
+                        const SizedBox(height: 6),
+                        _SummaryRow(
+                          label: 'Pajak (${cart.taxPercent.toStringAsFixed(0)}%)',
+                          value: '+ ${CurrencyFormatter.format(cart.taxAmount)}',
+                          valueColor: AppColors.warning),
+                      ],
+                      if (cart.redeemPoints > 0) ...[
+                        const SizedBox(height: 6),
+                        _SummaryRow(
+                          label: 'Diskon Poin',
+                          value: '- ${CurrencyFormatter.format(cart.pointDiscount)}',
+                          valueColor: AppColors.primary),
+                      ],
+                      const Divider(height: 16),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          const Text('Total',
+                            style: TextStyle(
+                              fontSize: 15, fontWeight: FontWeight.w700)),
+                          Text(CurrencyFormatter.format(cart.total),
+                            style: const TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.w800,
+                              color: AppColors.primary)),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+
+          // ── Tombol Diskon, Pajak ──────────────────────────────────────────
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+              child: Row(children: [
+                Expanded(
+                  child: OutlinedButton.icon(
+                    icon: const Icon(Icons.local_offer_outlined, size: 16),
+                    label: Text(
+                      cart.discountTotal > 0
+                          ? 'Diskon ${CurrencyFormatter.format(cart.discountTotal)}'
+                          : 'Tambah Diskon',
+                      style: const TextStyle(fontSize: 12)),
+                    onPressed: () => _showDiscount(context, ref),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: cart.discountTotal > 0
+                          ? AppColors.danger : null,
+                      side: cart.discountTotal > 0
+                          ? const BorderSide(color: AppColors.danger) : null,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: OutlinedButton.icon(
+                    icon: const Icon(Icons.percent_outlined, size: 16),
+                    label: Text(
+                      cart.taxPercent > 0
+                          ? 'Pajak ${cart.taxPercent.toStringAsFixed(0)}%'
+                          : 'Tambah Pajak',
+                      style: const TextStyle(fontSize: 12)),
+                    onPressed: () => _showTax(context, ref),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: cart.taxPercent > 0
+                          ? AppColors.warning : null,
+                      side: cart.taxPercent > 0
+                          ? const BorderSide(color: AppColors.warning) : null,
+                    ),
+                  ),
+                ),
+              ]),
+            ),
+          ),
+
+          // ── Tombol Simpan Draft + Bayar ───────────────────────────────────
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(12, 8, 12, 16),
+              child: Row(children: [
+                // Simpan Draft
+                OutlinedButton.icon(
+                  icon: const Icon(Icons.save_outlined, size: 18),
+                  label: const Text('Simpan Draft'),
+                  onPressed: () => _saveDraft(context, ref),
+                  style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16, vertical: 14),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                // Bayar
+                Expanded(
+                  child: ElevatedButton.icon(
+                    icon: const Icon(Icons.payment, size: 18),
+                    label: Text(
+                      'Bayar  ${CurrencyFormatter.format(cart.total)}  →',
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w700, fontSize: 14)),
+                    onPressed: () => _showPayment(context, ref),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.success,
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                    ),
+                  ),
+                ),
+              ]),
+            ),
+          ),
+
+          const SliverToBoxAdapter(child: SizedBox(height: 8)),
         ],
       ),
     );
@@ -84,6 +514,204 @@ class KasirScreen extends ConsumerWidget {
       ),
     );
   }
+
+  void _editQty(BuildContext context, WidgetRef ref, CartItem item) {
+    final ctrl = TextEditingController(text: '${item.quantity}');
+    showDialog(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: Text(item.product.name,
+          style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
+        content: TextField(
+          controller: ctrl,
+          keyboardType: TextInputType.number,
+          autofocus: true,
+          decoration: InputDecoration(
+            labelText: 'Jumlah',
+            suffixText: item.product.unit,
+            helperText: 'Stok tersedia: ${item.product.stock}',
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Batal')),
+          ElevatedButton(
+            onPressed: () {
+              final qty = int.tryParse(ctrl.text) ?? 1;
+              ref.read(kasirProvider.notifier)
+                  .updateQuantity(item.product.id, qty);
+              Navigator.pop(context);
+            },
+            child: const Text('OK')),
+        ],
+      ),
+    );
+  }
+
+  void _showDiscount(BuildContext context, WidgetRef ref) {
+    final cart = ref.read(kasirProvider);
+    final ctrl = TextEditingController(
+      text: cart.discountTotal > 0
+          ? cart.discountTotal.toStringAsFixed(0) : '');
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+      builder: (_) => Padding(
+        padding: EdgeInsets.only(
+          bottom: MediaQuery.of(context).viewInsets.bottom + 16,
+          left: 20, right: 20, top: 20),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Center(child: Container(
+              width: 40, height: 4,
+              decoration: BoxDecoration(
+                color: Colors.grey.shade300,
+                borderRadius: BorderRadius.circular(2)))),
+            const SizedBox(height: 16),
+            const Text('Tambah Diskon',
+              style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700)),
+            const SizedBox(height: 16),
+            TextField(
+              controller: ctrl,
+              keyboardType: TextInputType.number,
+              autofocus: true,
+              decoration: const InputDecoration(
+                labelText: 'Nominal Diskon', prefixText: 'Rp ')),
+            const SizedBox(height: 16),
+            Row(children: [
+              Expanded(child: OutlinedButton(
+                onPressed: () {
+                  ref.read(kasirProvider.notifier).setDiscount(0);
+                  Navigator.pop(context);
+                },
+                child: const Text('Hapus Diskon'))),
+              const SizedBox(width: 10),
+              Expanded(child: ElevatedButton(
+                onPressed: () {
+                  final disc = double.tryParse(ctrl.text) ?? 0;
+                  ref.read(kasirProvider.notifier).setDiscount(disc);
+                  Navigator.pop(context);
+                },
+                child: const Text('Terapkan'))),
+            ]),
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showTax(BuildContext context, WidgetRef ref) {
+    final cart = ref.read(kasirProvider);
+    final ctrl = TextEditingController(
+      text: cart.taxPercent > 0 ? cart.taxPercent.toStringAsFixed(0) : '');
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+      builder: (_) => Padding(
+        padding: EdgeInsets.only(
+          bottom: MediaQuery.of(context).viewInsets.bottom + 16,
+          left: 20, right: 20, top: 20),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Center(child: Container(
+              width: 40, height: 4,
+              decoration: BoxDecoration(
+                color: Colors.grey.shade300,
+                borderRadius: BorderRadius.circular(2)))),
+            const SizedBox(height: 16),
+            const Text('Atur Pajak',
+              style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700)),
+            const SizedBox(height: 16),
+            TextField(
+              controller: ctrl,
+              keyboardType: TextInputType.number,
+              autofocus: true,
+              decoration: const InputDecoration(
+                labelText: 'Persentase Pajak', suffixText: '%')),
+            const SizedBox(height: 16),
+            Row(children: [
+              Expanded(child: OutlinedButton(
+                onPressed: () {
+                  ref.read(kasirProvider.notifier).setTax(0);
+                  Navigator.pop(context);
+                },
+                child: const Text('Hapus Pajak'))),
+              const SizedBox(width: 10),
+              Expanded(child: ElevatedButton(
+                onPressed: () {
+                  final tax = double.tryParse(ctrl.text) ?? 0;
+                  ref.read(kasirProvider.notifier).setTax(tax.clamp(0, 100));
+                  Navigator.pop(context);
+                },
+                child: const Text('Terapkan'))),
+            ]),
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showPayment(BuildContext context, WidgetRef ref) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => ProviderScope(
+        parent: ProviderScope.containerOf(context),
+        child: const _PaymentSheet(),
+      ),
+    );
+  }
+
+  Future<void> _saveDraft(BuildContext context, WidgetRef ref) async {
+    await ref.read(kasirProvider.notifier).saveDraft();
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Row(children: [
+            Icon(Icons.check_circle_outline, color: Colors.white, size: 18),
+            SizedBox(width: 8),
+            Text('Draft berhasil disimpan'),
+          ]),
+          backgroundColor: AppColors.success,
+          duration: Duration(seconds: 2),
+        ),
+      );
+    }
+  }
+}
+
+// ─── Summary Row Helper ───────────────────────────────────────────────────────
+
+class _SummaryRow extends StatelessWidget {
+  final String label;
+  final String value;
+  final Color? valueColor;
+  const _SummaryRow({required this.label, required this.value, this.valueColor});
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Text(label, style: TextStyle(fontSize: 13, color: Colors.grey.shade600)),
+        Text(value, style: TextStyle(
+          fontSize: 13,
+          fontWeight: FontWeight.w600,
+          color: valueColor ?? Theme.of(context).textTheme.bodyMedium?.color)),
+      ],
+    );
+  }
 }
 
 // ─── Search Bar ──────────────────────────────────────────────────────────────
@@ -95,10 +723,23 @@ class _SearchBar extends ConsumerStatefulWidget {
 
 class _SearchBarState extends ConsumerState<_SearchBar> {
   final _ctrl = TextEditingController();
+  final _focus = FocusNode();
+
+  @override
+  void initState() {
+    super.initState();
+    _focus.addListener(() {
+      if (_focus.hasFocus) {
+        // Tutup scanner saat user tap search bar
+        widget.onFocused?.call();
+      }
+    });
+  }
 
   @override
   void dispose() {
     _ctrl.dispose();
+    _focus.dispose();
     super.dispose();
   }
 
@@ -152,6 +793,7 @@ class _SearchBarState extends ConsumerState<_SearchBar> {
         Expanded(
           child: TextField(
             controller: _ctrl,
+            focusNode: _focus,
             onChanged: (v) =>
                 ref.read(productSearchProvider.notifier).state = v,
             decoration: const InputDecoration(
@@ -601,44 +1243,7 @@ class _ProductResults extends ConsumerWidget {
   }
 }
 
-// ─── Cart Header ──────────────────────────────────────────────────────────────
-
-class _CartHeader extends StatelessWidget {
-  final KasirState cart;
-  const _CartHeader({required this.cart});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      color: AppColors.primaryLight,
-      child: Row(
-        children: [
-          Icon(Icons.shopping_cart_outlined,
-            size: 16, color: AppColors.primary),
-          const SizedBox(width: 6),
-          Text(
-            '${cart.totalItems} item',
-            style: const TextStyle(
-              fontSize: 13,
-              fontWeight: FontWeight.w600,
-              color: AppColors.primary,
-            ),
-          ),
-          const Spacer(),
-          Text(
-            'Subtotal: ${CurrencyFormatter.format(cart.subtotal)}',
-            style: const TextStyle(
-              fontSize: 13,
-              fontWeight: FontWeight.w600,
-              color: AppColors.primary,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
+// _CartHeader sudah digantikan _KasirBody
 
 // ─── Cart List ────────────────────────────────────────────────────────────────
 
@@ -826,7 +1431,63 @@ class _CheckoutPanel extends ConsumerWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            if (cart.discountTotal > 0 || cart.taxAmount > 0) ...[
+            // Redeem poin pelanggan
+            if (_selectedCustomer != null && _selectedCustomer!.points > 0) ...[
+              const SizedBox(height: 8),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: AppColors.primaryLight,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: AppColors.primary.withOpacity(0.3)),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.stars_rounded, color: AppColors.primary, size: 20),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('Poin: ${_selectedCustomer!.points} poin',
+                            style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+                          Text('1 poin = Rp 100 diskon',
+                            style: TextStyle(fontSize: 11, color: Colors.grey.shade600)),
+                        ],
+                      ),
+                    ),
+                    Row(
+                      children: [
+                        IconButton(
+                          icon: const Icon(Icons.remove_circle_outline),
+                          onPressed: cart.redeemPoints <= 0 ? null : () {
+                            ref.read(kasirProvider.notifier)
+                              .setRedeemPoints(cart.redeemPoints - 1);
+                          },
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(),
+                        ),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 8),
+                          child: Text('${cart.redeemPoints}',
+                            style: const TextStyle(fontWeight: FontWeight.w700)),
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.add_circle_outline),
+                          onPressed: cart.redeemPoints >= _selectedCustomer!.points ? null : () {
+                            ref.read(kasirProvider.notifier)
+                              .setRedeemPoints(cart.redeemPoints + 1);
+                          },
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ],
+            if (cart.discountTotal > 0 || cart.taxAmount > 0 || cart.redeemPoints > 0) ...[
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
@@ -838,6 +1499,19 @@ class _CheckoutPanel extends ConsumerWidget {
                       fontSize: 12, color: Colors.grey.shade500)),
                 ],
               ),
+              if (cart.redeemPoints > 0) ...[
+                const SizedBox(height: 4),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text('Diskon Poin (${cart.redeemPoints} poin)',
+                      style: const TextStyle(fontSize: 13, color: AppColors.primary)),
+                    Text('- ${CurrencyFormatter.format(cart.pointDiscount)}',
+                      style: const TextStyle(fontSize: 13, color: AppColors.primary,
+                        fontWeight: FontWeight.w600)),
+                  ],
+                ),
+              ],
               if (cart.discountTotal > 0) ...[
                 const SizedBox(height: 2),
                 Row(
@@ -1844,7 +2518,9 @@ class _PaymentSheetState extends ConsumerState<_PaymentSheet> {
           await db.transactionsDao.generateInvoiceNumber();
       final amountPaid = _method == 'tunai'
           ? (double.tryParse(_amountCtrl.text) ?? cart.total)
-          : cart.total;
+          : _method == 'hutang'
+              ? 0.0
+              : cart.total;
 
       final tx = TransactionsCompanion.insert(
         invoiceNumber: invoiceNumber,
@@ -1875,6 +2551,18 @@ class _PaymentSheetState extends ConsumerState<_PaymentSheet> {
         kasirId:   ref.read(authProvider)?.id,
         kasirName: ref.read(authProvider)?.name,
       );
+
+      // ── Kurangi poin yang diredeem ─────────────────────────────────────────
+      if (cart.redeemPoints > 0 && _selectedCustomer != null) {
+        final customer = _selectedCustomer!;
+        final newPoints = (customer.points - cart.redeemPoints).clamp(0, customer.points);
+        await db.customersDao.updateCustomer(
+          CustomersCompanion(
+            id: Value(customer.id),
+            points: Value(newPoints),
+          ),
+        );
+      }
 
       // ── Insert ke tabel Debts jika metode hutang ──────────────────────────
       if (_method == 'hutang' && _selectedCustomer != null) {
@@ -2321,6 +3009,7 @@ class _SuccessDialogState extends ConsumerState<_SuccessDialog> {
   }
 
   Future<Uint8List> _buildPdf(String storeName, String storeAddress) async {
+    await initializeDateFormatting('id', null);
     final doc = pw.Document();
     final now = DateTime.now();
     final dateStr = DateFormat('dd MMMM yyyy, HH:mm', 'id').format(now);

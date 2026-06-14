@@ -15,6 +15,7 @@ import 'dart:io';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:intl/intl.dart';
+import 'package:intl/date_symbol_data_local.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/currency.dart';
 import '../../../data/database/app_database.dart';
@@ -216,6 +217,7 @@ class _LaporanScreenState extends ConsumerState<LaporanScreen>
     required Map<String, double> labaData,
     required List<dynamic> lowStockProducts,
   }) async {
+    await initializeDateFormatting('id', null);
     final doc = pw.Document();
     final now = DateTime.now();
     final printDate =

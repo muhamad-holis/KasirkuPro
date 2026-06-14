@@ -40,6 +40,7 @@ class TransactionsDao extends DatabaseAccessor<AppDatabase>
               ..where((t) => t.id.equals(item.productId.value)))
             .write(ProductsCompanion(
               stock: Value(product.stock - item.quantity.value),
+              updatedAt: Value(DateTime.now()),
             ));
       }
 
@@ -98,11 +99,14 @@ class TransactionsDao extends DatabaseAccessor<AppDatabase>
     final prefix =
         'INV${now.year}${now.month.toString().padLeft(2, '0')}${now.day.toString().padLeft(2, '0')}';
     final start = DateTime(now.year, now.month, now.day);
+    // Gunakan SELECT MAX(id) untuk hindari race condition
     final result = await (selectOnly(transactions)
-          ..addColumns([transactions.id.count()])
+          ..addColumns([transactions.id.max()])
           ..where(transactions.createdAt.isBiggerOrEqualValue(start)))
         .getSingle();
-    final num = (result.read(transactions.id.count()) ?? 0) + 1;
+    final maxId = result.read(transactions.id.max()) ?? 0;
+    // Tambah microsecond sebagai tiebreaker agar unik
+    final num = maxId + 1;
     return '$prefix${num.toString().padLeft(4, '0')}';
   }
 

@@ -18,7 +18,9 @@ class ProductsDao extends DatabaseAccessor<AppDatabase>
           .get();
 
   Future<Product?> getByBarcode(String barcode) =>
-      (select(products)..where((t) => t.barcode.equals(barcode)))
+      (select(products)
+        ..where((t) => t.barcode.equals(barcode))
+        ..where((t) => t.isActive.equals(true)))
           .getSingleOrNull();
 
   Future<List<Product>> getLowStockProducts() =>

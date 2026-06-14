@@ -585,7 +585,7 @@ class _KasirFABItem extends StatelessWidget {
                 ],
               ),
               child: const Icon(
-                Icons.point_of_sale_rounded,
+                Icons.qr_code_scanner_rounded,
                 color: Colors.white,
                 size: 26,
               ),
