@@ -189,7 +189,7 @@ class _KasirBody extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final bgColor = isDark ? AppColors.darkBackground : const Color(0xFFF5F7FA);
+    final bgColor = isDark ? AppColors.darkBg : const Color(0xFFF5F7FA);
 
     return Container(
       color: bgColor,
@@ -717,6 +717,9 @@ class _SummaryRow extends StatelessWidget {
 // ─── Search Bar ──────────────────────────────────────────────────────────────
 
 class _SearchBar extends ConsumerStatefulWidget {
+  final VoidCallback? onFocused;
+  const _SearchBar({this.onFocused});
+
   @override
   ConsumerState<_SearchBar> createState() => _SearchBarState();
 }
@@ -1431,62 +1434,7 @@ class _CheckoutPanel extends ConsumerWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            // Redeem poin pelanggan
-            if (_selectedCustomer != null && _selectedCustomer!.points > 0) ...[
-              const SizedBox(height: 8),
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: AppColors.primaryLight,
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: AppColors.primary.withOpacity(0.3)),
-                ),
-                child: Row(
-                  children: [
-                    const Icon(Icons.stars_rounded, color: AppColors.primary, size: 20),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text('Poin: ${_selectedCustomer!.points} poin',
-                            style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
-                          Text('1 poin = Rp 100 diskon',
-                            style: TextStyle(fontSize: 11, color: Colors.grey.shade600)),
-                        ],
-                      ),
-                    ),
-                    Row(
-                      children: [
-                        IconButton(
-                          icon: const Icon(Icons.remove_circle_outline),
-                          onPressed: cart.redeemPoints <= 0 ? null : () {
-                            ref.read(kasirProvider.notifier)
-                              .setRedeemPoints(cart.redeemPoints - 1);
-                          },
-                          padding: EdgeInsets.zero,
-                          constraints: const BoxConstraints(),
-                        ),
-                        Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 8),
-                          child: Text('${cart.redeemPoints}',
-                            style: const TextStyle(fontWeight: FontWeight.w700)),
-                        ),
-                        IconButton(
-                          icon: const Icon(Icons.add_circle_outline),
-                          onPressed: cart.redeemPoints >= _selectedCustomer!.points ? null : () {
-                            ref.read(kasirProvider.notifier)
-                              .setRedeemPoints(cart.redeemPoints + 1);
-                          },
-                          padding: EdgeInsets.zero,
-                          constraints: const BoxConstraints(),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-            ],
+            // Redeem poin - ditampilkan di Payment Sheet
             if (cart.discountTotal > 0 || cart.taxAmount > 0 || cart.redeemPoints > 0) ...[
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
