@@ -21,13 +21,6 @@ android {
         main.java.srcDirs += 'src/main/kotlin'
     }
 
-    configurations.all {
-        resolutionStrategy {
-            force 'androidx.core:core:1.12.0'
-            force 'androidx.core:core-ktx:1.12.0'
-        }
-    }
-
     defaultConfig {
         applicationId "com.kasirku.app"
         minSdkVersion 23
@@ -44,6 +37,32 @@ android {
             shrinkResources false
         }
     }
+
+    configurations.all {
+        resolutionStrategy.eachDependency { DependencyResolveDetails details ->
+            if (details.requested.group == 'androidx.activity') {
+                details.useVersion '1.8.2'
+            }
+            if (details.requested.group == 'androidx.core' && details.requested.name == 'core') {
+                details.useVersion '1.13.1'
+            }
+            if (details.requested.group == 'androidx.core' && details.requested.name == 'core-ktx') {
+                details.useVersion '1.13.1'
+            }
+        }
+    }
+
+    packagingOptions {
+        resources {
+            excludes += [
+                'META-INF/DEPENDENCIES',
+                'META-INF/LICENSE',
+                'META-INF/LICENSE.txt',
+                'META-INF/NOTICE',
+                'META-INF/NOTICE.txt',
+            ]
+        }
+    }
 }
 
 flutter {
@@ -53,6 +72,6 @@ flutter {
 dependencies {
     implementation "org.jetbrains.kotlin:kotlin-stdlib-jdk8:1.9.10"
     implementation 'androidx.multidex:multidex:2.0.1'
-    implementation 'androidx.core:core:1.12.0'
-    implementation 'androidx.core:core-ktx:1.12.0'
+    implementation 'androidx.activity:activity-ktx:1.8.2'
+    implementation 'androidx.core:core-ktx:1.13.1'
 }
