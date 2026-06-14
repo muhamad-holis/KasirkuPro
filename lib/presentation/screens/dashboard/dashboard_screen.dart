@@ -9,6 +9,7 @@ import '../../providers/settings_provider.dart';
 import '../../navigation/app_router.dart';
 import '../../../data/database/app_database.dart';
 import '../notifikasi/notifikasi_screen.dart';
+import '../settings/settings_screen.dart';
 
 // ─── Helpers warna tema ───────────────────────────────────────────────────────
 
@@ -309,7 +310,17 @@ class _Header extends ConsumerWidget {
           ),
           const SizedBox(height: 16),
           // Kartu nama toko
-          Container(
+          GestureDetector(
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => ProviderScope(
+                  parent: ProviderScope.containerOf(context),
+                  child: const SettingsScreen(),
+                ),
+              ),
+            ),
+            child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
             decoration: BoxDecoration(
               color: _card(isDark),
@@ -351,6 +362,7 @@ class _Header extends ConsumerWidget {
               ),
               Icon(Icons.chevron_right, color: _textSub(isDark), size: 20),
             ]),
+          ),
           ),
         ],
       ),

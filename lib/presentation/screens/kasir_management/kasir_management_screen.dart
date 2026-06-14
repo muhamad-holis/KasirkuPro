@@ -321,9 +321,10 @@ class _AddEditSheet extends ConsumerStatefulWidget {
 class _AddEditSheetState extends ConsumerState<_AddEditSheet> {
   final _usernameCtrl    = TextEditingController();
   final _displayNameCtrl = TextEditingController();
-  String _pin  = '';
+  final _pinCtrl         = TextEditingController();
   String _role = 'kasir';
   bool   _saving = false;
+  bool   _pinVisible = false;
 
   // SECURITY: PIN min 6 digit
   static const int _pinLength = 6;
@@ -344,22 +345,14 @@ class _AddEditSheetState extends ConsumerState<_AddEditSheet> {
   void dispose() {
     _usernameCtrl.dispose();
     _displayNameCtrl.dispose();
+    _pinCtrl.dispose();
     super.dispose();
-  }
-
-  void _onKey(String d) {
-    if (_pin.length >= _pinLength) return;
-    setState(() => _pin += d);
-  }
-
-  void _onDel() {
-    if (_pin.isEmpty) return;
-    setState(() => _pin = _pin.substring(0, _pin.length - 1));
   }
 
   Future<void> _save() async {
     final username    = _usernameCtrl.text.trim().toLowerCase();
     final displayName = _displayNameCtrl.text.trim();
+    final pin         = _pinCtrl.text.trim();
 
     if (username.length < 3) {
       _snack('Username minimal 3 karakter'); return;
@@ -370,8 +363,11 @@ class _AddEditSheetState extends ConsumerState<_AddEditSheet> {
     if (displayName.isEmpty) {
       _snack('Nama tampilan tidak boleh kosong'); return;
     }
-    if (!isEdit && _pin.length < _pinLength) {
+    if (!isEdit && pin.length < _pinLength) {
       _snack('PIN harus $_pinLength digit'); return;
+    }
+    if (!isEdit && !RegExp(r'^\d+$').hasMatch(pin)) {
+      _snack('PIN hanya boleh angka'); return;
     }
 
     setState(() => _saving = true);
@@ -390,7 +386,7 @@ class _AddEditSheetState extends ConsumerState<_AddEditSheet> {
           actorId: actorId,
         );
       } else {
-        final hashedPin = await compute(hashPinIsolate, PinHashArgs(_pin));
+        final hashedPin = await compute(hashPinIsolate, PinHashArgs(pin));
         await db.usersDao.insertUser(
           UsersCompanion.insert(
             username:    username,
@@ -503,37 +499,29 @@ class _AddEditSheetState extends ConsumerState<_AddEditSheet> {
 
           // PIN hanya saat tambah baru
           if (!isEdit) ...[
-            const SizedBox(height: 20),
-            Text('PIN (${_pin.length}/$_pinLength digit)',
-                style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700,
-                    color: isDark
-                        ? const Color(0xFF94A3B8)
-                        : AppColors.textSecondary)),
-            const SizedBox(height: 12),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: List.generate(_pinLength, (i) {
-                final filled = i < _pin.length;
-                return AnimatedContainer(
-                  duration: const Duration(milliseconds: 120),
-                  margin: const EdgeInsets.symmetric(horizontal: 6),
-                  width: 14, height: 14,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: filled ? AppColors.primary : Colors.transparent,
-                    border: Border.all(
-                      color: filled
-                          ? AppColors.primary
-                          : isDark
-                              ? const Color(0xFF475569) : Colors.grey.shade300,
-                      width: 2,
-                    ),
-                  ),
-                );
-              }),
-            ),
             const SizedBox(height: 16),
-            _MiniNumpad(onKey: _onKey, onDel: _onDel),
+            TextField(
+              controller: _pinCtrl,
+              keyboardType: TextInputType.number,
+              obscureText: !_pinVisible,
+              maxLength: _pinLength,
+              decoration: InputDecoration(
+                labelText: 'PIN ($_pinLength digit)',
+                hintText: 'Masukkan PIN 6 angka',
+                prefixIcon: const Icon(Icons.lock_outline_rounded,
+                    color: AppColors.primary),
+                suffixIcon: IconButton(
+                  icon: Icon(
+                    _pinVisible ? Icons.visibility_off : Icons.visibility,
+                    color: AppColors.primary,
+                  ),
+                  onPressed: () => setState(() => _pinVisible = !_pinVisible),
+                ),
+                border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12)),
+                counterText: '',
+              ),
+            ),
           ],
 
           const SizedBox(height: 24),

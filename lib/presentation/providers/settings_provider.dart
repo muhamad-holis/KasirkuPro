@@ -38,6 +38,7 @@ class StoreSettings {
   final String currency;
   final bool showLogo;
   final bool printAfterTransaction;
+  final String logoPath; // path ke file logo custom
 
   const StoreSettings({
     this.storeName            = 'KasirKu',
@@ -48,6 +49,7 @@ class StoreSettings {
     this.currency             = 'Rp',
     this.showLogo             = true,
     this.printAfterTransaction = false,
+    this.logoPath             = '',
   });
 
   StoreSettings copyWith({
@@ -59,6 +61,7 @@ class StoreSettings {
     String? currency,
     bool? showLogo,
     bool? printAfterTransaction,
+    String? logoPath,
   }) => StoreSettings(
     storeName:             storeName             ?? this.storeName,
     storeAddress:          storeAddress          ?? this.storeAddress,
@@ -68,6 +71,7 @@ class StoreSettings {
     currency:              currency              ?? this.currency,
     showLogo:              showLogo              ?? this.showLogo,
     printAfterTransaction: printAfterTransaction ?? this.printAfterTransaction,
+    logoPath:              logoPath              ?? this.logoPath,
   );
 }
 
@@ -91,6 +95,7 @@ class StoreSettingsNotifier extends StateNotifier<StoreSettings> {
       currency:              map['mata_uang']            ?? 'Rp',
       showLogo:              map['struk_logo']           != 'false',
       printAfterTransaction: map['cetak_otomatis']       == 'true',
+      logoPath:              map['logo_path']            ?? '',
     );
   }
 
@@ -106,6 +111,7 @@ class StoreSettingsNotifier extends StateNotifier<StoreSettings> {
       'mata_uang':      s.currency,
       'struk_logo':     s.showLogo.toString(),
       'cetak_otomatis': s.printAfterTransaction.toString(),
+      'logo_path':      s.logoPath,
     };
     for (final e in entries.entries) {
       await db.settingsDao.setSetting(e.key, e.value);

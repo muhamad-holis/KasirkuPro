@@ -10,6 +10,7 @@ import 'package:local_auth/local_auth.dart';
 import 'package:print_bluetooth_thermal/print_bluetooth_thermal.dart';
 import 'package:esc_pos_utils_plus/esc_pos_utils_plus.dart';
 import 'package:image/image.dart' as img;
+import 'package:image_picker/image_picker.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/currency.dart';
 import '../../providers/settings_provider.dart';
@@ -126,6 +127,16 @@ class SettingsScreen extends ConsumerWidget {
               secondary: _TileIcon(
                   Icons.image_outlined, AppColors.primary),
             ),
+            _Tile(
+              icon: Icons.add_photo_alternate_outlined,
+              title: 'Ganti Logo Struk',
+              subtitle: store.logoPath.isNotEmpty
+                  ? 'Logo custom aktif — ketuk untuk ganti'
+                  : 'Gunakan gambar dari galeri',
+              color: store.logoPath.isNotEmpty
+                  ? AppColors.success : AppColors.primary,
+              onTap: () => _ggantiLogo(context, ref),
+            ),
             SwitchListTile(
               title: const Text('Cetak Otomatis'),
               subtitle: const Text('Print struk setelah transaksi'),
@@ -179,11 +190,19 @@ class SettingsScreen extends ConsumerWidget {
               icon: Icons.print_outlined,
               title: 'Test Print',
               subtitle: 'Cetak struk uji coba',
-              color: printer.deviceName != null
-                  ? AppColors.primary : Colors.grey,
-              onTap: printer.deviceName != null
-                  ? () => _testPrint(context, ref, store)
-                  : null,
+              color: AppColors.primary,
+              onTap: () {
+                if (printer.deviceName == null) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Hubungkan printer Bluetooth terlebih dahulu'),
+                      backgroundColor: Colors.orange,
+                    ),
+                  );
+                } else {
+                  _testPrint(context, ref, store);
+                }
+              },
             ),
           ]),
 
@@ -419,10 +438,21 @@ class SettingsScreen extends ConsumerWidget {
 
   Future<img.Image?> _loadLogoImage(int maxWidth) async {
     try {
-      final ByteData data =
-          await rootBundle.load('assets/images/ic_launcher.png');
-      final Uint8List bytes = data.buffer.asUint8List();
-      img.Image? original = img.decodeImage(bytes);
+      final store = ref.read(storeSettingsProvider);
+      img.Image? original;
+
+      // Pakai logo custom jika ada
+      if (store.logoPath.isNotEmpty && File(store.logoPath).existsSync()) {
+        final bytes = await File(store.logoPath).readAsBytes();
+        original = img.decodeImage(bytes);
+      } else {
+        // Fallback ke icon default
+        final ByteData data =
+            await rootBundle.load('assets/images/ic_launcher.png');
+        final Uint8List bytes = data.buffer.asUint8List();
+        original = img.decodeImage(bytes);
+      }
+
       if (original == null) return null;
       if (original.width > maxWidth) {
         original = img.copyResize(original, width: maxWidth);
@@ -430,6 +460,36 @@ class SettingsScreen extends ConsumerWidget {
       return img.grayscale(original);
     } catch (_) {
       return null;
+    }
+  }
+
+  // ── Ganti logo toko ────────────────────────────────────────────────────────
+
+  Future<void> _ggantiLogo(BuildContext context, WidgetRef ref) async {
+    final picker = ImagePicker();
+    final picked = await picker.pickImage(
+      source: ImageSource.gallery,
+      maxWidth: 512,
+      maxHeight: 512,
+    );
+    if (picked == null) return;
+
+    // Simpan ke folder app agar path permanen
+    final appDir = await getApplicationDocumentsDirectory();
+    final savedFile = await File(picked.path)
+        .copy('${appDir.path}/store_logo.png');
+
+    final store = ref.read(storeSettingsProvider);
+    await ref.read(storeSettingsProvider.notifier)
+        .save(store.copyWith(logoPath: savedFile.path));
+
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Logo berhasil diganti!'),
+          backgroundColor: Colors.green,
+        ),
+      );
     }
   }
 

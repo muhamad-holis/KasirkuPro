@@ -144,5 +144,5 @@ final allUsersProvider = FutureProvider.autoDispose<List<User>>((ref) async {
     throw UnauthorizedException(
         'allUsersProvider: hanya dapat diakses oleh admin');
   }
-  return ref.read(databaseProvider).usersDao.getAllUsers();
+  return ref.read(databaseProvider).usersDao.getActiveUsers();
 });
