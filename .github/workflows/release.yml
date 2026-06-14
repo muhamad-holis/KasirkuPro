@@ -1,0 +1,55 @@
+name: Release KasirKu Pro APK
+
+on:
+  push:
+    tags: [ 'v*' ]
+  workflow_dispatch:
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'zulu'
+          java-version: '17'
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.24.5'
+          channel: 'stable'
+          cache: true
+
+      - name: Create local.properties
+        run: |
+          echo "flutter.sdk=$(dirname $(dirname $(which flutter)))" > android/local.properties
+          echo "sdk.dir=$ANDROID_SDK_ROOT" >> android/local.properties
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Generate code (Drift + Riverpod + Freezed)
+        run: dart run build_runner build --delete-conflicting-outputs
+
+      - name: Build APK Release
+        run: flutter build apk --release
+
+      - name: Rename APK
+        run: |
+          mv build/app/outputs/flutter-apk/app-release.apk \
+             build/app/outputs/flutter-apk/kasirku-pro-${{ github.ref_name }}.apk
+
+      - name: Upload ke GitHub Releases
+        uses: softprops/action-gh-release@v2
+        with:
+          files: build/app/outputs/flutter-apk/kasirku-pro-${{ github.ref_name }}.apk
+          name: KasirKu Pro ${{ github.ref_name }}
+          body: "Release KasirKu Pro ${{ github.ref_name }}"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
