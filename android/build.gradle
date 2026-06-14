@@ -30,14 +30,22 @@ tasks.register("clean", Delete) {
     delete rootProject.buildDir
 }
 
-// --- BLOK KODE WAJIB: MENGATASI ERROR LSTAR DENGAN CARA AMAN ---
-// Mengganti afterEvaluate dengan plugins.withId agar terhindar 
-// dari error "project is already evaluated".
 subprojects {
     project.plugins.withId("com.android.library") {
         android {
             compileSdkVersion 34
             buildToolsVersion "34.0.0"
+        }
+    }
+    
+    // --- BLOK KODE WAJIB: MENGATASI ERROR ANDROIDX ACTIVITY 35 ---
+    // Strategi resolusi ini secara paksa akan menurunkan versi androidx.activity
+    // ke 1.9.3 untuk seluruh plugin, menghentikan paksaan ke compileSdk 35.
+    project.configurations.all {
+        resolutionStrategy.eachDependency { details ->
+            if (details.requested.group == 'androidx.activity') {
+                details.useVersion "1.9.3"
+            }
         }
     }
 }
