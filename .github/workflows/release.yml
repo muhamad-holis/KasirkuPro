@@ -19,6 +19,10 @@ jobs:
           distribution: 'zulu'
           java-version: '17'
 
+      - name: Setup Android SDK Build Tools 34
+        run: |
+          ${ANDROID_SDK_ROOT}/cmdline-tools/latest/bin/sdkmanager "build-tools;34.0.0" "platforms;android-35"
+
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:

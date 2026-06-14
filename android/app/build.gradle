@@ -7,6 +7,7 @@ plugins {
 android {
     namespace "com.kasirku.app"
     compileSdk 35
+    buildToolsVersion "34.0.0"
 
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_17
@@ -38,20 +39,6 @@ android {
         }
     }
 
-    configurations.all {
-        resolutionStrategy.eachDependency { DependencyResolveDetails details ->
-            if (details.requested.group == 'androidx.activity') {
-                details.useVersion '1.8.2'
-            }
-            if (details.requested.group == 'androidx.core' && details.requested.name == 'core') {
-                details.useVersion '1.13.1'
-            }
-            if (details.requested.group == 'androidx.core' && details.requested.name == 'core-ktx') {
-                details.useVersion '1.13.1'
-            }
-        }
-    }
-
     packagingOptions {
         resources {
             excludes += [
@@ -72,6 +59,4 @@ flutter {
 dependencies {
     implementation "org.jetbrains.kotlin:kotlin-stdlib-jdk8:1.9.10"
     implementation 'androidx.multidex:multidex:2.0.1'
-    implementation 'androidx.activity:activity-ktx:1.8.2'
-    implementation 'androidx.core:core-ktx:1.13.1'
 }
