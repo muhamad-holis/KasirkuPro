@@ -6,8 +6,9 @@ plugins {
 
 android {
     namespace "com.kasirku.app"
-    compileSdk 35
-    buildToolsVersion "35.0.0"
+    // Menggunakan SDK 34 karena merupakan versi paling stabil untuk Flutter saat ini
+    compileSdk 34
+    buildToolsVersion "34.0.0"
 
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_17
@@ -25,7 +26,7 @@ android {
     defaultConfig {
         applicationId "com.kasirku.app"
         minSdkVersion 23
-        targetSdkVersion 35
+        targetSdkVersion 34
         versionCode 1
         versionName "1.0.0"
         multiDexEnabled true
@@ -39,9 +40,8 @@ android {
         }
     }
 
-    // Suppress lStar AAPT error yang muncul dari dependency (printing/pdf package)
-    // lStar adalah Material3 attr yang butuh API 31+, tapi kita support minSdk 23
-    // Fix: force override dengan nilai dummy agar AAPT tidak gagal
+    // AAPT Options dikembalikan ke standar normal karena masalah lStar
+    // sudah diatasi melalui penyesuaian compileSdk dan dependensi AndroidX
     aaptOptions {
         noCompress "tflite"
     }
@@ -72,6 +72,9 @@ flutter {
 dependencies {
     implementation "org.jetbrains.kotlin:kotlin-stdlib-jdk8:1.9.10"
     implementation 'androidx.multidex:multidex:2.0.1'
-    // AppCompat diperlukan agar Theme.AppCompat tersedia (fix lStar error)
+    
+    // Penambahan dependensi core-ktx versi stabil untuk mengatasi tuntas konflik lStar 
+    // dari package printing tanpa perlu memanipulasi file XML
+    implementation 'androidx.core:core-ktx:1.12.0'
     implementation 'androidx.appcompat:appcompat:1.7.0'
 }
