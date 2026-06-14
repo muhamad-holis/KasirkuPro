@@ -1,3 +1,17 @@
+buildscript {
+    ext.kotlin_version = '1.9.10'
+    repositories {
+        google()
+        mavenCentral()
+    }
+
+    dependencies {
+        // Menggunakan AGP 8.3.2 sesuai dengan konfigurasi Gradle Wrapper 8.6 Anda
+        classpath 'com.android.tools.build:gradle:8.3.2'
+        classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:$kotlin_version"
+    }
+}
+
 allprojects {
     repositories {
         google()
@@ -5,36 +19,28 @@ allprojects {
     }
 }
 
-rootProject.buildDir = "../build"
+rootProject.buildDir = '../build'
 subprojects {
     project.buildDir = "${rootProject.buildDir}/${project.name}"
 }
 subprojects {
-    project.evaluationDependsOn(":app")
-}
-
-// ============================================================
-// FIX: android:attr/lStar not found
-//
-// Plugin "printing" (dan plugin lain) dikompilasi sebagai
-// Gradle subproject TERPISAH dengan compileSdk mereka sendiri.
-// Attribute lStar butuh API 31+, sedangkan beberapa plugin
-// masih pakai compileSdkVersion lama (30 atau lebih rendah).
-//
-// Solusi: setelah tiap plugin subproject selesai dievaluasi,
-// paksa compileSdkVersion ke 35 agar AAPT punya akses ke
-// semua framework attributes termasuk lStar.
-// ============================================================
-subprojects {
-    afterEvaluate { project ->
-        if (project.hasProperty('android')) {
-            project.android {
-                compileSdkVersion 35
-            }
-        }
-    }
+    project.evaluationDependsOn(':app')
 }
 
 tasks.register("clean", Delete) {
     delete rootProject.buildDir
+}
+
+// --- BLOK KODE WAJIB: MENGATASI ERROR LSTAR ---
+// Script ini akan memaksa package 'printing' dan semua plugin Flutter lainnya 
+// untuk dikompilasi menggunakan SDK 34 agar mengenali atribut Material3.
+subprojects {
+    afterEvaluate { project ->
+        if (project.hasProperty('android')) {
+            project.android {
+                compileSdkVersion 34
+                buildToolsVersion "34.0.0"
+            }
+        }
+    }
 }
