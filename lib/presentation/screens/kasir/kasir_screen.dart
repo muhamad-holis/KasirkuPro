@@ -24,6 +24,10 @@ import '../../providers/settings_provider.dart';
 import '../../providers/auth_provider.dart';
 import '../../../data/database/app_database.dart';
 import '../dashboard/dashboard_screen.dart' show dashboardStatsProvider;
+import '../../navigation/app_router.dart' show currentNavIndexProvider;
+
+// Index tab "Kasir" pada bottom navigation (lihat _screens di app_router.dart)
+const int _kKasirTabIndex = 2;
 
 class KasirScreen extends ConsumerStatefulWidget {
   const KasirScreen({super.key});
@@ -68,8 +72,9 @@ class _KasirScreenState extends ConsumerState<KasirScreen> {
           await notifier.clearDraft();
         }
       }
-      // Auto buka scanner
-      if (mounted) _openScanner();
+      // Catatan: scanner TIDAK lagi auto-dibuka saat cold start.
+      // Scanner hanya dibuka saat user aktif menekan tab "Kasir"
+      // di bottom navigation — lihat ref.listen di method build().
     });
   }
 
@@ -114,6 +119,14 @@ class _KasirScreenState extends ConsumerState<KasirScreen> {
   @override
   Widget build(BuildContext context) {
     final cart = ref.watch(kasirProvider);
+
+    // Buka scanner hanya saat user aktif berpindah ke tab "Kasir",
+    // bukan saat cold start (IndexedStack membangun semua screen sekaligus).
+    ref.listen<int>(currentNavIndexProvider, (previous, next) {
+      if (next == _kKasirTabIndex && previous != _kKasirTabIndex) {
+        _openScanner();
+      }
+    });
 
     return Scaffold(
       appBar: AppBar(
@@ -551,9 +564,15 @@ class _KasirBody extends ConsumerWidget {
 
   void _showDiscount(BuildContext context, WidgetRef ref) {
     final cart = ref.read(kasirProvider);
+    final initialPercent = (cart.subtotal > 0 && cart.discountTotal > 0)
+        ? (cart.discountTotal / cart.subtotal * 100)
+        : 0.0;
     final ctrl = TextEditingController(
-      text: cart.discountTotal > 0
-          ? cart.discountTotal.toStringAsFixed(0) : '');
+      text: initialPercent > 0
+          ? (initialPercent % 1 == 0
+              ? initialPercent.toStringAsFixed(0)
+              : initialPercent.toStringAsFixed(2))
+          : '');
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -563,44 +582,55 @@ class _KasirBody extends ConsumerWidget {
         padding: EdgeInsets.only(
           bottom: MediaQuery.of(context).viewInsets.bottom + 16,
           left: 20, right: 20, top: 20),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Center(child: Container(
-              width: 40, height: 4,
-              decoration: BoxDecoration(
-                color: Colors.grey.shade300,
-                borderRadius: BorderRadius.circular(2)))),
-            const SizedBox(height: 16),
-            const Text('Tambah Diskon',
-              style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700)),
-            const SizedBox(height: 16),
-            TextField(
-              controller: ctrl,
-              keyboardType: TextInputType.number,
-              autofocus: true,
-              decoration: const InputDecoration(
-                labelText: 'Nominal Diskon', prefixText: 'Rp ')),
-            const SizedBox(height: 16),
-            Row(children: [
-              Expanded(child: OutlinedButton(
-                onPressed: () {
-                  ref.read(kasirProvider.notifier).setDiscount(0);
-                  Navigator.pop(context);
-                },
-                child: const Text('Hapus Diskon'))),
-              const SizedBox(width: 10),
-              Expanded(child: ElevatedButton(
-                onPressed: () {
-                  final disc = double.tryParse(ctrl.text) ?? 0;
-                  ref.read(kasirProvider.notifier).setDiscount(disc);
-                  Navigator.pop(context);
-                },
-                child: const Text('Terapkan'))),
-            ]),
-            const SizedBox(height: 8),
-          ],
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Center(child: Container(
+                width: 40, height: 4,
+                decoration: BoxDecoration(
+                  color: Colors.grey.shade300,
+                  borderRadius: BorderRadius.circular(2)))),
+              const SizedBox(height: 16),
+              const Text('Tambah Diskon',
+                style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700)),
+              const SizedBox(height: 4),
+              Text(
+                'Diskon dihitung dari subtotal ${CurrencyFormatter.format(cart.subtotal)}',
+                style: TextStyle(fontSize: 12, color: Colors.grey.shade500)),
+              const SizedBox(height: 16),
+              TextField(
+                controller: ctrl,
+                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                autofocus: true,
+                decoration: const InputDecoration(
+                  labelText: 'Persentase Diskon',
+                  suffixText: '%',
+                  prefixIcon: Icon(Icons.percent_outlined))),
+              const SizedBox(height: 16),
+              Row(children: [
+                Expanded(child: OutlinedButton(
+                  onPressed: () {
+                    ref.read(kasirProvider.notifier).setDiscount(0);
+                    Navigator.pop(context);
+                  },
+                  child: const Text('Hapus Diskon'))),
+                const SizedBox(width: 10),
+                Expanded(child: ElevatedButton(
+                  onPressed: () {
+                    double percent = double.tryParse(ctrl.text) ?? 0;
+                    if (percent < 0) percent = 0;
+                    if (percent > 100) percent = 100;
+                    final discAmount = cart.subtotal * (percent / 100);
+                    ref.read(kasirProvider.notifier).setDiscount(discAmount);
+                    Navigator.pop(context);
+                  },
+                  child: const Text('Terapkan'))),
+              ]),
+              const SizedBox(height: 8),
+            ],
+          ),
         ),
       ),
     );
@@ -619,7 +649,8 @@ class _KasirBody extends ConsumerWidget {
         padding: EdgeInsets.only(
           bottom: MediaQuery.of(context).viewInsets.bottom + 16,
           left: 20, right: 20, top: 20),
-        child: Column(
+        child: SingleChildScrollView(
+          child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             Center(child: Container(
@@ -656,6 +687,7 @@ class _KasirBody extends ConsumerWidget {
             ]),
             const SizedBox(height: 8),
           ],
+          ),
         ),
       ),
     );
@@ -665,7 +697,8 @@ class _KasirBody extends ConsumerWidget {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      backgroundColor: Colors.transparent,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
       builder: (_) => ProviderScope(
         parent: ProviderScope.containerOf(context),
         child: const _PaymentSheet(),

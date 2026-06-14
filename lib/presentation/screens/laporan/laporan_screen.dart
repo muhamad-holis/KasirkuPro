@@ -1243,7 +1243,7 @@ class _LabaRugiCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: Theme.of(context).cardColor,
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
@@ -1472,6 +1472,7 @@ class _LRRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4),
       child: Row(
@@ -1483,8 +1484,8 @@ class _LRRow extends StatelessWidget {
                     fontWeight:
                         bold ? FontWeight.w700 : FontWeight.normal,
                     color: bold
-                        ? Colors.black87
-                        : Colors.grey.shade700)),
+                        ? (isDark ? Colors.white : Colors.black87)
+                        : (isDark ? Colors.grey.shade400 : Colors.grey.shade700))),
           ),
           Text(
             '$prefix${CurrencyFormatter.format(value.abs())}',
