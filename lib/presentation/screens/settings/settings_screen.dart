@@ -448,7 +448,7 @@ class SettingsScreen extends ConsumerWidget {
       } else {
         // Fallback ke icon default
         final ByteData data =
-            await rootBundle.load('assets/images/ic_launcher.png');
+            await rootBundle.load('assets/images/app_icon.png');
         final Uint8List bytes = data.buffer.asUint8List();
         original = img.decodeImage(bytes);
       }
@@ -1238,13 +1238,21 @@ class _ReceiptPreview extends StatelessWidget {
           if (store.showLogo) ...[
             ClipRRect(
               borderRadius: BorderRadius.circular(4),
-              child: Image.asset(
-                'assets/images/ic_launcher.png',
-                width: 56,
-                height: 56,
-                fit: BoxFit.contain,
-                errorBuilder: (_, __, ___) => const SizedBox.shrink(),
-              ),
+              child: store.logoPath.isNotEmpty && File(store.logoPath).existsSync()
+                  ? Image.file(
+                      File(store.logoPath),
+                      width: 56,
+                      height: 56,
+                      fit: BoxFit.contain,
+                      errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+                    )
+                  : Image.asset(
+                      'assets/images/app_icon.png',
+                      width: 56,
+                      height: 56,
+                      fit: BoxFit.contain,
+                      errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+                    ),
             ),
             const SizedBox(height: 6),
           ],

@@ -515,7 +515,7 @@ class _ProductResults extends ConsumerWidget {
         return Container(
           constraints: const BoxConstraints(maxHeight: 220),
           decoration: BoxDecoration(
-            color: Colors.white,
+            color: Theme.of(context).cardColor,
             boxShadow: [
               BoxShadow(
                 color: Colors.black.withOpacity(0.05),
@@ -2143,10 +2143,21 @@ class _SuccessDialogState extends ConsumerState<_SuccessDialog> {
   // ── Helper load logo (sama dengan settings_screen) ─────────────────────────
   Future<img.Image?> _loadLogoImage(int maxWidth) async {
     try {
-      final ByteData data =
-          await rootBundle.load('assets/images/ic_launcher.png');
-      final Uint8List bytes = data.buffer.asUint8List();
-      img.Image? original = img.decodeImage(bytes);
+      final store = ref.read(storeSettingsProvider);
+      img.Image? original;
+
+      // Pakai logo custom jika ada
+      if (store.logoPath.isNotEmpty && File(store.logoPath).existsSync()) {
+        final bytes = await File(store.logoPath).readAsBytes();
+        original = img.decodeImage(bytes);
+      } else {
+        // Fallback ke logo default dari assets
+        final ByteData data =
+            await rootBundle.load('assets/images/app_icon.png');
+        final Uint8List bytes = data.buffer.asUint8List();
+        original = img.decodeImage(bytes);
+      }
+
       if (original == null) return null;
       if (original.width > maxWidth) {
         original = img.copyResize(original, width: maxWidth);
