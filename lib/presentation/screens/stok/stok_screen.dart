@@ -26,10 +26,17 @@ class _StokScreenState extends ConsumerState<StokScreen>
     with SingleTickerProviderStateMixin {
   late final TabController _tab;
 
+  int _currentTab = 0;
+
   @override
   void initState() {
     super.initState();
     _tab = TabController(length: 3, vsync: this);
+    _tab.addListener(() {
+      if (_tab.indexIsChanging || _tab.index != _currentTab) {
+        setState(() => _currentTab = _tab.index);
+      }
+    });
   }
 
   @override
@@ -77,13 +84,15 @@ class _StokScreenState extends ConsumerState<StokScreen>
           _CategoryTab(),
         ],
       ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => _showAddProduct(context, ref),
-        icon: const Icon(Icons.add),
-        label: const Text('Tambah Produk'),
-        backgroundColor: AppColors.primary,
-        foregroundColor: Colors.white,
-      ),
+      floatingActionButton: _currentTab == 2
+          ? null
+          : FloatingActionButton.extended(
+              onPressed: () => _showAddProduct(context, ref),
+              icon: const Icon(Icons.add),
+              label: const Text('Tambah Produk'),
+              backgroundColor: AppColors.primary,
+              foregroundColor: Colors.white,
+            ),
     );
   }
 

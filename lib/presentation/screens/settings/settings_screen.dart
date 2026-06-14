@@ -436,7 +436,7 @@ class SettingsScreen extends ConsumerWidget {
 
   // ── Helper: load & konversi logo asset ke bitmap ESC/POS ──────────────────
 
-  Future<img.Image?> _loadLogoImage(int maxWidth) async {
+  Future<img.Image?> _loadLogoImage(int maxWidth, WidgetRef ref) async {
     try {
       final store = ref.read(storeSettingsProvider);
       img.Image? original;
@@ -538,7 +538,7 @@ class SettingsScreen extends ConsumerWidget {
 
       // ── Logo ────────────────────────────────────────────────────────────
       if (store.showLogo) {
-        final logoImg = await _loadLogoImage(logoMaxWidth);
+        final logoImg = await _loadLogoImage(logoMaxWidth, ref);
         if (logoImg != null) {
           bytes += generator.image(logoImg);
           bytes += generator.feed(1);
