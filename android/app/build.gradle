@@ -21,6 +21,13 @@ android {
         main.java.srcDirs += 'src/main/kotlin'
     }
 
+    configurations.all {
+        resolutionStrategy {
+            force 'androidx.core:core:1.12.0'
+            force 'androidx.core:core-ktx:1.12.0'
+        }
+    }
+
     defaultConfig {
         applicationId "com.kasirku.app"
         minSdkVersion 23
@@ -33,6 +40,8 @@ android {
     buildTypes {
         release {
             signingConfig signingConfigs.debug
+            minifyEnabled false
+            shrinkResources false
         }
     }
 }
@@ -44,4 +53,6 @@ flutter {
 dependencies {
     implementation "org.jetbrains.kotlin:kotlin-stdlib-jdk8:1.9.10"
     implementation 'androidx.multidex:multidex:2.0.1'
+    implementation 'androidx.core:core:1.12.0'
+    implementation 'androidx.core:core-ktx:1.12.0'
 }
