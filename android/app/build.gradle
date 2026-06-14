@@ -6,9 +6,8 @@ plugins {
 
 android {
     namespace "com.kasirku.app"
-    // Menggunakan SDK 34 karena merupakan versi paling stabil untuk Flutter saat ini
-    compileSdk 34
-    buildToolsVersion "34.0.0"
+    compileSdk 35
+    buildToolsVersion "35.0.0"
 
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_17
@@ -26,9 +25,9 @@ android {
     defaultConfig {
         applicationId "com.kasirku.app"
         minSdkVersion 23
-        targetSdkVersion 34
-        versionCode 1
-        versionName "1.0.0"
+        targetSdkVersion 35
+        versionCode 9
+        versionName "1.0.9"
         multiDexEnabled true
     }
 
@@ -73,8 +72,7 @@ dependencies {
     implementation "org.jetbrains.kotlin:kotlin-stdlib-jdk8:1.9.10"
     implementation 'androidx.multidex:multidex:2.0.1'
     
-    // Penambahan dependensi core-ktx versi stabil untuk mengatasi tuntas konflik lStar 
-    // dari package printing tanpa perlu memanipulasi file XML
-    implementation 'androidx.core:core-ktx:1.12.0'
+    // Core AndroidX dependencies - required for SDK 35 compatibility
+    implementation 'androidx.core:core-ktx:1.15.0'
     implementation 'androidx.appcompat:appcompat:1.7.0'
 }
