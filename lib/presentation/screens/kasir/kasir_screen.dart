@@ -578,9 +578,11 @@ class _KasirBody extends ConsumerWidget {
       isScrollControlled: true,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
-      builder: (_) => Padding(
+      builder: (sheetCtx) => AnimatedPadding(
+        duration: const Duration(milliseconds: 100),
+        curve: Curves.decelerate,
         padding: EdgeInsets.only(
-          bottom: MediaQuery.of(context).viewInsets.bottom + 16,
+          bottom: MediaQuery.of(sheetCtx).viewInsets.bottom + 16,
           left: 20, right: 20, top: 20),
         child: SingleChildScrollView(
           child: Column(
@@ -645,9 +647,11 @@ class _KasirBody extends ConsumerWidget {
       isScrollControlled: true,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
-      builder: (_) => Padding(
+      builder: (sheetCtx) => AnimatedPadding(
+        duration: const Duration(milliseconds: 100),
+        curve: Curves.decelerate,
         padding: EdgeInsets.only(
-          bottom: MediaQuery.of(context).viewInsets.bottom + 16,
+          bottom: MediaQuery.of(sheetCtx).viewInsets.bottom + 16,
           left: 20, right: 20, top: 20),
         child: SingleChildScrollView(
           child: Column(

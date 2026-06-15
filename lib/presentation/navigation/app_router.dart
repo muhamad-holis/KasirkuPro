@@ -269,12 +269,54 @@ class _LainnyaHomeScreen extends ConsumerWidget {
               padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
               sliver: SliverGrid(
                 gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount: 2,
-                  mainAxisSpacing: 14,
-                  crossAxisSpacing: 14,
-                  childAspectRatio: 1.55,
+                  crossAxisCount: 3,
+                  mainAxisSpacing: 12,
+                  crossAxisSpacing: 12,
+                  childAspectRatio: 0.95,
                 ),
                 delegate: SliverChildListDelegate([
+                  // ── Aksi cepat (dipindah dari Dashboard) ──────────────────
+                  _MenuCard(
+                    icon: Icons.shopping_cart_outlined,
+                    label: 'Mulai Kasir',
+                    description: 'Transaksi penjualan',
+                    color: AppColors.primary,
+                    onTap: () =>
+                        ref.read(currentNavIndexProvider.notifier).state = 2,
+                  ),
+                  _MenuCard(
+                    icon: Icons.add_box_outlined,
+                    label: 'Tambah Produk',
+                    description: 'Kelola stok produk',
+                    color: AppColors.success,
+                    onTap: () =>
+                        ref.read(currentNavIndexProvider.notifier).state = 3,
+                  ),
+                  _MenuCard(
+                    icon: Icons.history_rounded,
+                    label: 'Riwayat Transaksi',
+                    description: 'Lihat semua transaksi',
+                    color: AppColors.info,
+                    onTap: () =>
+                        ref.read(currentNavIndexProvider.notifier).state = 1,
+                  ),
+                  _MenuCard(
+                    icon: Icons.insert_chart_outlined_rounded,
+                    label: 'Laporan Hari Ini',
+                    description: 'Ringkasan penjualan',
+                    color: AppColors.warning,
+                    onTap: () =>
+                        ref.read(currentNavIndexProvider.notifier).state = 1,
+                  ),
+                  // ── Kas & Keuangan ─────────────────────────────────────────
+                  _MenuCard(
+                    icon: Icons.payments_rounded,
+                    label: 'Kas & Keuangan',
+                    description: 'Kas masuk & keluar',
+                    color: AppColors.success,
+                    onTap: () => MainNavigation.navigateToKas(context),
+                  ),
+                  // ── Menu lainnya ────────────────────────────────────────────
                   _MenuCard(
                     icon: Icons.people_rounded,
                     label: 'Pelanggan',
@@ -403,7 +445,7 @@ class _MenuCard extends StatelessWidget {
         onTap: onTap,
         borderRadius: BorderRadius.circular(16),
         child: Container(
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(16),
             border: Border.all(
@@ -421,7 +463,7 @@ class _MenuCard extends StatelessWidget {
                   color: color.withOpacity(0.12),
                   borderRadius: BorderRadius.circular(10),
                 ),
-                child: Icon(icon, color: color, size: 22),
+                child: Icon(icon, color: color, size: 20),
               ),
               Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -429,16 +471,18 @@ class _MenuCard extends StatelessWidget {
                   Text(
                     label,
                     style: TextStyle(
-                      fontSize: 13,
+                      fontSize: 12,
                       fontWeight: FontWeight.w700,
                       color: color,
                     ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                   ),
                   const SizedBox(height: 2),
                   Text(
                     description,
                     style: TextStyle(
-                      fontSize: 10,
+                      fontSize: 9.5,
                       color: descColor,
                     ),
                     maxLines: 1,
@@ -468,139 +512,136 @@ class _BottomNavBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final navBg = isDark ? AppColors.darkSurface : Colors.white;
-    final shadowColor = isDark
-        ? Colors.black.withOpacity(0.3)
-        : Colors.black.withOpacity(0.07);
+    // Samakan warna bar dengan warna header (AppBar)
+    final navBg = isDark ? const Color(0xFF134E4A) : AppColors.primary;
+    final shadowColor = Colors.black.withOpacity(isDark ? 0.35 : 0.15);
+    final inactiveColor = Colors.white.withOpacity(0.65);
 
-    return Container(
-      decoration: BoxDecoration(
-        color: navBg,
-        boxShadow: [
-          BoxShadow(
-            color: shadowColor,
-            blurRadius: 24,
-            offset: const Offset(0, -4),
+    const double barHeight = 72;
+    const double fabSize = 58;
+    // Ruang ekstra di atas bar agar tombol Kasir bisa "mengambang"
+    // melewati garis bar (mirip aplikasi Dana), tanpa overflow Stack.
+    const double floatHeadroom = 20;
+    const double cornerRadius = 24;
+    final bottomInset = MediaQuery.of(context).padding.bottom;
+
+    return SizedBox(
+      height: barHeight + floatHeadroom + bottomInset,
+      child: Stack(
+        alignment: Alignment.bottomCenter,
+        children: [
+          // ── Bar navigasi (warna header + lengkungan kiri-kanan) ─────────
+          Container(
+            height: barHeight + bottomInset,
+            padding: EdgeInsets.only(bottom: bottomInset),
+            clipBehavior: Clip.antiAlias,
+            decoration: BoxDecoration(
+              color: navBg,
+              borderRadius: const BorderRadius.only(
+                topLeft: Radius.circular(cornerRadius),
+                topRight: Radius.circular(cornerRadius),
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: shadowColor,
+                  blurRadius: 24,
+                  offset: const Offset(0, -4),
+                ),
+              ],
+            ),
+            child: Row(
+              children: [
+                // 0 – Dashboard
+                _NavItem(
+                  index: 0,
+                  current: currentIndex,
+                  icon: Icons.home_outlined,
+                  activeIcon: Icons.home_rounded,
+                  label: 'Dashboard',
+                  ref: ref,
+                ),
+                // 1 – Laporan
+                _NavItem(
+                  index: 1,
+                  current: currentIndex,
+                  icon: Icons.insert_chart_outlined,
+                  activeIcon: Icons.insert_chart_rounded,
+                  label: 'Laporan',
+                  ref: ref,
+                ),
+                // 2 – ruang kosong untuk tombol Kasir yang mengambang
+                const Expanded(child: SizedBox()),
+                // 3 – Stok
+                _NavItem(
+                  index: 3,
+                  current: currentIndex,
+                  icon: Icons.inventory_2_outlined,
+                  activeIcon: Icons.inventory_2_rounded,
+                  label: 'Stok',
+                  ref: ref,
+                ),
+                // 4 – Lainnya (tab, bukan bottom sheet)
+                _NavItem(
+                  index: 4,
+                  current: currentIndex,
+                  icon: Icons.grid_view_outlined,
+                  activeIcon: Icons.grid_view_rounded,
+                  label: 'Lainnya',
+                  ref: ref,
+                  // Jika sudah di tab Lainnya & tap lagi → pop ke grid home
+                  onRetap: () {
+                    if (_lainnyaNavKey.currentState?.canPop() ?? false) {
+                      _lainnyaNavKey.currentState!.popUntil((route) => route.isFirst);
+                    }
+                  },
+                ),
+              ],
+            ),
           ),
-        ],
-      ),
-      child: SafeArea(
-        top: false,
-        child: SizedBox(
-          height: 72,
-          child: Row(
-            children: [
-              // 0 – Dashboard
-              _NavItem(
-                index: 0,
-                current: currentIndex,
-                icon: Icons.home_outlined,
-                activeIcon: Icons.home_rounded,
-                label: 'Dashboard',
-                ref: ref,
-              ),
-              // 1 – Laporan
-              _NavItem(
-                index: 1,
-                current: currentIndex,
-                icon: Icons.insert_chart_outlined,
-                activeIcon: Icons.insert_chart_rounded,
-                label: 'Laporan',
-                ref: ref,
-              ),
-              // 2 – Kasir (FAB tengah)
-              _KasirFABItem(
-                isActive: currentIndex == 2,
-                onTap: () =>
-                    ref.read(currentNavIndexProvider.notifier).state = 2,
-              ),
-              // 3 – Stok
-              _NavItem(
-                index: 3,
-                current: currentIndex,
-                icon: Icons.inventory_2_outlined,
-                activeIcon: Icons.inventory_2_rounded,
-                label: 'Stok',
-                ref: ref,
-              ),
-              // 4 – Lainnya (tab, bukan bottom sheet)
-              _NavItem(
-                index: 4,
-                current: currentIndex,
-                icon: Icons.grid_view_outlined,
-                activeIcon: Icons.grid_view_rounded,
-                label: 'Lainnya',
-                ref: ref,
-                // Jika sudah di tab Lainnya & tap lagi → pop ke grid home
-                onRetap: () {
-                  if (_lainnyaNavKey.currentState?.canPop() ?? false) {
-                    _lainnyaNavKey.currentState!.popUntil((route) => route.isFirst);
-                  }
-                },
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-// ─── Kasir FAB di tengah ──────────────────────────────────────────────────────
-
-class _KasirFABItem extends StatelessWidget {
-  final bool isActive;
-  final VoidCallback onTap;
-
-  const _KasirFABItem({
-    required this.isActive,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final inactiveColor =
-        isDark ? const Color(0xFF94A3B8) : AppColors.textSecondary;
-
-    return Expanded(
-      child: GestureDetector(
-        onTap: onTap,
-        behavior: HitTestBehavior.opaque,
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Container(
-              width: 48,
-              height: 48,
-              decoration: BoxDecoration(
-                color: AppColors.primary,
-                shape: BoxShape.circle,
-                boxShadow: [
-                  BoxShadow(
-                    color: AppColors.primary.withOpacity(0.35),
-                    blurRadius: 12,
-                    offset: const Offset(0, 4),
+          // ── Tombol Kasir mengambang (lebih besar, ala Dana) ─────────────
+          Positioned(
+            top: 0,
+            child: GestureDetector(
+              onTap: () =>
+                  ref.read(currentNavIndexProvider.notifier).state = 2,
+              behavior: HitTestBehavior.opaque,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    width: fabSize,
+                    height: fabSize,
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      shape: BoxShape.circle,
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.25),
+                          blurRadius: 16,
+                          offset: const Offset(0, 6),
+                        ),
+                      ],
+                    ),
+                    child: Icon(
+                      Icons.qr_code_scanner_rounded,
+                      color: AppColors.primary,
+                      size: 28,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Kasir',
+                    style: TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w700,
+                      color: currentIndex == 2 ? Colors.white : inactiveColor,
+                    ),
                   ),
                 ],
               ),
-              child: const Icon(
-                Icons.qr_code_scanner_rounded,
-                color: Colors.white,
-                size: 26,
-              ),
             ),
-            const SizedBox(height: 4),
-            Text(
-              'Kasir',
-              style: TextStyle(
-                fontSize: 10,
-                fontWeight: FontWeight.w700,
-                color: isActive ? AppColors.primary : inactiveColor,
-              ),
-            ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
@@ -629,11 +670,9 @@ class _NavItem extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isActive = index == current;
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final activeBg =
-        isDark ? AppColors.darkPrimaryLight : AppColors.primaryLight;
-    final inactiveColor =
-        isDark ? const Color(0xFF94A3B8) : AppColors.textSecondary;
+    const inactiveColor = Colors.white;
+    const inactiveOpacity = 0.65;
+    final activeBg = Colors.white.withOpacity(0.18);
 
     return Expanded(
       child: GestureDetector(
@@ -658,7 +697,9 @@ class _NavItem extends StatelessWidget {
               ),
               child: Icon(
                 isActive ? activeIcon : icon,
-                color: isActive ? AppColors.primary : inactiveColor,
+                color: isActive
+                    ? Colors.white
+                    : inactiveColor.withOpacity(inactiveOpacity),
                 size: 22,
               ),
             ),
@@ -668,7 +709,9 @@ class _NavItem extends StatelessWidget {
               style: TextStyle(
                 fontSize: 10,
                 fontWeight: isActive ? FontWeight.w700 : FontWeight.w500,
-                color: isActive ? AppColors.primary : inactiveColor,
+                color: isActive
+                    ? Colors.white
+                    : inactiveColor.withOpacity(inactiveOpacity),
               ),
             ),
           ],
