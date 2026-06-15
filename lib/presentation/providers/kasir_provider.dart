@@ -161,32 +161,51 @@ class KasirNotifier extends StateNotifier<KasirState> {
     }
   }
 
-  Future<void> loadDraft() async {
+  // BUG #8 FIX: loadDraft menerima AppDatabase sebagai parameter agar bisa
+  // refresh stok tiap produk dari DB sebelum di-load ke state.
+  // Tanpa ini, CartItem menggunakan stok snapshot lama saat draft dibuat,
+  // sehingga validasi qty bisa lolos meskipun stok aktual sudah berkurang.
+  Future<void> loadDraft(AppDatabase db) async {
     try {
       final prefs = await SharedPreferences.getInstance();
       final raw = prefs.getString(_kDraftKey);
       if (raw == null) return;
       final data = jsonDecode(raw) as Map<String, dynamic>;
-      final items = (data['items'] as List).map((e) {
+      final itemsJson = data['items'] as List;
+
+      final List<CartItem> items = [];
+      for (final e in itemsJson) {
+        final productId = e['productId'] as int;
+
+        // Ambil stok terbaru dari DB; fallback ke nilai draft jika produk hilang
+        final freshProduct = await db.productsDao.getProductById(productId);
+
         final p = Product(
-          id: e['productId'],
+          id: productId,
           name: e['productName'],
           sellPrice: (e['sellPrice'] as num).toDouble(),
           unit: e['unit'] ?? 'pcs',
-          stock: e['stock'] ?? 0,
-          minStock: e['minStock'] ?? 5,
-          categoryId: 0,
-          buyPrice: 0,
-          isActive: true,
-          createdAt: DateTime.now(),
-          updatedAt: DateTime.now(),
+          // Gunakan stok terbaru dari DB, bukan snapshot lama
+          stock: freshProduct?.stock ?? (e['stock'] ?? 0),
+          minStock: freshProduct?.minStock ?? (e['minStock'] ?? 5),
+          categoryId: freshProduct?.categoryId ?? 0,
+          buyPrice: freshProduct?.buyPrice ?? 0,
+          isActive: freshProduct?.isActive ?? true,
+          createdAt: freshProduct?.createdAt ?? DateTime.now(),
+          updatedAt: freshProduct?.updatedAt ?? DateTime.now(),
         );
-        return CartItem(
+
+        final qty = e['quantity'] as int;
+        // Clamp quantity agar tidak melebihi stok aktual
+        final safeQty = qty.clamp(1, p.stock > 0 ? p.stock : 1);
+
+        items.add(CartItem(
           product: p,
-          quantity: e['quantity'],
+          quantity: safeQty,
           discount: (e['discount'] as num).toDouble(),
-        );
-      }).toList();
+        ));
+      }
+
       state = KasirState(
         items: items,
         discountTotal: (data['discountTotal'] as num).toDouble(),

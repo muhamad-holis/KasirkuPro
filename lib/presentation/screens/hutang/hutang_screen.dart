@@ -593,8 +593,12 @@ class _BayarHutangSheetState extends ConsumerState<_BayarHutangSheet> {
             type: 'income',
             category: 'pelunasan_hutang',
             amount: amount,
+            // BUG #3 FIX: Tambahkan marker unik [debt_id:X] agar filter riwayat
+            // pembayaran di debtPaymentHistoryProvider bisa eksak per hutang.
+            // Format lama 'Invoice #X' menyebabkan filter selalu true untuk semua
+            // cash_flow pelunasan_hutang → riwayat campur semua pelanggan.
             description:
-                'Bayar hutang ${widget.customerName} - Invoice #${widget.debt.transactionId ?? widget.debt.id}',
+                'Bayar hutang ${widget.customerName} [debt_id:${widget.debt.id}]',
           );
 
       if (mounted) {

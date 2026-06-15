@@ -6,6 +6,7 @@ import '../../providers/dashboard_provider.dart';
 import '../../providers/products_provider.dart';
 import '../../providers/database_provider.dart';
 import '../../providers/settings_provider.dart';
+import '../../providers/notification_provider.dart';
 import '../../navigation/app_router.dart';
 import '../../../data/database/app_database.dart';
 import '../notifikasi/notifikasi_screen.dart';
@@ -76,11 +77,11 @@ final dashboardStatsProvider = StreamProvider<DashboardStats>((ref) async* {
     final avgToday     = txToday > 0 ? omzetToday / txToday : 0.0;
     final avgYesterday = txYesterday > 0 ? omzetYesterday / txYesterday : 0.0;
 
-    int productsSold = 0;
-    for (final tx in todayTx) {
-      final items = await db.transactionsDao.getTransactionItems(tx.id);
-      productsSold += items.fold<int>(0, (sum, item) => sum + item.quantity);
-    }
+    // BUG #6 FIX: Ganti N+1 query (1 query per transaksi) dengan satu query aggregat.
+    // Sebelumnya: loop for(tx in todayTx) → getTransactionItems(tx.id) → 30 query jika 30 tx.
+    // Sekarang: satu query SUM langsung di DB.
+    final productsSold = await db.transactionsDao
+        .getTotalProductsSold(todayTx.map((t) => t.id).toList());
 
     yield DashboardStats(
       omzetToday:   omzetToday,
@@ -272,39 +273,47 @@ class _Header extends ConsumerWidget {
                       style: TextStyle(color: Colors.white70, fontSize: 13)),
                 ],
               ),
-              GestureDetector(
-                onTap: () => Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => ProviderScope(
-                      parent: ProviderScope.containerOf(context),
-                      child: const NotifikasiScreen(),
-                    ),
-                  ),
-                ),
-                child: Stack(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(10),
-                      decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.15),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: const Icon(Icons.notifications_outlined,
-                          color: Colors.white, size: 22),
-                    ),
-                    Positioned(
-                      top: 6, right: 6,
-                      child: Container(
-                        width: 8, height: 8,
-                        decoration: const BoxDecoration(
-                          color: Color(0xFFEF4444),
-                          shape: BoxShape.circle,
+              // BUG #1 FIX: Ganti dot merah hardcoded dengan Consumer yang
+              // watch unreadCountProvider. Dot hanya tampil jika count > 0.
+              Consumer(
+                builder: (context, ref, _) {
+                  final unreadCount = ref.watch(unreadCountProvider);
+                  return GestureDetector(
+                    onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => ProviderScope(
+                          parent: ProviderScope.containerOf(context),
+                          child: const NotifikasiScreen(),
                         ),
                       ),
                     ),
-                  ],
-                ),
+                    child: Stack(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(10),
+                          decoration: BoxDecoration(
+                            color: Colors.white.withOpacity(0.15),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: const Icon(Icons.notifications_outlined,
+                              color: Colors.white, size: 22),
+                        ),
+                        if (unreadCount > 0)
+                          Positioned(
+                            top: 6, right: 6,
+                            child: Container(
+                              width: 8, height: 8,
+                              decoration: const BoxDecoration(
+                                color: Color(0xFFEF4444),
+                                shape: BoxShape.circle,
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
+                  );
+                },
               ),
             ],
           ),

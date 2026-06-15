@@ -238,8 +238,14 @@ class ReportsDao extends DatabaseAccessor<AppDatabase>
     double kasExpense = 0;
 
     for (final f in allFlows) {
+      // BUG #4 FIX: Exclude 'pelunasan_hutang' dari kasIncomeNonSales.
+      // Omzet dari transaksi hutang sudah dihitung di getOmzet().
+      // Pembayaran hutang bukan pendapatan baru — hanya konversi piutang → kas.
+      // Tanpa fix ini, hutang yang dibayar dalam periode yang sama dihitung 2x
+      // → inflasi laba bersih sebesar nilai pembayaran.
       if (f.type == 'income' &&
-          f.category.toLowerCase() != 'penjualan') {
+          f.category.toLowerCase() != 'penjualan' &&
+          f.category.toLowerCase() != 'pelunasan_hutang') {
         kasIncomeNonSales += f.amount;
       } else if (f.type == 'expense') {
         kasExpense += f.amount;

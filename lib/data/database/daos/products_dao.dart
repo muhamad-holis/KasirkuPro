@@ -23,9 +23,11 @@ class ProductsDao extends DatabaseAccessor<AppDatabase>
         ..where((t) => t.isActive.equals(true)))
           .getSingleOrNull();
 
+  // BUG #11 FIX: Ganti isSmallerOrEqual → isSmaller agar stok == minStock
+  // tidak dianggap "hampir habis". Peringatan hanya saat stock < minStock.
   Future<List<Product>> getLowStockProducts() =>
       (select(products)
-        ..where((t) => t.stock.isSmallerOrEqual(t.minStock))
+        ..where((t) => t.stock.isSmaller(t.minStock))
         ..where((t) => t.isActive.equals(true)))
           .get();
 
@@ -66,9 +68,14 @@ class ProductsDao extends DatabaseAccessor<AppDatabase>
   Stream<List<Product>> watchAllProducts() =>
       (select(products)..where((t) => t.isActive.equals(true))).watch();
 
+  // BUG #11 FIX: Ganti isSmallerOrEqual → isSmaller (sama seperti getLowStockProducts)
   Stream<List<Product>> watchLowStock() =>
       (select(products)
-        ..where((t) => t.stock.isSmallerOrEqual(t.minStock))
+        ..where((t) => t.stock.isSmaller(t.minStock))
         ..where((t) => t.isActive.equals(true)))
           .watch();
+
+  /// Ambil satu produk berdasarkan ID (untuk refresh stok saat load draft)
+  Future<Product?> getProductById(int id) =>
+      (select(products)..where((t) => t.id.equals(id))).getSingleOrNull();
 }

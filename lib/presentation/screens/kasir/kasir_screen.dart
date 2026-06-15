@@ -67,7 +67,9 @@ class _KasirScreenState extends ConsumerState<KasirScreen> {
           ),
         );
         if (load == true) {
-          await notifier.loadDraft();
+          // BUG #8 FIX: Pass db agar loadDraft bisa refresh stok dari DB
+          final db = ref.read(databaseProvider);
+          await notifier.loadDraft(db);
         } else {
           await notifier.clearDraft();
         }

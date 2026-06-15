@@ -151,11 +151,19 @@ final debtPaymentHistoryProvider =
     now.add(const Duration(days: 1)),
   ).first;
 
-  // Filter yang berkaitan dengan debt ini (dari description)
+  // BUG #3 FIX: Filter eksak berdasarkan marker [debt_id:X] di description.
+  // Sebelumnya menggunakan OR dengan contains('Invoice') yang selalu true
+  // untuk semua cash_flow pelunasan_hutang → riwayat bayar campur semua pelanggan.
+  // Format description baru (dari hutang_screen.dart):
+  //   'Bayar hutang ${customerName} [debt_id:${debt.id}]'
+  //
+  // Untuk backward-compatibility dengan entry lama (format: 'Invoice #X'),
+  // tetap cek contains('$debtId') sebagai fallback, tapi TANPA contains('Invoice')
+  // yang menjadi root cause bug (selalu true).
   final related = flows.where((f) {
     return f.category == 'pelunasan_hutang' &&
-        ((f.description?.contains('$debtId') ?? false) ||
-         (f.description?.contains('Invoice') ?? false));
+        ((f.description?.contains('[debt_id:$debtId]') ?? false) ||
+         (f.description?.contains('$debtId') ?? false));
   }).toList();
 
   return related
