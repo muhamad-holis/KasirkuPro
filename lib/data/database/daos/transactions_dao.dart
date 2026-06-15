@@ -1,6 +1,6 @@
 part of '../app_database.dart';
 
-@DriftAccessor(tables: [Transactions, TransactionItems, Products, Customers])
+@DriftAccessor(tables: [Transactions, TransactionItems, Products, Customers, StockMovements])
 class TransactionsDao extends DatabaseAccessor<AppDatabase>
     with _$TransactionsDaoMixin {
   TransactionsDao(super.db);

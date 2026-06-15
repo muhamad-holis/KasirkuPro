@@ -27,7 +27,7 @@ class ProductsDao extends DatabaseAccessor<AppDatabase>
   // tidak dianggap "hampir habis". Peringatan hanya saat stock < minStock.
   Future<List<Product>> getLowStockProducts() =>
       (select(products)
-        ..where((t) => t.stock.isSmaller(t.minStock))
+        ..where((t) => t.stock.isSmallerThanValue(t.minStock))
         ..where((t) => t.isActive.equals(true)))
           .get();
 
@@ -71,7 +71,7 @@ class ProductsDao extends DatabaseAccessor<AppDatabase>
   // BUG #11 FIX: Ganti isSmallerOrEqual → isSmaller (sama seperti getLowStockProducts)
   Stream<List<Product>> watchLowStock() =>
       (select(products)
-        ..where((t) => t.stock.isSmaller(t.minStock))
+        ..where((t) => t.stock.isSmallerThanValue(t.minStock))
         ..where((t) => t.isActive.equals(true)))
           .watch();
 
