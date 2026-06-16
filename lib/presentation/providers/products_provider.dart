@@ -41,6 +41,13 @@ final lowStockProvider = StreamProvider<List<Product>>((ref) {
   return ref.watch(databaseProvider).productsDao.watchLowStock();
 });
 
+// Produk yang stoknya habis total (stock == 0)
+final outStockProvider = StreamProvider<List<Product>>((ref) {
+  return ref.watch(databaseProvider).productsDao.watchAllProducts().map(
+    (list) => list.where((p) => p.stock <= 0).toList(),
+  );
+});
+
 // ─── Categories ───────────────────────────────────────────────────────────────
 
 final categoriesProvider = StreamProvider<List<Category>>((ref) {

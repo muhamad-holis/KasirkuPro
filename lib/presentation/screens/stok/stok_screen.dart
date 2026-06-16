@@ -31,7 +31,7 @@ class _StokScreenState extends ConsumerState<StokScreen>
   @override
   void initState() {
     super.initState();
-    _tab = TabController(length: 3, vsync: this);
+    _tab = TabController(length: 4, vsync: this);
     _tab.addListener(() {
       if (_tab.indexIsChanging || _tab.index != _currentTab) {
         setState(() => _currentTab = _tab.index);
@@ -72,6 +72,7 @@ class _StokScreenState extends ConsumerState<StokScreen>
           tabs: const [
             Tab(text: 'Semua'),
             Tab(text: 'Hampir Habis'),
+            Tab(text: 'Habis'),
             Tab(text: 'Kategori'),
           ],
         ),
@@ -81,10 +82,11 @@ class _StokScreenState extends ConsumerState<StokScreen>
         children: [
           _ProductListTab(),
           _LowStockTab(),
+          _OutStockTab(),
           _CategoryTab(),
         ],
       ),
-      floatingActionButton: _currentTab == 2
+      floatingActionButton: _currentTab == 3
           ? null
           : FloatingActionButton.extended(
               onPressed: () => _showAddProduct(context, ref),
@@ -430,6 +432,78 @@ class _LowStockTab extends ConsumerWidget {
                   style: const TextStyle(
                     fontWeight: FontWeight.w600,
                     color: AppColors.warning)),
+              ]),
+            ),
+            Expanded(
+              child: GridView.builder(
+                padding: const EdgeInsets.fromLTRB(12, 8, 12, 100),
+                gridDelegate:
+                    const SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: 3,
+                  crossAxisSpacing: 8,
+                  mainAxisSpacing: 8,
+                  childAspectRatio: 0.62,
+                ),
+                itemCount: list.length,
+                itemBuilder: (_, i) => _ProductGridCard(product: list[i]),
+              ),
+            ),
+          ],
+        );
+      },
+      loading: () => const Center(child: CircularProgressIndicator()),
+      error: (e, _) => Center(child: Text('Error: $e')),
+    );
+  }
+}
+
+// ─── Tab: Stok Habis ─────────────────────────────────────────────────────────
+
+class _OutStockTab extends ConsumerWidget {
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final out = ref.watch(outStockProvider);
+    return out.when(
+      data: (list) {
+        if (list.isEmpty) {
+          return Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Icon(Icons.check_circle_outline,
+                  size: 64, color: AppColors.success),
+                const SizedBox(height: 12),
+                const Text('Tidak ada stok habis!',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.success)),
+                const SizedBox(height: 6),
+                Text('Semua produk masih tersedia',
+                  style: TextStyle(color: Colors.grey.shade500)),
+              ],
+            ),
+          );
+        }
+        return Column(
+          children: [
+            Container(
+              margin: const EdgeInsets.fromLTRB(12, 12, 12, 0),
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: AppColors.danger.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: AppColors.danger.withOpacity(0.3)),
+              ),
+              child: Row(children: [
+                const Icon(Icons.remove_circle_outline,
+                  color: AppColors.danger, size: 18),
+                const SizedBox(width: 8),
+                Text('${list.length} produk stoknya habis',
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.danger)),
               ]),
             ),
             Expanded(

@@ -204,7 +204,7 @@ class _LainnyaHomeScreen extends ConsumerWidget {
                     Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text('Menu Lainnya',
+                        Text('Menu',
                             style: TextStyle(fontSize: 22,
                                 fontWeight: FontWeight.w800,
                                 color: titleColor)),
@@ -346,6 +346,16 @@ class _LainnyaHomeScreen extends ConsumerWidget {
                         MaterialPageRoute(builder: (_) => ProviderScope(
                           parent: ProviderScope.containerOf(context),
                           child: const NotifikasiScreen()))),
+                  ),
+                  _MenuCard(
+                    icon: Icons.calculate_rounded,
+                    label: 'Kalkulator',
+                    description: 'Hitung cepat',
+                    color: AppColors.info,
+                    onTap: () => showDialog(
+                      context: context,
+                      builder: (_) => const _KalkulatorDialog(),
+                    ),
                   ),
                   // Pengaturan & Kelola Kasir hanya untuk Admin
                   if (isAdmin) ...[
@@ -586,7 +596,7 @@ class _BottomNavBar extends StatelessWidget {
                   current: currentIndex,
                   icon: Icons.grid_view_outlined,
                   activeIcon: Icons.grid_view_rounded,
-                  label: 'Lainnya',
+                  label: 'Menu',
                   ref: ref,
                   // Jika sudah di tab Lainnya & tap lagi → pop ke grid home
                   onRetap: () {
@@ -714,6 +724,146 @@ class _NavItem extends StatelessWidget {
                     : inactiveColor.withOpacity(inactiveOpacity),
               ),
             ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ─── Kalkulator Dialog ────────────────────────────────────────────────────────
+
+class _KalkulatorDialog extends StatefulWidget {
+  const _KalkulatorDialog();
+  @override
+  State<_KalkulatorDialog> createState() => _KalkulatorDialogState();
+}
+
+class _KalkulatorDialogState extends State<_KalkulatorDialog> {
+  String _display = '0';
+  String _expr = '';
+  double? _prev;
+  String? _op;
+  bool _newNum = true;
+
+  void _press(String v) {
+    setState(() {
+      if (v == 'C') {
+        _display = '0'; _expr = ''; _prev = null; _op = null; _newNum = true;
+      } else if (v == '⌫') {
+        if (_display.length > 1) {
+          _display = _display.substring(0, _display.length - 1);
+        } else {
+          _display = '0';
+        }
+      } else if (['+', '-', '×', '÷'].contains(v)) {
+        _prev = double.tryParse(_display);
+        _op = v;
+        _expr = '$_display $v';
+        _newNum = true;
+      } else if (v == '=') {
+        if (_prev != null && _op != null) {
+          final cur = double.tryParse(_display) ?? 0;
+          double res = 0;
+          if (_op == '+') res = _prev! + cur;
+          if (_op == '-') res = _prev! - cur;
+          if (_op == '×') res = _prev! * cur;
+          if (_op == '÷') res = cur != 0 ? _prev! / cur : 0;
+          _display = res == res.truncateToDouble()
+              ? res.toInt().toString()
+              : res.toStringAsFixed(4).replaceAll(RegExp(r'0+$'), '').replaceAll(RegExp(r'\.$'), '');
+          _expr = ''; _prev = null; _op = null; _newNum = true;
+        }
+      } else if (v == '.') {
+        if (_newNum) { _display = '0.'; _newNum = false; }
+        else if (!_display.contains('.')) _display += '.';
+      } else {
+        if (_newNum || _display == '0') { _display = v; _newNum = false; }
+        else if (_display.length < 12) _display += v;
+      }
+    });
+  }
+
+  Widget _btn(String label, {Color? bg, Color? fg, int flex = 1}) {
+    return Expanded(
+      flex: flex,
+      child: Padding(
+        padding: const EdgeInsets.all(3),
+        child: Material(
+          color: bg ?? Colors.grey.shade100,
+          borderRadius: BorderRadius.circular(12),
+          child: InkWell(
+            borderRadius: BorderRadius.circular(12),
+            onTap: () => _press(label),
+            child: SizedBox(
+              height: 52,
+              child: Center(
+                child: Text(
+                  label,
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w600,
+                    color: fg ?? AppColors.textPrimary,
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return Dialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(12, 16, 12, 12),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text('Kalkulator',
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+            const SizedBox(height: 12),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              decoration: BoxDecoration(
+                color: isDark ? AppColors.darkSurface : Colors.grey.shade100,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Text(_expr,
+                    style: TextStyle(fontSize: 13, color: Colors.grey.shade500)),
+                  const SizedBox(height: 4),
+                  Text(_display,
+                    style: const TextStyle(
+                      fontSize: 34, fontWeight: FontWeight.w700)),
+                ],
+              ),
+            ),
+            const SizedBox(height: 8),
+            Row(children: [
+              _btn('C', bg: AppColors.danger.withOpacity(0.12), fg: AppColors.danger),
+              _btn('⌫', bg: AppColors.warning.withOpacity(0.12), fg: AppColors.warning),
+              _btn('%', bg: Colors.grey.shade200),
+              _btn('÷', bg: AppColors.primary.withOpacity(0.12), fg: AppColors.primary),
+            ]),
+            Row(children: [_btn('7'), _btn('8'), _btn('9'),
+              _btn('×', bg: AppColors.primary.withOpacity(0.12), fg: AppColors.primary)]),
+            Row(children: [_btn('4'), _btn('5'), _btn('6'),
+              _btn('-', bg: AppColors.primary.withOpacity(0.12), fg: AppColors.primary)]),
+            Row(children: [_btn('1'), _btn('2'), _btn('3'),
+              _btn('+', bg: AppColors.primary.withOpacity(0.12), fg: AppColors.primary)]),
+            Row(children: [
+              _btn('0', flex: 2),
+              _btn('.'),
+              _btn('=', bg: AppColors.primary, fg: Colors.white),
+            ]),
           ],
         ),
       ),
