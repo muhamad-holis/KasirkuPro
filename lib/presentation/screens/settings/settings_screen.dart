@@ -15,12 +15,35 @@ import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/currency.dart';
 import '../../providers/settings_provider.dart';
 import '../../providers/database_provider.dart';
+import '../../providers/auth_provider.dart';
+import '../../providers/backup_provider.dart';
 
 class SettingsScreen extends ConsumerWidget {
   const SettingsScreen({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    // BUG #2 FIX: Guard — hanya Admin yang boleh akses Settings.
+    // Kasir yang masuk lewat shortcut dashboard akan lihat halaman akses ditolak.
+    final isAdmin = ref.watch(isAdminProvider);
+    if (!isAdmin) {
+      return Scaffold(
+        appBar: AppBar(title: const Text('Pengaturan')),
+        body: const Center(
+          child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+            Icon(Icons.block_rounded, size: 64, color: AppColors.danger),
+            SizedBox(height: 16),
+            Text('Akses Ditolak',
+                style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800,
+                    color: AppColors.danger)),
+            SizedBox(height: 8),
+            Text('Pengaturan hanya dapat diakses oleh Admin.',
+                style: TextStyle(color: AppColors.textSecondary)),
+          ]),
+        ),
+      );
+    }
+
     final isDark        = ref.watch(themeModeProvider);
     final store         = ref.watch(storeSettingsProvider);
     final printer       = ref.watch(printerSettingsProvider);
@@ -254,6 +277,11 @@ class SettingsScreen extends ConsumerWidget {
               color: AppColors.danger,
               onTap: () => _confirmReset(context, ref),
             ),
+          ]),
+
+          // ── Backup & Restore ───────────────────────────────
+          _Section('Backup & Restore', [
+            _BackupTile(),
           ]),
 
           // ── Tentang ───────────────────────────────────────
@@ -1785,5 +1813,258 @@ class _TileIcon extends StatelessWidget {
       ),
       child: Icon(icon, color: color, size: 20),
     );
+  }
+}
+
+// ─── Backup Tile ──────────────────────────────────────────────────────────────
+
+class _BackupTile extends ConsumerWidget {
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final backup = ref.watch(backupProvider);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    final months = ['Jan','Feb','Mar','Apr','Mei','Jun',
+                    'Jul','Ags','Sep','Okt','Nov','Des'];
+    String lastBackupStr = 'Belum pernah backup';
+    if (backup.lastBackup != null) {
+      final d = backup.lastBackup!;
+      lastBackupStr =
+          '${d.day} ${months[d.month - 1]} ${d.year}, ${d.hour.toString().padLeft(2, '0')}:${d.minute.toString().padLeft(2, '0')}';
+    }
+
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: isDark ? AppColors.darkCard : Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+            color: isDark ? AppColors.darkBorder : AppColors.border,
+            width: 0.5),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // ── Status koneksi Google ──────────────────────────────────────────
+          Row(children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: (backup.isConnected
+                        ? AppColors.success
+                        : AppColors.textSecondary)
+                    .withOpacity(0.1),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Icon(
+                Icons.backup_rounded,
+                color: backup.isConnected
+                    ? AppColors.success
+                    : AppColors.textSecondary,
+                size: 20,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    backup.isConnected ? 'Terhubung' : 'Belum Terhubung',
+                    style: TextStyle(
+                      fontWeight: FontWeight.w700,
+                      fontSize: 14,
+                      color: backup.isConnected
+                          ? AppColors.success
+                          : AppColors.textSecondary,
+                    ),
+                  ),
+                  Text(
+                    backup.isConnected
+                        ? backup.connectedEmail ?? ''
+                        : 'Hubungkan Google Drive untuk backup otomatis',
+                    style: const TextStyle(
+                        fontSize: 11, color: AppColors.textSecondary),
+                  ),
+                ],
+              ),
+            ),
+          ]),
+
+          const SizedBox(height: 12),
+          const Divider(height: 1),
+          const SizedBox(height: 12),
+
+          // ── Info backup terakhir ───────────────────────────────────────────
+          Row(children: [
+            const Icon(Icons.history_rounded,
+                size: 14, color: AppColors.textSecondary),
+            const SizedBox(width: 6),
+            Text(
+              'Backup terakhir: $lastBackupStr',
+              style: const TextStyle(
+                  fontSize: 12, color: AppColors.textSecondary),
+            ),
+          ]),
+
+          const SizedBox(height: 12),
+
+          // ── Pesan status ──────────────────────────────────────────────────
+          if (backup.message != null) ...[
+            Container(
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              decoration: BoxDecoration(
+                color: backup.status == BackupStatus.error
+                    ? AppColors.danger.withOpacity(0.08)
+                    : AppColors.success.withOpacity(0.08),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Row(children: [
+                Icon(
+                  backup.status == BackupStatus.error
+                      ? Icons.error_outline
+                      : Icons.check_circle_outline,
+                  size: 14,
+                  color: backup.status == BackupStatus.error
+                      ? AppColors.danger
+                      : AppColors.success,
+                ),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    backup.message!,
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: backup.status == BackupStatus.error
+                          ? AppColors.danger
+                          : AppColors.success,
+                    ),
+                  ),
+                ),
+              ]),
+            ),
+            const SizedBox(height: 12),
+          ],
+
+          // ── Tombol aksi ───────────────────────────────────────────────────
+          if (backup.status == BackupStatus.loading)
+            const Center(
+              child: Padding(
+                padding: EdgeInsets.symmetric(vertical: 8),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    SizedBox(
+                      width: 16, height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2)),
+                    SizedBox(width: 8),
+                    Text('Memproses...',
+                        style: TextStyle(
+                            fontSize: 13, color: AppColors.textSecondary)),
+                  ],
+                ),
+              ),
+            )
+          else if (!backup.isConnected)
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                icon: const Icon(Icons.login_rounded, size: 18),
+                label: const Text('Hubungkan Google Drive'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.primary,
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10)),
+                ),
+                onPressed: () =>
+                    ref.read(backupProvider.notifier).connectGoogle(),
+              ),
+            )
+          else
+            Column(children: [
+              Row(children: [
+                Expanded(
+                  child: OutlinedButton.icon(
+                    icon: const Icon(Icons.cloud_upload_outlined, size: 16),
+                    label: const Text('Backup Sekarang'),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: AppColors.primary,
+                      side: const BorderSide(color: AppColors.primary),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10)),
+                    ),
+                    onPressed: () =>
+                        ref.read(backupProvider.notifier).backupNow(),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: OutlinedButton.icon(
+                    icon: const Icon(Icons.cloud_download_outlined, size: 16),
+                    label: const Text('Restore'),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: AppColors.info,
+                      side: const BorderSide(color: AppColors.info),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10)),
+                    ),
+                    onPressed: () => _confirmRestore(context, ref),
+                  ),
+                ),
+              ]),
+              const SizedBox(height: 8),
+              SizedBox(
+                width: double.infinity,
+                child: TextButton.icon(
+                  icon: const Icon(Icons.logout_rounded,
+                      size: 14, color: AppColors.danger),
+                  label: const Text('Putuskan Google Drive',
+                      style: TextStyle(
+                          fontSize: 12, color: AppColors.danger)),
+                  onPressed: () =>
+                      ref.read(backupProvider.notifier).disconnectGoogle(),
+                ),
+              ),
+            ]),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _confirmRestore(BuildContext context, WidgetRef ref) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Row(children: [
+          Icon(Icons.warning_amber_rounded,
+              color: AppColors.warning, size: 22),
+          SizedBox(width: 8),
+          Text('Restore Data?',
+              style: TextStyle(fontWeight: FontWeight.w700)),
+        ]),
+        content: const Text(
+          'Data saat ini akan diganti dengan data dari backup. '
+          'Pastikan sudah backup data terbaru sebelum restore.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Batal')),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.warning,
+                foregroundColor: Colors.white),
+            child: const Text('Ya, Restore')),
+        ],
+      ),
+    );
+    if (confirm == true) {
+      ref.read(backupProvider.notifier).restoreFromDrive();
+    }
   }
 }

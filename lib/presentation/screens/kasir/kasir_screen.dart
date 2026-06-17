@@ -2073,6 +2073,141 @@ class _PaymentSheetState extends ConsumerState<_PaymentSheet> {
               ),
               if (_method == 'hutang') ...[
               ],
+              // FITUR POIN: UI tukar poin pelanggan
+              if (_selectedCustomer != null && _selectedCustomer!.points > 0) ...[
+                Consumer(
+                  builder: (_, ref, __) {
+                    final cart = ref.watch(kasirProvider);
+                    final maxRedeem = _selectedCustomer!.points;
+                    final currentRedeem = cart.redeemPoints;
+                    return Container(
+                      margin: const EdgeInsets.only(bottom: 12),
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: AppColors.warning.withOpacity(0.08),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                            color: AppColors.warning.withOpacity(0.3)),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(children: [
+                            const Icon(Icons.stars_rounded,
+                                color: AppColors.warning, size: 18),
+                            const SizedBox(width: 6),
+                            Text(
+                              'Tukar Poin ($maxRedeem tersedia)',
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w700,
+                                fontSize: 13,
+                                color: AppColors.warning,
+                              ),
+                            ),
+                            const Spacer(),
+                            Text(
+                              '1 poin = Rp 100',
+                              style: TextStyle(
+                                  fontSize: 11,
+                                  color: Colors.grey.shade500),
+                            ),
+                          ]),
+                          const SizedBox(height: 10),
+                          Row(children: [
+                            GestureDetector(
+                              onTap: currentRedeem > 0
+                                  ? () => ref
+                                      .read(kasirProvider.notifier)
+                                      .setRedeemPoints(currentRedeem - 1)
+                                  : null,
+                              child: Container(
+                                width: 32, height: 32,
+                                decoration: BoxDecoration(
+                                  color: currentRedeem > 0
+                                      ? AppColors.warning.withOpacity(0.15)
+                                      : Colors.grey.shade100,
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: Icon(Icons.remove,
+                                    size: 16,
+                                    color: currentRedeem > 0
+                                        ? AppColors.warning
+                                        : Colors.grey.shade400),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Column(
+                                children: [
+                                  Text(
+                                    '$currentRedeem poin',
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.w800,
+                                      fontSize: 16,
+                                      color: AppColors.warning,
+                                    ),
+                                  ),
+                                  Text(
+                                    '= Rp ${(currentRedeem * 100).toString().replaceAllMapped(RegExp(r"(\d{1,3})(?=(\d{3})+(?!\d))"), (m) => "\${m[1]}.")}',
+                                    style: TextStyle(
+                                        fontSize: 11,
+                                        color: Colors.grey.shade500),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            GestureDetector(
+                              onTap: currentRedeem < maxRedeem
+                                  ? () => ref
+                                      .read(kasirProvider.notifier)
+                                      .setRedeemPoints(currentRedeem + 1)
+                                  : null,
+                              child: Container(
+                                width: 32, height: 32,
+                                decoration: BoxDecoration(
+                                  color: currentRedeem < maxRedeem
+                                      ? AppColors.warning.withOpacity(0.15)
+                                      : Colors.grey.shade100,
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: Icon(Icons.add,
+                                    size: 16,
+                                    color: currentRedeem < maxRedeem
+                                        ? AppColors.warning
+                                        : Colors.grey.shade400),
+                              ),
+                            ),
+                          ]),
+                          Slider(
+                            value: currentRedeem.toDouble(),
+                            min: 0,
+                            max: maxRedeem.toDouble(),
+                            divisions: maxRedeem > 0 ? maxRedeem : 1,
+                            activeColor: AppColors.warning,
+                            onChanged: (v) => ref
+                                .read(kasirProvider.notifier)
+                                .setRedeemPoints(v.round()),
+                          ),
+                          if (currentRedeem > 0)
+                            Align(
+                              alignment: Alignment.centerRight,
+                              child: TextButton(
+                                onPressed: () => ref
+                                    .read(kasirProvider.notifier)
+                                    .setRedeemPoints(0),
+                                child: const Text('Reset Poin',
+                                    style: TextStyle(
+                                        fontSize: 11,
+                                        color: AppColors.danger)),
+                              ),
+                            ),
+                        ],
+                      ),
+                    );
+                  },
+                ),
+              ],
               const SizedBox(height: 16),
             ],
 

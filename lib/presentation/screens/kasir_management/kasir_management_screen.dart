@@ -473,28 +473,57 @@ class _AddEditSheetState extends ConsumerState<_AddEditSheet> {
           const SizedBox(height: 16),
 
           // Role
+          // BUG #1 FIX: Saat tambah user baru, hanya bisa pilih Kasir.
+          // Admin tidak boleh membuat Admin baru — hanya bisa tambah Kasir.
+          // Saat edit, role ditampilkan tapi tidak bisa diubah (readonly).
           Container(
             decoration: BoxDecoration(
               border: Border.all(
                   color: isDark ? AppColors.darkBorder : AppColors.border),
               borderRadius: BorderRadius.circular(12),
             ),
-            child: Row(children: [
-              Expanded(child: RadioListTile<String>(
-                title: const Text('Kasir', style: TextStyle(fontSize: 14)),
-                value: 'kasir', groupValue: _role,
-                activeColor: AppColors.primary,
-                onChanged: (v) => setState(() => _role = v!),
-                dense: true,
-              )),
-              Expanded(child: RadioListTile<String>(
-                title: const Text('Admin', style: TextStyle(fontSize: 14)),
-                value: 'admin', groupValue: _role,
-                activeColor: AppColors.primary,
-                onChanged: (v) => setState(() => _role = v!),
-                dense: true,
-              )),
-            ]),
+            child: isEdit
+                // Mode edit: tampilkan role saat ini sebagai readonly
+                ? Padding(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 16, vertical: 14),
+                    child: Row(children: [
+                      Icon(
+                        _role == 'admin'
+                            ? Icons.admin_panel_settings_rounded
+                            : Icons.badge_rounded,
+                        color: _role == 'admin'
+                            ? AppColors.primary : AppColors.success,
+                        size: 20,
+                      ),
+                      const SizedBox(width: 10),
+                      Text(
+                        'Role: ${_role == 'admin' ? 'Admin' : 'Kasir'}',
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                          color: _role == 'admin'
+                              ? AppColors.primary : AppColors.success,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Text('(tidak dapat diubah)',
+                          style: TextStyle(
+                              fontSize: 12,
+                              color: Colors.grey.shade500)),
+                    ]),
+                  )
+                // Mode tambah baru: hanya tampilkan Kasir
+                : RadioListTile<String>(
+                    title: const Text('Kasir', style: TextStyle(fontSize: 14)),
+                    subtitle: const Text('Admin hanya dapat menambah akun Kasir',
+                        style: TextStyle(fontSize: 11)),
+                    value: 'kasir',
+                    groupValue: _role,
+                    activeColor: AppColors.primary,
+                    onChanged: (v) => setState(() => _role = v!),
+                    dense: true,
+                  ),
           ),
 
           // PIN hanya saat tambah baru

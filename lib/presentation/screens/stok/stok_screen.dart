@@ -13,6 +13,7 @@ import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/currency.dart';
 import '../../providers/products_provider.dart';
 import '../../providers/database_provider.dart';
+import '../../providers/auth_provider.dart';
 import '../../../data/database/app_database.dart';
 
 class StokScreen extends ConsumerStatefulWidget {
@@ -88,13 +89,17 @@ class _StokScreenState extends ConsumerState<StokScreen>
       ),
       floatingActionButton: _currentTab == 3
           ? null
-          : FloatingActionButton.extended(
-              onPressed: () => _showAddProduct(context, ref),
-              icon: const Icon(Icons.add),
-              label: const Text('Tambah Produk'),
-              backgroundColor: AppColors.primary,
-              foregroundColor: Colors.white,
-            ),
+          // BUG #2 FIX: FAB Tambah Produk hanya tampil untuk Admin.
+          // Kasir bisa lihat stok tapi tidak bisa tambah/edit/hapus produk.
+          : ref.watch(isAdminProvider)
+              ? FloatingActionButton.extended(
+                  onPressed: () => _showAddProduct(context, ref),
+                  icon: const Icon(Icons.add),
+                  label: const Text('Tambah Produk'),
+                  backgroundColor: AppColors.primary,
+                  foregroundColor: Colors.white,
+                )
+              : null,
     );
   }
 
@@ -1302,6 +1307,8 @@ class _ProductCard extends ConsumerWidget {
   }
 
   void _showDetail(BuildContext context, WidgetRef ref) {
+    // BUG #2 FIX: Kasir hanya bisa lihat detail produk, tidak bisa edit/hapus.
+    final isAdmin = ref.read(isAdminProvider);
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -1310,7 +1317,7 @@ class _ProductCard extends ConsumerWidget {
       ),
       builder: (_) => ProviderScope(
         parent: ProviderScope.containerOf(context),
-        child: _EditProductSheet(product: product),
+        child: _EditProductSheet(product: product, readOnly: !isAdmin),
       ),
     );
   }
@@ -1948,7 +1955,8 @@ class _AddProductSheetState extends ConsumerState<_AddProductSheet> {
 
 class _EditProductSheet extends ConsumerStatefulWidget {
   final Product product;
-  const _EditProductSheet({required this.product});
+  final bool readOnly;
+  const _EditProductSheet({required this.product, this.readOnly = false});
 
   @override
   ConsumerState<_EditProductSheet> createState() =>
@@ -2266,28 +2274,52 @@ class _EditProductSheetState extends ConsumerState<_EditProductSheet>
                       ]),
                       const SizedBox(height: 20),
 
-                      Row(children: [
-                        Expanded(
-                          child: OutlinedButton.icon(
-                            icon: const Icon(Icons.delete_outline,
-                              color: AppColors.danger, size: 18),
-                            label: const Text('Hapus',
-                              style: TextStyle(color: AppColors.danger)),
-                            onPressed: () => _delete(context)),
-                        ),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: ElevatedButton.icon(
-                            icon: _loading
-                                ? const SizedBox(
-                                    width: 16, height: 16,
-                                    child: CircularProgressIndicator(
-                                      color: Colors.white, strokeWidth: 2))
-                                : const Icon(Icons.save_outlined, size: 18),
-                            label: Text(_loading ? 'Menyimpan...' : 'Simpan'),
-                            onPressed: _loading ? null : _update),
-                        ),
-                      ]),
+                      // BUG #2 FIX: Kasir tidak bisa hapus atau simpan perubahan produk
+                      if (widget.readOnly)
+                        Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: AppColors.warning.withOpacity(0.1),
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(
+                                color: AppColors.warning.withOpacity(0.3)),
+                          ),
+                          child: const Row(children: [
+                            Icon(Icons.info_outline,
+                                color: AppColors.warning, size: 18),
+                            SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                'Hanya Admin yang dapat mengubah data produk.',
+                                style: TextStyle(
+                                    fontSize: 12, color: AppColors.warning),
+                              ),
+                            ),
+                          ]),
+                        )
+                      else
+                        Row(children: [
+                          Expanded(
+                            child: OutlinedButton.icon(
+                              icon: const Icon(Icons.delete_outline,
+                                color: AppColors.danger, size: 18),
+                              label: const Text('Hapus',
+                                style: TextStyle(color: AppColors.danger)),
+                              onPressed: () => _delete(context)),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: ElevatedButton.icon(
+                              icon: _loading
+                                  ? const SizedBox(
+                                      width: 16, height: 16,
+                                      child: CircularProgressIndicator(
+                                        color: Colors.white, strokeWidth: 2))
+                                  : const Icon(Icons.save_outlined, size: 18),
+                              label: Text(_loading ? 'Menyimpan...' : 'Simpan'),
+                              onPressed: _loading ? null : _update),
+                          ),
+                        ]),
                     ],
                   ),
                 ),

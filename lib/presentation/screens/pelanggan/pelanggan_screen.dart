@@ -861,6 +861,12 @@ class _CustomerDetailSheet extends ConsumerWidget {
                 _CustomerDebtsSection(customerId: customer.id),
                 const SizedBox(height: 20),
 
+                // ── Riwayat & Info Poin ─────────────────────────────────────
+                _SectionTitle('Poin Reward'),
+                const SizedBox(height: 8),
+                _CustomerPointsSection(customer: customer),
+                const SizedBox(height: 20),
+
                 // ── Tombol aksi ─────────────────────────────────────────────
                 Row(children: [
                   Expanded(
@@ -1289,6 +1295,202 @@ class _InfoRow extends StatelessWidget {
                   fontSize: 13, fontWeight: FontWeight.w600)),
         ),
       ]),
+    );
+  }
+}
+
+// ─── Section Poin Reward Pelanggan ────────────────────────────────────────────
+
+class _CustomerPointsSection extends ConsumerWidget {
+  final Customer customer;
+  const _CustomerPointsSection({required this.customer});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // ── Ringkasan poin ────────────────────────────────────────────────────
+        Container(
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: AppColors.warning.withOpacity(0.08),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: AppColors.warning.withOpacity(0.3)),
+          ),
+          child: Row(children: [
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: AppColors.warning.withOpacity(0.15),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(Icons.stars_rounded,
+                  color: AppColors.warning, size: 22),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('Total Poin Aktif',
+                      style: TextStyle(
+                          fontSize: 12, color: AppColors.textSecondary)),
+                  const SizedBox(height: 2),
+                  Text(
+                    '${customer.points} poin',
+                    style: const TextStyle(
+                      fontSize: 22,
+                      fontWeight: FontWeight.w800,
+                      color: AppColors.warning,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                const Text('Nilai tukar',
+                    style: TextStyle(
+                        fontSize: 11, color: AppColors.textSecondary)),
+                Text(
+                  'Rp ${(customer.points * 100).toString().replaceAllMapped(RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (m) => '${m[1]}.')}',
+                  style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.warning,
+                  ),
+                ),
+                const Text('1 poin = Rp 100',
+                    style: TextStyle(
+                        fontSize: 10, color: AppColors.textSecondary)),
+              ],
+            ),
+          ]),
+        ),
+        const SizedBox(height: 12),
+
+        // ── Riwayat perolehan poin dari transaksi ─────────────────────────────
+        const Text('Riwayat Perolehan Poin',
+            style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w700,
+                color: AppColors.textSecondary)),
+        const SizedBox(height: 8),
+
+        FutureBuilder<List<Transaction>>(
+          future: ref
+              .read(databaseProvider)
+              .transactionsDao
+              .getTransactionsByCustomer(customer.id),
+          builder: (_, snap) {
+            if (!snap.hasData) {
+              return const Center(
+                child: Padding(
+                  padding: EdgeInsets.all(16),
+                  child: CircularProgressIndicator(color: AppColors.warning),
+                ),
+              );
+            }
+            final txList = snap.data!;
+            // Hitung riwayat poin dari tiap transaksi (1 poin per Rp 10.000)
+            final pointHistory = txList
+                .map((tx) {
+                  final pts = (tx.total / 10000).floor();
+                  return {'tx': tx, 'pts': pts};
+                })
+                .where((e) => (e['pts'] as int) > 0)
+                .toList();
+
+            if (pointHistory.isEmpty) {
+              return Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: isDark ? AppColors.darkCard : Colors.grey.shade50,
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: const Center(
+                  child: Text('Belum ada perolehan poin',
+                      style: TextStyle(
+                          color: AppColors.textSecondary, fontSize: 13)),
+                ),
+              );
+            }
+
+            return ListView.separated(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              itemCount: pointHistory.length > 5 ? 5 : pointHistory.length,
+              separatorBuilder: (_, __) => const Divider(height: 1),
+              itemBuilder: (_, i) {
+                final item = pointHistory[i];
+                final tx = item['tx'] as dynamic;
+                final pts = item['pts'] as int;
+                final dt = tx.createdAt as DateTime;
+                final months = [
+                  'Jan','Feb','Mar','Apr','Mei','Jun',
+                  'Jul','Ags','Sep','Okt','Nov','Des'
+                ];
+                final tgl =
+                    '${dt.day} ${months[dt.month - 1]} ${dt.year}';
+
+                return Container(
+                  padding: const EdgeInsets.symmetric(
+                      vertical: 10, horizontal: 12),
+                  decoration: BoxDecoration(
+                    color: isDark ? AppColors.darkCard : Colors.white,
+                    borderRadius: i == 0
+                        ? const BorderRadius.vertical(
+                            top: Radius.circular(10))
+                        : (i == (pointHistory.length > 5 ? 4 : pointHistory.length - 1)
+                            ? const BorderRadius.vertical(
+                                bottom: Radius.circular(10))
+                            : BorderRadius.zero),
+                  ),
+                  child: Row(children: [
+                    Container(
+                      padding: const EdgeInsets.all(6),
+                      decoration: BoxDecoration(
+                        color: AppColors.warning.withOpacity(0.1),
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(Icons.star_rounded,
+                          color: AppColors.warning, size: 14),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(tx.invoiceNumber ?? 'Transaksi',
+                              style: const TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600)),
+                          Text(tgl,
+                              style: const TextStyle(
+                                  fontSize: 11,
+                                  color: AppColors.textSecondary)),
+                        ],
+                      ),
+                    ),
+                    Text(
+                      '+$pts poin',
+                      style: const TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.warning,
+                      ),
+                    ),
+                  ]),
+                );
+              },
+            );
+          },
+        ),
+      ],
     );
   }
 }

@@ -104,6 +104,26 @@ class _MainNavigationState extends ConsumerState<MainNavigation> {
     final idx      = ref.watch(currentNavIndexProvider);
     final aktifUser = ref.watch(authProvider);
 
+    // BUG #3 FIX: Auto-redirect ke LoginScreen jika authProvider null.
+    // Sebelumnya logout hanya clear SecureStorage + manual navigate,
+    // tapi Riverpod state di memori masih ada sehingga saat app di-resume
+    // tanpa restart penuh, user masih bisa akses dashboard.
+    // Dengan listen di build(), setiap perubahan authProvider ke null
+    // akan langsung redirect tanpa mengandalkan Navigator manual.
+    if (aktifUser == null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (context.mounted) {
+          Navigator.of(context).pushAndRemoveUntil(
+            MaterialPageRoute(builder: (_) => const LoginScreen()),
+            (_) => false,
+          );
+        }
+      });
+      return const Scaffold(
+        body: Center(child: CircularProgressIndicator()),
+      );
+    }
+
     return PopScope(
       canPop: false,
       onPopInvokedWithResult: (didPop, _) async {
