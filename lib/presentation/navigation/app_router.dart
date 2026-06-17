@@ -45,7 +45,7 @@ class _MainNavigationState extends ConsumerState<MainNavigation> {
     const DashboardScreen(),   // 0 Dashboard
     const LaporanScreen(),     // 1 Laporan
     const KasirScreen(),       // 2 Kasir
-    const StokScreen(),        // 3 Stok
+    const _StokTabGuard(),     // 3 Stok (diblokir total untuk Kasir)
     const _LainnyaTab(),       // 4 Lainnya (nested navigator)
   ];
 
@@ -547,6 +547,10 @@ class _BottomNavBar extends StatelessWidget {
     final shadowColor = Colors.black.withOpacity(isDark ? 0.35 : 0.15);
     final inactiveColor = Colors.white.withOpacity(0.65);
 
+    // BUG FIX: Cek role untuk blokir total akses tab Stok bagi Kasir.
+    // Kasir tidak boleh membuka tab Stok sama sekali (bukan hanya read-only).
+    final isAdmin = ref.read(isAdminProvider);
+
     const double barHeight = 72;
     const double fabSize = 58;
     // Ruang ekstra di atas bar agar tombol Kasir bisa "mengambang"
@@ -601,15 +605,20 @@ class _BottomNavBar extends StatelessWidget {
                 ),
                 // 2 – ruang kosong untuk tombol Kasir yang mengambang
                 const Expanded(child: SizedBox()),
-                // 3 – Stok
-                _NavItem(
-                  index: 3,
-                  current: currentIndex,
-                  icon: Icons.inventory_2_outlined,
-                  activeIcon: Icons.inventory_2_rounded,
-                  label: 'Stok',
-                  ref: ref,
-                ),
+                // 3 – Stok (blokir total untuk Kasir)
+                isAdmin
+                    ? _NavItem(
+                        index: 3,
+                        current: currentIndex,
+                        icon: Icons.inventory_2_outlined,
+                        activeIcon: Icons.inventory_2_rounded,
+                        label: 'Stok',
+                        ref: ref,
+                      )
+                    : _NavItemBlocked(
+                        icon: Icons.inventory_2_outlined,
+                        label: 'Stok',
+                      ),
                 // 4 – Lainnya (tab, bukan bottom sheet)
                 _NavItem(
                   index: 4,
@@ -884,6 +893,102 @@ class _KalkulatorDialogState extends State<_KalkulatorDialog> {
               _btn('.'),
               _btn('=', bg: AppColors.primary, fg: Colors.white),
             ]),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ─── Nav Item Diblokir (untuk Kasir) ──────────────────────────────────────────
+// Tampil di posisi yang sama seperti _NavItem biasa, tapi tap-nya
+// menampilkan info "akses ditolak" alih-alih pindah tab.
+
+class _NavItemBlocked extends StatelessWidget {
+  final IconData icon;
+  final String label;
+
+  const _NavItemBlocked({required this.icon, required this.label});
+
+  @override
+  Widget build(BuildContext context) {
+    return Expanded(
+      child: GestureDetector(
+        onTap: () {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: const Row(children: [
+                Icon(Icons.lock_outline, color: Colors.white, size: 18),
+                SizedBox(width: 8),
+                Text('Hanya Admin yang dapat mengakses Stok'),
+              ]),
+              backgroundColor: AppColors.danger,
+              behavior: SnackBarBehavior.floating,
+              duration: const Duration(seconds: 2),
+            ),
+          );
+        },
+        behavior: HitTestBehavior.opaque,
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 5),
+              child: Icon(icon, color: Colors.white.withOpacity(0.4), size: 22),
+            ),
+            const SizedBox(height: 3),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 10,
+                fontWeight: FontWeight.w500,
+                color: Colors.white.withOpacity(0.4),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ─── Guard Tab Stok ───────────────────────────────────────────────────────────
+// Pengaman ganda selain menyembunyikan nav item: jika index 3 entah bagaimana
+// tetap teraktivasi (misal lewat deep link atau state lama), tampilkan halaman
+// akses ditolak alih-alih StokScreen. Kasir tidak bisa membuka Stok sama sekali.
+
+class _StokTabGuard extends ConsumerWidget {
+  const _StokTabGuard();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final isAdmin = ref.watch(isAdminProvider);
+    if (isAdmin) {
+      return const StokScreen();
+    }
+    return Scaffold(
+      body: Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: AppColors.danger.withOpacity(0.1),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(Icons.lock_rounded,
+                  size: 48, color: AppColors.danger),
+            ),
+            const SizedBox(height: 16),
+            const Text('Akses Ditolak',
+                style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.w800,
+                    color: AppColors.danger)),
+            const SizedBox(height: 8),
+            const Text('Halaman Stok hanya dapat diakses oleh Admin.',
+                style: TextStyle(color: AppColors.textSecondary)),
           ],
         ),
       ),
