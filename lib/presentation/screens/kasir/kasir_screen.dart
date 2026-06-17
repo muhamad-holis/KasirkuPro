@@ -2917,9 +2917,23 @@ class _PaymentSheetState extends ConsumerState<_PaymentSheet> {
       ref.invalidate(dashboardStatsProvider);
 
       if (context.mounted) {
-        Navigator.pop(context);
-        _showSuccessDialog(context, invoiceNumber, cart, amountPaid,
-            ref.read(authProvider)?.name);
+        // ── BUGFIX: Simpan context dan data SEBELUM Navigator.pop ─────────
+        // Context dari _PaymentSheet akan detached setelah pop, sehingga
+        // showDialog yang dipanggil sesudah pop tidak akan muncul.
+        // Solusi: ambil navigator dari root context terlebih dahulu,
+        // lalu pop sheet, lalu tampilkan dialog menggunakan navigator tersebut.
+        final kasirName = ref.read(authProvider)?.name;
+        final nav = Navigator.of(context);
+        nav.pop(); // Tutup PaymentSheet
+
+        // Tunggu frame berikutnya agar animasi pop selesai,
+        // baru tampilkan dialog sukses di atas halaman Kasir.
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (nav.context.mounted) {
+            _showSuccessDialog(
+                nav.context, invoiceNumber, cart, amountPaid, kasirName);
+          }
+        });
       }
     } catch (e) {
       if (context.mounted) {
