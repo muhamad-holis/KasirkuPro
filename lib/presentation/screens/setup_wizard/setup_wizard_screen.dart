@@ -203,7 +203,7 @@ class _SetupWizardScreenState extends ConsumerState<SetupWizardScreen>
                   padding: const EdgeInsets.fromLTRB(24, 20, 24, 0),
                   child: Column(
                     children: [
-                      // Logo
+                      // FIX #1: Logo dari asset app_icon.png
                       Container(
                         width: 56, height: 56,
                         decoration: BoxDecoration(
@@ -212,21 +212,39 @@ class _SetupWizardScreenState extends ConsumerState<SetupWizardScreen>
                           border: Border.all(
                               color: Colors.white.withOpacity(0.3), width: 1),
                         ),
-                        child: const Icon(Icons.storefront_rounded,
-                            color: Colors.white, size: 30),
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(16),
+                          child: Image.asset(
+                            'assets/images/app_icon.png',
+                            width: 56, height: 56,
+                            fit: BoxFit.contain,
+                          ),
+                        ),
                       ),
                       const SizedBox(height: 12),
-                      const Text('KasirKu',
+                      // FIX #2: Title konsisten w800
+                      RichText(text: const TextSpan(children: [
+                        TextSpan(text: 'Kasir',
                           style: TextStyle(
-                              color: Colors.white,
-                              fontSize: 20,
-                              fontWeight: FontWeight.w800,
-                              letterSpacing: 0.5)),
+                            color: Colors.white,
+                            fontSize: 22,
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: 0.5,
+                          )),
+                        TextSpan(text: 'Ku',
+                          style: TextStyle(
+                            color: Color(0xFF99F6E4),
+                            fontSize: 22,
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: 0.5,
+                          )),
+                      ])),
                       const SizedBox(height: 4),
                       Text('Setup Awal',
                           style: TextStyle(
                               color: Colors.white.withOpacity(0.7),
-                              fontSize: 13)),
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600)),
                       const SizedBox(height: 24),
                       _buildStepper(),
                     ],

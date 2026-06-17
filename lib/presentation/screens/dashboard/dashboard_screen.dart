@@ -7,10 +7,13 @@ import '../../providers/products_provider.dart';
 import '../../providers/database_provider.dart';
 import '../../providers/settings_provider.dart';
 import '../../providers/notification_provider.dart';
+import '../../providers/auth_provider.dart';
 import '../../navigation/app_router.dart';
 import '../../../data/database/app_database.dart';
 import '../notifikasi/notifikasi_screen.dart';
 import '../settings/settings_screen.dart';
+import '../kasir_management/kasir_management_screen.dart';
+import '../login/login_screen.dart';
 
 // ─── Helpers warna tema ───────────────────────────────────────────────────────
 
@@ -318,17 +321,9 @@ class _Header extends ConsumerWidget {
             ],
           ),
           const SizedBox(height: 16),
-          // Kartu nama toko
+          // Kartu nama toko → tap untuk ganti role / kelola akun
           GestureDetector(
-            onTap: () => Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (_) => ProviderScope(
-                  parent: ProviderScope.containerOf(context),
-                  child: const SettingsScreen(),
-                ),
-              ),
-            ),
+            onTap: () => _showSwitchRoleSheet(context, ref),
             child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
             decoration: BoxDecoration(
@@ -347,29 +342,58 @@ class _Header extends ConsumerWidget {
               ),
               const SizedBox(width: 12),
               Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      settings.storeName.isNotEmpty ? settings.storeName : 'KasirKu',
-                      style: TextStyle(
-                        fontWeight: FontWeight.w700,
-                        fontSize: 14,
-                        color: _textPrimary(isDark),
-                      ),
-                    ),
-                    Text(
-                      settings.storeAddress.isNotEmpty
-                          ? settings.storeAddress
-                          : 'Pengaturan toko',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(fontSize: 12, color: _textSub(isDark)),
-                    ),
-                  ],
+                child: Consumer(
+                  builder: (ctx, r, _) {
+                    final user = r.watch(authProvider);
+                    final isAdmin = user?.role == 'admin';
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          settings.storeName.isNotEmpty
+                              ? settings.storeName : 'KasirKu',
+                          style: TextStyle(
+                            fontWeight: FontWeight.w700,
+                            fontSize: 14,
+                            color: _textPrimary(isDark),
+                          ),
+                        ),
+                        Row(children: [
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 6, vertical: 1),
+                            decoration: BoxDecoration(
+                              color: isAdmin
+                                  ? AppColors.primary.withOpacity(0.12)
+                                  : AppColors.success.withOpacity(0.12),
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: Text(
+                              isAdmin ? 'Admin' : 'Kasir',
+                              style: TextStyle(
+                                fontSize: 10,
+                                fontWeight: FontWeight.w700,
+                                color: isAdmin
+                                    ? AppColors.primary : AppColors.success,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 6),
+                          Text(
+                            'Ketuk untuk ganti role',
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: _textSub(isDark),
+                            ),
+                          ),
+                        ]),
+                      ],
+                    );
+                  },
                 ),
               ),
-              Icon(Icons.chevron_right, color: _textSub(isDark), size: 20),
+              Icon(Icons.swap_horiz_rounded,
+                  color: AppColors.primary, size: 22),
             ]),
           ),
           ),
@@ -377,9 +401,204 @@ class _Header extends ConsumerWidget {
       ),
     );
   }
+
+  /// Tampilkan bottom sheet pilihan: Ganti role (logout) atau Kelola Kasir (admin only)
+  void _showSwitchRoleSheet(BuildContext context, WidgetRef ref) {
+    final isDark    = Theme.of(context).brightness == Brightness.dark;
+    final sheetBg   = isDark ? AppColors.darkSurface : Colors.white;
+    final textColor = isDark ? Colors.white : AppColors.textPrimary;
+    final user      = ref.read(authProvider);
+    final isAdmin   = user?.role == 'admin';
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: sheetBg,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (_) => ProviderScope(
+        parent: ProviderScope.containerOf(context),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(24, 12, 24, 36),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 40, height: 4,
+                margin: const EdgeInsets.only(bottom: 20),
+                decoration: BoxDecoration(
+                  color: isDark ? AppColors.darkBorder : Colors.grey.shade300,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              Text(
+                'Akun & Role',
+                style: TextStyle(
+                  fontSize: 18, fontWeight: FontWeight.w800, color: textColor),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                'Login ulang diperlukan untuk berpindah role',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 12,
+                  color: isDark
+                      ? const Color(0xFF94A3B8) : AppColors.textSecondary,
+                ),
+              ),
+              const SizedBox(height: 20),
+
+              // Info role saat ini
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: isAdmin
+                      ? AppColors.primary.withOpacity(0.08)
+                      : AppColors.success.withOpacity(0.08),
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(
+                    color: isAdmin
+                        ? AppColors.primary.withOpacity(0.25)
+                        : AppColors.success.withOpacity(0.25),
+                  ),
+                ),
+                child: Row(children: [
+                  Icon(
+                    isAdmin
+                        ? Icons.admin_panel_settings_rounded
+                        : Icons.badge_rounded,
+                    color: isAdmin ? AppColors.primary : AppColors.success,
+                    size: 24,
+                  ),
+                  const SizedBox(width: 12),
+                  Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    Text(
+                      user?.displayName ?? '-',
+                      style: TextStyle(
+                        fontSize: 14, fontWeight: FontWeight.w800,
+                        color: textColor,
+                      ),
+                    ),
+                    Text(
+                      isAdmin ? 'Admin' : 'Kasir',
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: isAdmin ? AppColors.primary : AppColors.success,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ]),
+                ]),
+              ),
+              const SizedBox(height: 16),
+
+              // Tombol Kelola Admin/Kasir — hanya admin
+              if (isAdmin) ...[
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton.icon(
+                    icon: const Icon(Icons.people_outline_rounded, size: 18),
+                    label: const Text('Kelola Admin & Kasir',
+                        style: TextStyle(fontWeight: FontWeight.w700)),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: AppColors.primary,
+                      side: const BorderSide(color: AppColors.primary),
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12)),
+                    ),
+                    onPressed: () {
+                      Navigator.pop(context);
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => ProviderScope(
+                            parent: ProviderScope.containerOf(context),
+                            child: const KasirManagementScreen(),
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+                const SizedBox(height: 10),
+              ],
+
+              // Tombol ganti role (logout)
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  icon: const Icon(Icons.swap_horiz_rounded, size: 18),
+                  label: Text(
+                    isAdmin
+                        ? 'Ganti ke Role Kasir'
+                        : 'Ganti ke Role Admin',
+                    style: const TextStyle(fontWeight: FontWeight.w700),
+                  ),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.primary,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    elevation: 0,
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12)),
+                  ),
+                  onPressed: () => _confirmLogout(context, ref, isAdmin),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _confirmLogout(BuildContext context, WidgetRef ref, bool isAdmin) {
+    final targetRole = isAdmin ? 'Kasir' : 'Admin';
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text('Ganti Role',
+            style: TextStyle(fontWeight: FontWeight.w800, fontSize: 16)),
+        content: Text(
+          'Kamu akan logout dan login ulang sebagai $targetRole.\nLanjutkan?',
+          style: const TextStyle(fontSize: 13),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Batal'),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              Navigator.pop(ctx);     // tutup dialog
+              Navigator.pop(context); // tutup bottom sheet
+              await ref.read(authProvider.notifier).logout();
+              if (context.mounted) {
+                Navigator.of(context).pushAndRemoveUntil(
+                  MaterialPageRoute(builder: (_) => const LoginScreen()),
+                  (route) => false,
+                );
+              }
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.primary,
+              foregroundColor: Colors.white,
+              elevation: 0,
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10)),
+            ),
+            child: const Text('Ya, Logout',
+                style: TextStyle(fontWeight: FontWeight.w700)),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
-// ─── Section Title ────────────────────────────────────────────────────────────
 
 class _SectionTitle extends StatelessWidget {
   final String title;

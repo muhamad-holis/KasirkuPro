@@ -1,11 +1,9 @@
 // lib/presentation/screens/login/login_screen.dart
 //
-// SECURITY PATCH:
-// - Login field: USERNAME (bukan nama dropdown) + PIN 6 digit
-// - Tidak ada hint "PIN default 1234" di UI
-// - Tampilkan pesan lockout dengan countdown
-// - Redirect ke ChangePinScreen jika mustChangePin = true
-// - Redirect ke SetupWizard jika DB kosong
+// FIXES:
+// 1. Logo dari assets/images/app_icon.png (bukan Icon widget)
+// 2. Title font konsisten: semua w800
+// 3. Dark mode: TextField fill color & text color kontras
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -30,7 +28,6 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   bool  _loading      = false;
   String? _error;
 
-  // SECURITY: PIN minimal 6 digit
   static const int _pinLength = 6;
 
   @override
@@ -46,10 +43,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     super.dispose();
   }
 
-  /// Jika DB kosong, redirect ke Setup Wizard
   Future<void> _checkSetupNeeded() async {
-    final needsSetup =
-        await ref.read(databaseProvider).needsSetup();
+    final needsSetup = await ref.read(databaseProvider).needsSetup();
     if (needsSetup && mounted) {
       Navigator.of(context).pushReplacement(
         MaterialPageRoute(builder: (_) => const SetupWizardScreen()),
@@ -65,7 +60,6 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       setState(() => _error = 'Username tidak boleh kosong');
       return;
     }
-    // SECURITY: minimum 6 digit
     if (pin.length < _pinLength) {
       setState(() => _error = 'PIN harus minimal $_pinLength digit');
       return;
@@ -84,7 +78,6 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       return;
     }
 
-    // Cek mustChangePin
     final user = ref.read(authProvider);
     if (user?.mustChangePin == true) {
       Navigator.of(context).pushReplacement(
@@ -100,19 +93,20 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Scaffold(
       body: Stack(
         children: [
-          _buildBackground(),
+          _buildBackground(isDark),
           SafeArea(
             child: SingleChildScrollView(
               padding: const EdgeInsets.symmetric(horizontal: 24),
               child: Column(
                 children: [
                   const SizedBox(height: 40),
-                  _buildHeader(),
+                  _buildHeader(isDark),
                   const SizedBox(height: 28),
-                  _buildLoginCard(),
+                  _buildLoginCard(isDark),
                   const SizedBox(height: 24),
                 ],
               ),
@@ -123,7 +117,19 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     );
   }
 
-  Widget _buildBackground() {
+  Widget _buildBackground(bool isDark) {
+    if (isDark) {
+      return Container(
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [Color(0xFF0F172A), Color(0xFF1E293B), Color(0xFF0F172A)],
+            stops: [0.0, 0.5, 1.0],
+          ),
+        ),
+      );
+    }
     return Container(
       decoration: const BoxDecoration(
         gradient: LinearGradient(
@@ -136,73 +142,95 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     );
   }
 
-  Widget _buildHeader() {
+  Widget _buildHeader(bool isDark) {
     return Column(children: [
+      // FIX #1: Gunakan app_icon.png dari assets
       Container(
         width: 80, height: 80,
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: isDark ? AppColors.darkSurface : Colors.white,
           borderRadius: BorderRadius.circular(20),
           boxShadow: [BoxShadow(
             color: AppColors.primary.withOpacity(0.2),
             blurRadius: 16, offset: const Offset(0, 6))]),
-        child: const Icon(Icons.point_of_sale_rounded,
-            color: AppColors.primary, size: 42)),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(20),
+          child: Image.asset(
+            'assets/images/app_icon.png',
+            width: 80, height: 80,
+            fit: BoxFit.contain,
+          ),
+        ),
+      ),
       const SizedBox(height: 14),
-      RichText(text: const TextSpan(children: [
+      // FIX #2: Title font konsisten w800
+      RichText(text: TextSpan(children: [
         TextSpan(text: 'Kasir',
-          style: TextStyle(fontSize: 32, fontWeight: FontWeight.w900,
-              color: Color(0xFF111827))),
-        TextSpan(text: 'Ku',
-          style: TextStyle(fontSize: 32, fontWeight: FontWeight.w900,
+          style: TextStyle(
+            fontSize: 32, fontWeight: FontWeight.w800,
+            color: isDark ? Colors.white : const Color(0xFF111827),
+          )),
+        const TextSpan(text: 'Ku',
+          style: TextStyle(fontSize: 32, fontWeight: FontWeight.w800,
               color: AppColors.primary)),
       ])),
       const SizedBox(height: 6),
-      const Text(
+      Text(
         'Kelola transaksi, stok, dan laporan toko.',
         textAlign: TextAlign.center,
-        style: TextStyle(fontSize: 13, color: Color(0xFF374151))),
+        style: TextStyle(
+          fontSize: 13,
+          color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF374151),
+        )),
     ]);
   }
 
-  Widget _buildLoginCard() {
+  Widget _buildLoginCard(bool isDark) {
+    final cardBg   = isDark ? AppColors.darkCard : Colors.white;
+    final textColor = isDark ? Colors.white : const Color(0xFF111827);
+
     return Container(
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: cardBg,
         borderRadius: BorderRadius.circular(24),
         boxShadow: [BoxShadow(
-          color: Colors.black.withOpacity(0.08),
+          color: Colors.black.withOpacity(isDark ? 0.3 : 0.08),
           blurRadius: 24, offset: const Offset(0, 8))]),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text('Login',
-            style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800,
-                color: Color(0xFF111827))),
+          // FIX #2: font konsisten w800
+          Text('Login',
+            style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800,
+                color: textColor)),
           const SizedBox(height: 4),
-          const Text('Masukkan username dan PIN Anda',
-            style: TextStyle(fontSize: 13, color: AppColors.textSecondary)),
+          Text('Masukkan username dan PIN Anda',
+            style: TextStyle(
+              fontSize: 13,
+              color: isDark ? const Color(0xFF94A3B8) : AppColors.textSecondary,
+            )),
           const SizedBox(height: 22),
 
-          // Username field
-          _label('Username'),
+          _label('Username', isDark),
           const SizedBox(height: 6),
           TextField(
             controller: _usernameCtrl,
             keyboardType: TextInputType.text,
             textInputAction: TextInputAction.next,
             autocorrect: false,
+            // FIX #3: dark mode — pastikan warna teks terlihat
+            style: TextStyle(color: isDark ? Colors.white : const Color(0xFF111827)),
             onChanged: (_) => setState(() => _error = null),
             decoration: _inputDeco(
               hint: 'Masukkan username Anda',
               prefix: Icons.alternate_email_rounded,
+              isDark: isDark,
             ),
           ),
           const SizedBox(height: 16),
 
-          // PIN field
-          _label('PIN (min. $_pinLength digit)'),
+          _label('PIN (min. $_pinLength digit)', isDark),
           const SizedBox(height: 6),
           TextField(
             controller: _pinCtrl,
@@ -210,25 +238,29 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
             keyboardType: TextInputType.number,
             textInputAction: TextInputAction.done,
             maxLength: 8,
+            // FIX #3: dark mode — pastikan warna teks terlihat
+            style: TextStyle(color: isDark ? Colors.white : const Color(0xFF111827)),
             onChanged: (_) => setState(() => _error = null),
             onSubmitted: (_) => _loading ? null : _doLogin(),
             decoration: _inputDeco(
               hint: '••••••',
               prefix: Icons.lock_outline_rounded,
               counter: '',
+              isDark: isDark,
               suffix: IconButton(
                 icon: Icon(
                   _obscurePin
                       ? Icons.visibility_outlined
                       : Icons.visibility_off_outlined,
-                  color: AppColors.textSecondary, size: 20),
+                  color: isDark ? const Color(0xFF94A3B8) : AppColors.textSecondary,
+                  size: 20,
+                ),
                 onPressed: () =>
                     setState(() => _obscurePin = !_obscurePin),
               ),
             ),
           ),
 
-          // Error box
           if (_error != null) ...[
             const SizedBox(height: 10),
             Container(
@@ -250,7 +282,6 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
           const SizedBox(height: 20),
 
-          // Tombol masuk
           SizedBox(
             width: double.infinity, height: 52,
             child: ElevatedButton.icon(
@@ -283,27 +314,40 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     );
   }
 
-  Widget _label(String text) => Text(text, style: const TextStyle(
-      fontSize: 13, fontWeight: FontWeight.w600, color: Color(0xFF374151)));
+  Widget _label(String text, bool isDark) => Text(text, style: TextStyle(
+      fontSize: 13,
+      fontWeight: FontWeight.w700,
+      color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF374151)));
 
+  // FIX #3: inputDeco aware dark mode — fill dan border kontras
   InputDecoration _inputDeco({
     required String hint,
     required IconData prefix,
+    required bool isDark,
     String? counter,
     Widget? suffix,
   }) {
+    // Dark mode: fill gelap tapi teks tetap bisa dibaca
+    final fillColor = isDark ? const Color(0xFF1E293B) : const Color(0xFFF9FAFB);
+    final borderColor = isDark ? AppColors.darkBorder : const Color(0xFFE5E7EB);
+
     return InputDecoration(
       hintText: hint,
       counterText: counter,
+      // FIX #3: warna hint kontras di dark mode
+      hintStyle: TextStyle(
+        color: isDark ? const Color(0xFF475569) : AppColors.textHint,
+      ),
       prefixIcon: Icon(prefix, color: AppColors.primary, size: 22),
       suffixIcon: suffix,
-      filled: true, fillColor: const Color(0xFFF9FAFB),
+      filled: true,
+      fillColor: fillColor,
       border: OutlineInputBorder(
         borderRadius: BorderRadius.circular(12),
-        borderSide: const BorderSide(color: Color(0xFFE5E7EB))),
+        borderSide: BorderSide(color: borderColor)),
       enabledBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(12),
-        borderSide: const BorderSide(color: Color(0xFFE5E7EB))),
+        borderSide: BorderSide(color: borderColor)),
       focusedBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(12),
         borderSide: const BorderSide(color: AppColors.primary, width: 2)),

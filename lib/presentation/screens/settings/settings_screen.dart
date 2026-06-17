@@ -63,8 +63,10 @@ class SettingsScreen extends ConsumerWidget {
           // ── Tampilan ──────────────────────────────────────
           _Section('Tampilan', [
             SwitchListTile(
-              title: const Text('Mode Gelap'),
-              subtitle: const Text('Aktifkan tema gelap'),
+              title: const Text('Mode Gelap',
+                  style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14)),
+              subtitle: const Text('Aktifkan tema gelap',
+                  style: TextStyle(fontSize: 12)),
               value: isDark,
               onChanged: (_) =>
                   ref.read(themeModeProvider.notifier).toggle(),
@@ -141,8 +143,10 @@ class SettingsScreen extends ConsumerWidget {
               onTap: () => _pickReceiptSize(context, ref, store),
             ),
             SwitchListTile(
-              title: const Text('Tampilkan Logo'),
-              subtitle: const Text('Cetak logo toko di bagian atas struk'),
+              title: const Text('Tampilkan Logo',
+                  style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14)),
+              subtitle: const Text('Cetak logo toko di bagian atas struk',
+                  style: TextStyle(fontSize: 12)),
               value: store.showLogo,
               onChanged: (v) =>
                   ref.read(storeSettingsProvider.notifier)
@@ -161,8 +165,10 @@ class SettingsScreen extends ConsumerWidget {
               onTap: () => _ggantiLogo(context, ref),
             ),
             SwitchListTile(
-              title: const Text('Cetak Otomatis'),
-              subtitle: const Text('Print struk setelah transaksi'),
+              title: const Text('Cetak Otomatis',
+                  style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14)),
+              subtitle: const Text('Print struk setelah transaksi',
+                  style: TextStyle(fontSize: 12)),
               value: store.printAfterTransaction,
               onChanged: (v) =>
                   ref.read(storeSettingsProvider.notifier)
@@ -186,10 +192,11 @@ class SettingsScreen extends ConsumerWidget {
                 leading: _TileIcon(
                     Icons.bluetooth_connected, AppColors.success),
                 title: Text(printer.deviceName!,
-                    style: const TextStyle(fontWeight: FontWeight.w600)),
+                    style: const TextStyle(
+                        fontWeight: FontWeight.w700, fontSize: 14)),
                 subtitle: Text(printer.deviceAddress ?? '',
                     style: TextStyle(
-                        fontSize: 11, color: Colors.grey.shade500)),
+                        fontSize: 12, color: Colors.grey.shade500)),
                 trailing: TextButton(
                   onPressed: () => ref
                       .read(printerSettingsProvider.notifier)
@@ -1740,20 +1747,28 @@ class _Tile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final c = color ?? AppColors.primary;
+    // FIX: title selalu w700 + ukuran 14, warna hanya untuk item berwarna
+    // Item normal (tanpa color) tetap pakai warna teks utama agar konsisten
+    final titleColor = color != null
+        ? color!
+        : (isDark ? Colors.white : AppColors.textPrimary);
     return ListTile(
       leading: _TileIcon(icon, c),
       title: Text(title,
           style: TextStyle(
-              fontWeight: FontWeight.w600,
+              fontWeight: FontWeight.w700,
               fontSize: 14,
-              color: color)),
+              color: titleColor)),
       subtitle: Text(subtitle,
           style: TextStyle(
-              fontSize: 12, color: Colors.grey.shade500)),
+              fontSize: 12,
+              color: isDark ? const Color(0xFF94A3B8) : Colors.grey.shade500)),
       trailing: onTap != null
-          ? const Icon(Icons.chevron_right,
-              color: Colors.grey, size: 20)
+          ? Icon(Icons.chevron_right,
+              color: isDark ? const Color(0xFF64748B) : Colors.grey,
+              size: 20)
           : null,
       onTap: onTap,
     );
@@ -1779,16 +1794,23 @@ class _SwitchTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final c = color ?? AppColors.primary;
+    // FIX: sama seperti _Tile — title w700 size 14, warna hanya jika ada color
+    final titleColor = color != null
+        ? color!
+        : (isDark ? Colors.white : AppColors.textPrimary);
     return ListTile(
       leading: _TileIcon(icon, c),
       title: Text(title,
           style: TextStyle(
-              fontWeight: FontWeight.w600,
+              fontWeight: FontWeight.w700,
               fontSize: 14,
-              color: color)),
+              color: titleColor)),
       subtitle: Text(subtitle,
-          style: TextStyle(fontSize: 12, color: Colors.grey.shade500)),
+          style: TextStyle(
+              fontSize: 12,
+              color: isDark ? const Color(0xFF94A3B8) : Colors.grey.shade500)),
       trailing: Switch(
         value: value,
         onChanged: onChanged,
@@ -1885,7 +1907,7 @@ class _BackupTile extends ConsumerWidget {
                         ? backup.connectedEmail ?? ''
                         : 'Hubungkan Google Drive untuk backup otomatis',
                     style: const TextStyle(
-                        fontSize: 11, color: AppColors.textSecondary),
+                        fontSize: 12, color: AppColors.textSecondary),
                   ),
                 ],
               ),
