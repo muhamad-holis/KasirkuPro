@@ -72,7 +72,7 @@ class _StokScreenState extends ConsumerState<StokScreen>
           indicatorWeight: 3,
           tabs: const [
             Tab(text: 'Semua'),
-            Tab(text: 'Hampir Habis'),
+            Tab(text: 'Hampir'),
             Tab(text: 'Habis'),
             Tab(text: 'Kategori'),
           ],
@@ -614,18 +614,29 @@ class _CategoryCard extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final iconData = _iconFromName(category.icon ?? category.name);
     final colorData = _colorFromName(category.name);
+    // FIX DARK MODE: Card sebelumnya hardcode Colors.white sebagai background,
+    // sementara teks judul mengikuti warna default tema (putih di dark mode)
+    // → teks putih di atas card putih = tidak terlihat / kontras buruk.
+    // Sekarang background dan warna teks menyesuaikan tema aktif.
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final cardBg = isDark ? AppColors.darkCard : Colors.white;
+    final borderColor = isDark ? AppColors.darkBorder : Colors.grey.shade200;
+    final titleColor = isDark ? Colors.white : AppColors.textPrimary;
+    final subtitleColor = isDark ? Colors.grey.shade400 : Colors.grey.shade500;
 
     return Container(
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: cardBg,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.grey.shade200),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.03),
-            blurRadius: 6,
-            offset: const Offset(0, 2)),
-        ],
+        border: Border.all(color: borderColor),
+        boxShadow: isDark
+            ? []
+            : [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.03),
+                  blurRadius: 6,
+                  offset: const Offset(0, 2)),
+              ],
       ),
       child: ListTile(
         leading: Container(
@@ -638,10 +649,11 @@ class _CategoryCard extends ConsumerWidget {
           child: Icon(iconData, color: colorData, size: 22),
         ),
         title: Text(category.name,
-            style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14)),
+            style: TextStyle(
+                fontWeight: FontWeight.w700, fontSize: 14, color: titleColor)),
         subtitle: Text(
           '$productCount produk',
-          style: TextStyle(fontSize: 12, color: Colors.grey.shade500),
+          style: TextStyle(fontSize: 12, color: subtitleColor),
         ),
         trailing: Row(
           mainAxisSize: MainAxisSize.min,
