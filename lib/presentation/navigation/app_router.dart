@@ -12,6 +12,7 @@ import '../screens/notifikasi/notifikasi_screen.dart';
 import '../screens/kas/kas_screen.dart';
 import '../screens/login/login_screen.dart'; // <-- Import tambahan untuk LoginScreen()
 import '../../core/theme/app_theme.dart';
+import '../../core/utils/responsive.dart';
 import '../providers/auth_provider.dart';
 import '../screens/kasir_management/kasir_management_screen.dart';
 
@@ -124,6 +125,11 @@ class _MainNavigationState extends ConsumerState<MainNavigation> {
       );
     }
 
+    // FITUR TABLET: di tablet landscape, gunakan NavigationRail (sidebar)
+    // alih-alih bottom navigation bar agar lebih nyaman dipakai dalam
+    // genggaman dua tangan / posisi di meja kasir yang landscape.
+    final isTabletLandscape = Responsive.isTabletLandscape(context);
+
     return PopScope(
       canPop: false,
       onPopInvokedWithResult: (didPop, _) async {
@@ -134,8 +140,33 @@ class _MainNavigationState extends ConsumerState<MainNavigation> {
         }
       },
       child: Scaffold(
-        body: IndexedStack(index: idx, children: _screens),
-        bottomNavigationBar: _BottomNavBar(currentIndex: idx, ref: ref),
+        body: isTabletLandscape
+            ? Row(
+                children: [
+                  _SideNavRail(currentIndex: idx, ref: ref),
+                  const VerticalDivider(width: 1),
+                  Expanded(
+                    child: IndexedStack(index: idx, children: _screens),
+                  ),
+                ],
+              )
+            : IndexedStack(index: idx, children: _screens),
+        bottomNavigationBar:
+            isTabletLandscape ? null : _BottomNavBar(currentIndex: idx, ref: ref),
+        // FITUR TABLET: tombol "Buka Kasir" mengambang di pojok kanan bawah,
+        // mengikuti gaya dashboard desktop. Hanya tampil di tablet landscape
+        // dan saat user tidak sedang berada di tab Kasir.
+        floatingActionButton: (isTabletLandscape && idx != 2)
+            ? FloatingActionButton.extended(
+                onPressed: () =>
+                    ref.read(currentNavIndexProvider.notifier).state = 2,
+                backgroundColor: AppColors.primary,
+                icon: const Icon(Icons.point_of_sale_rounded, color: Colors.white),
+                label: const Text('Buka Kasir',
+                    style: TextStyle(
+                        color: Colors.white, fontWeight: FontWeight.w700)),
+              )
+            : null,
       ),
     );
   }
@@ -288,8 +319,9 @@ class _LainnyaHomeScreen extends ConsumerWidget {
             SliverPadding(
               padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
               sliver: SliverGrid(
-                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount: 3,
+                // FITUR TABLET: jumlah kolom menyesuaikan lebar layar
+                gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: Responsive.gridColumns(context),
                   mainAxisSpacing: 12,
                   crossAxisSpacing: 12,
                   childAspectRatio: 0.95,
@@ -990,6 +1022,295 @@ class _StokTabGuard extends ConsumerWidget {
             const Text('Halaman Stok hanya dapat diakses oleh Admin.',
                 style: TextStyle(color: AppColors.textSecondary)),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+// ─── FITUR TABLET: Side Navigation Rail (gaya sidebar desktop) ────────────
+// Pengganti _BottomNavBar saat tablet dalam orientasi landscape.
+// Desain mengikuti referensi dashboard desktop: sidebar lebar dengan
+// brand header, item nav horizontal (icon + label sejajar), dan info
+// user di bagian bawah. Warna tetap memakai hijau khas Kasirku.
+// Logic guard isAdmin untuk tab Stok tetap dipertahankan sama seperti
+// _BottomNavBar, supaya kasir tidak bisa mengakses Stok lewat sidebar juga.
+
+class _SideNavRail extends StatelessWidget {
+  final int currentIndex;
+  final WidgetRef ref;
+
+  const _SideNavRail({
+    required this.currentIndex,
+    required this.ref,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final railBg = isDark ? const Color(0xFF134E4A) : AppColors.primary;
+    final isAdmin = ref.read(isAdminProvider);
+    final aktifUser = ref.watch(authProvider);
+
+    return Container(
+      width: 220,
+      color: railBg,
+      child: SafeArea(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            // ── Brand header ────────────────────────────────────────────
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 20, 20, 24),
+              child: Row(
+                children: [
+                  Container(
+                    width: 38,
+                    height: 38,
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.15),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: const Icon(Icons.storefront_rounded,
+                        color: Colors.white, size: 22),
+                  ),
+                  const SizedBox(width: 10),
+                  const Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('KasirKu',
+                            style: TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.w800,
+                                fontSize: 17)),
+                        Text('Sistem Kasir Modern',
+                            style: TextStyle(
+                                color: Colors.white70, fontSize: 10)),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
+            // ── Item navigasi ───────────────────────────────────────────
+            Expanded(
+              child: ListView(
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                children: [
+                  _SideRailItem(
+                    index: 0,
+                    current: currentIndex,
+                    icon: Icons.home_outlined,
+                    activeIcon: Icons.home_rounded,
+                    label: 'Dashboard',
+                    ref: ref,
+                  ),
+                  _SideRailItem(
+                    index: 2,
+                    current: currentIndex,
+                    icon: Icons.point_of_sale_outlined,
+                    activeIcon: Icons.point_of_sale_rounded,
+                    label: 'Kasir / POS',
+                    ref: ref,
+                  ),
+                  isAdmin
+                      ? _SideRailItem(
+                          index: 3,
+                          current: currentIndex,
+                          icon: Icons.inventory_2_outlined,
+                          activeIcon: Icons.inventory_2_rounded,
+                          label: 'Stok',
+                          ref: ref,
+                        )
+                      : _SideRailItemBlocked(
+                          icon: Icons.inventory_2_outlined,
+                          label: 'Stok',
+                        ),
+                  _SideRailItem(
+                    index: 1,
+                    current: currentIndex,
+                    icon: Icons.insert_chart_outlined,
+                    activeIcon: Icons.insert_chart_rounded,
+                    label: 'Laporan',
+                    ref: ref,
+                  ),
+                  _SideRailItem(
+                    index: 4,
+                    current: currentIndex,
+                    icon: Icons.grid_view_outlined,
+                    activeIcon: Icons.grid_view_rounded,
+                    label: 'Menu Lainnya',
+                    ref: ref,
+                    onRetap: () {
+                      if (_lainnyaNavKey.currentState?.canPop() ?? false) {
+                        _lainnyaNavKey.currentState!
+                            .popUntil((route) => route.isFirst);
+                      }
+                    },
+                  ),
+                ],
+              ),
+            ),
+
+            // ── Info user aktif ─────────────────────────────────────────
+            Container(
+              margin: const EdgeInsets.all(12),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.08),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Row(
+                children: [
+                  CircleAvatar(
+                    radius: 16,
+                    backgroundColor: Colors.white.withOpacity(0.2),
+                    child: const Icon(Icons.person_rounded,
+                        color: Colors.white, size: 18),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          aktifUser?.name ?? 'Pengguna',
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w700,
+                              fontSize: 12),
+                        ),
+                        Text(
+                          isAdmin ? 'Admin' : 'Kasir',
+                          style: const TextStyle(
+                              color: Colors.white60, fontSize: 10),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _SideRailItem extends StatelessWidget {
+  final int index;
+  final int current;
+  final IconData icon;
+  final IconData activeIcon;
+  final String label;
+  final WidgetRef ref;
+  final VoidCallback? onRetap;
+
+  const _SideRailItem({
+    required this.index,
+    required this.current,
+    required this.icon,
+    required this.activeIcon,
+    required this.label,
+    required this.ref,
+    this.onRetap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final isActive = current == index;
+    final fgColor = isActive ? Colors.white : Colors.white.withOpacity(0.7);
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 3),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(10),
+          onTap: () {
+            if (isActive && onRetap != null) {
+              onRetap!();
+            } else {
+              ref.read(currentNavIndexProvider.notifier).state = index;
+            }
+          },
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            decoration: BoxDecoration(
+              color: isActive ? Colors.white.withOpacity(0.16) : Colors.transparent,
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Row(
+              children: [
+                Icon(isActive ? activeIcon : icon, color: fgColor, size: 20),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    label,
+                    style: TextStyle(
+                      fontSize: 13.5,
+                      fontWeight: isActive ? FontWeight.w700 : FontWeight.w500,
+                      color: fgColor,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _SideRailItemBlocked extends StatelessWidget {
+  final IconData icon;
+  final String label;
+
+  const _SideRailItemBlocked({required this.icon, required this.label});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 3),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(10),
+        onTap: () {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: const Row(children: [
+                Icon(Icons.lock_outline, color: Colors.white, size: 18),
+                SizedBox(width: 8),
+                Text('Hanya Admin yang dapat mengakses Stok'),
+              ]),
+              backgroundColor: AppColors.danger,
+              behavior: SnackBarBehavior.floating,
+              duration: Duration(seconds: 2),
+            ),
+          );
+        },
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          child: Row(
+            children: [
+              Icon(icon, color: Colors.white.withOpacity(0.35), size: 20),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  label,
+                  style: TextStyle(
+                    fontSize: 13.5,
+                    fontWeight: FontWeight.w500,
+                    color: Colors.white.withOpacity(0.35),
+                  ),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );

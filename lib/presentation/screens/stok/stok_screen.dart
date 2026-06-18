@@ -11,6 +11,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/currency.dart';
+import '../../../core/utils/responsive.dart';
 import '../../providers/products_provider.dart';
 import '../../providers/database_provider.dart';
 import '../../providers/auth_provider.dart';
@@ -370,9 +371,9 @@ class _ProductListTab extends ConsumerWidget {
               }
               return GridView.builder(
                 padding: const EdgeInsets.fromLTRB(12, 8, 12, 100),
-                gridDelegate:
-                    const SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount: 3,
+                // FITUR TABLET: jumlah kolom menyesuaikan lebar layar
+                gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: Responsive.gridColumns(context),
                   crossAxisSpacing: 8,
                   mainAxisSpacing: 8,
                   childAspectRatio: 0.62,
@@ -442,9 +443,9 @@ class _LowStockTab extends ConsumerWidget {
             Expanded(
               child: GridView.builder(
                 padding: const EdgeInsets.fromLTRB(12, 8, 12, 100),
-                gridDelegate:
-                    const SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount: 3,
+                // FITUR TABLET: jumlah kolom menyesuaikan lebar layar
+                gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: Responsive.gridColumns(context),
                   crossAxisSpacing: 8,
                   mainAxisSpacing: 8,
                   childAspectRatio: 0.62,
@@ -514,9 +515,9 @@ class _OutStockTab extends ConsumerWidget {
             Expanded(
               child: GridView.builder(
                 padding: const EdgeInsets.fromLTRB(12, 8, 12, 100),
-                gridDelegate:
-                    const SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount: 3,
+                // FITUR TABLET: jumlah kolom menyesuaikan lebar layar
+                gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: Responsive.gridColumns(context),
                   crossAxisSpacing: 8,
                   mainAxisSpacing: 8,
                   childAspectRatio: 0.62,
@@ -617,7 +618,6 @@ class _CategoryCard extends ConsumerWidget {
     // FIX DARK MODE: Card sebelumnya hardcode Colors.white sebagai background,
     // sementara teks judul mengikuti warna default tema (putih di dark mode)
     // → teks putih di atas card putih = tidak terlihat / kontras buruk.
-    // Sekarang background dan warna teks menyesuaikan tema aktif.
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final cardBg = isDark ? AppColors.darkCard : Colors.white;
     final borderColor = isDark ? AppColors.darkBorder : Colors.grey.shade200;
