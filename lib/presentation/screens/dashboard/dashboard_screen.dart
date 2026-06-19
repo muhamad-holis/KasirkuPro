@@ -49,10 +49,6 @@ class DashboardStats {
 }
 
 // ─── DashboardStats Provider ──────────────────────────────────────────────────
-// FIX: Menggunakan StreamProvider yang meng-watch todayTransactionsProvider
-// agar data dashboard otomatis update setiap ada transaksi baru,
-// tanpa perlu restart aplikasi (bug: data tidak real-time di mode offline).
-
 final dashboardStatsProvider = StreamProvider<DashboardStats>((ref) async* {
   final db  = ref.watch(databaseProvider);
   final now = DateTime.now();
@@ -60,8 +56,6 @@ final dashboardStatsProvider = StreamProvider<DashboardStats>((ref) async* {
   final endOfToday       = startOfToday.add(const Duration(days: 1));
   final startOfYesterday = startOfToday.subtract(const Duration(days: 1));
 
-  // Watch stream transaksi hari ini — setiap ada insert baru, stream ini
-  // emit ulang dan seluruh blok async* dieksekusi ulang otomatis.
   final todayStream = db.transactionsDao.watchTodayTransactions();
 
   await for (final todayTx in todayStream) {
@@ -81,9 +75,6 @@ final dashboardStatsProvider = StreamProvider<DashboardStats>((ref) async* {
     final avgToday     = txToday > 0 ? omzetToday / txToday : 0.0;
     final avgYesterday = txYesterday > 0 ? omzetYesterday / txYesterday : 0.0;
 
-    // BUG #6 FIX: Ganti N+1 query (1 query per transaksi) dengan satu query aggregat.
-    // Sebelumnya: loop for(tx in todayTx) → getTransactionItems(tx.id) → 30 query jika 30 tx.
-    // Sekarang: satu query SUM langsung di DB.
     final productsSold = await db.transactionsDao
         .getTotalProductsSold(todayTx.map((t) => t.id).toList());
 
@@ -118,90 +109,88 @@ class DashboardScreen extends ConsumerWidget {
     final todayTx  = ref.watch(todayTransactionsProvider);
     final isTabletLandscape = Responsive.isTabletLandscape(context);
 
-    // FITUR TABLET: di tablet landscape, susun ulang widget yang sama
-    // (Summary, Aksi Cepat, LowStock Banner, Transaksi Terakhir) menjadi
-    // 2 kolom mengikuti referensi dashboard desktop — kiri berisi konten
-    // utama (ringkasan + transaksi), kanan berisi konten pendukung
-    // (aksi cepat + stok menipis). Tidak ada provider atau logic baru;
-    // widget-widget yang dipindah adalah widget yang sudah ada apa adanya.
     if (isTabletLandscape) {
       return Scaffold(
         backgroundColor: _bg(isDark),
-        body: CustomScrollView(
-          slivers: [
-            SliverToBoxAdapter(child: _Header()),
-            SliverPadding(
-              padding: const EdgeInsets.fromLTRB(16, 20, 16, 24),
-              sliver: SliverToBoxAdapter(
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // ── Kolom kiri: Ringkasan + Transaksi Terakhir ──────────
-                    Expanded(
-                      flex: 3,
-                      child: Column(
+        body: Column(
+          children: [
+            _Header(),
+            Expanded(
+              child: CustomScrollView(
+                slivers: [
+                  SliverPadding(
+                    padding: const EdgeInsets.fromLTRB(16, 20, 16, 24),
+                    sliver: SliverToBoxAdapter(
+                      child: Row(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          _SectionTitle(
-                            'Ringkasan Hari Ini',
-                            action: 'Lihat semua',
-                            onAction: () => ref
-                                .read(currentNavIndexProvider.notifier)
-                                .state = 1,
+                          Expanded(
+                            flex: 3,
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                _SectionTitle(
+                                  'Ringkasan Hari Ini',
+                                  action: 'Lihat semua',
+                                  onAction: () => ref
+                                      .read(currentNavIndexProvider.notifier)
+                                      .state = 1,
+                                ),
+                                const SizedBox(height: 12),
+                                stats.when(
+                                  data:    (s)    => _SummaryGrid(stats: s),
+                                  loading: ()     => _Shimmer(isDark: isDark, height: 180),
+                                  error:   (e, _) => _ErrorWidget(msg: '$e'),
+                                ),
+                                const SizedBox(height: 24),
+                                _SectionTitle(
+                                  'Transaksi Terakhir',
+                                  action: 'Lihat semua',
+                                  onAction: () => ref
+                                      .read(currentNavIndexProvider.notifier)
+                                      .state = 1,
+                                ),
+                                const SizedBox(height: 12),
+                                todayTx.when(
+                                  data: (list) => list.isEmpty
+                                      ? _EmptyTx(isDark: isDark)
+                                      : _TxList(transactions: list.take(5).toList()),
+                                  loading: () => _Shimmer(isDark: isDark, height: 80),
+                                  error:   (e, _) => _ErrorWidget(msg: '$e'),
+                                ),
+                              ],
+                            ),
                           ),
-                          const SizedBox(height: 12),
-                          stats.when(
-                            data:    (s)    => _SummaryGrid(stats: s),
-                            loading: ()     => _Shimmer(isDark: isDark, height: 180),
-                            error:   (e, _) => _ErrorWidget(msg: '$e'),
-                          ),
-                          const SizedBox(height: 24),
-                          _SectionTitle(
-                            'Transaksi Terakhir',
-                            action: 'Lihat semua',
-                            onAction: () => ref
-                                .read(currentNavIndexProvider.notifier)
-                                .state = 1,
-                          ),
-                          const SizedBox(height: 12),
-                          todayTx.when(
-                            data: (list) => list.isEmpty
-                                ? _EmptyTx(isDark: isDark)
-                                : _TxList(transactions: list.take(5).toList()),
-                            loading: () => _Shimmer(isDark: isDark, height: 80),
-                            error:   (e, _) => _ErrorWidget(msg: '$e'),
+                          const SizedBox(width: 20),
+                          Expanded(
+                            flex: 2,
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                _SectionTitle('Aksi Cepat'),
+                                const SizedBox(height: 12),
+                                _QuickActions(),
+                                const SizedBox(height: 24),
+                                lowStock.when(
+                                  data: (list) => list.isEmpty
+                                      ? const SizedBox()
+                                      : _LowStockBanner(
+                                          products: list,
+                                          onLihatStok: () => ref
+                                              .read(currentNavIndexProvider.notifier)
+                                              .state = 3,
+                                        ),
+                                  loading: () => const SizedBox(),
+                                  error:   (_, __) => const SizedBox(),
+                                ),
+                              ],
+                            ),
                           ),
                         ],
                       ),
                     ),
-                    const SizedBox(width: 20),
-                    // ── Kolom kanan: Aksi Cepat + Stok Menipis ──────────────
-                    Expanded(
-                      flex: 2,
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          _SectionTitle('Aksi Cepat'),
-                          const SizedBox(height: 12),
-                          _QuickActions(),
-                          const SizedBox(height: 24),
-                          lowStock.when(
-                            data: (list) => list.isEmpty
-                                ? const SizedBox()
-                                : _LowStockBanner(
-                                    products: list,
-                                    onLihatStok: () => ref
-                                        .read(currentNavIndexProvider.notifier)
-                                        .state = 3,
-                                  ),
-                            loading: () => const SizedBox(),
-                            error:   (_, __) => const SizedBox(),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
+                  ),
+                ],
               ),
             ),
           ],
@@ -211,65 +200,67 @@ class DashboardScreen extends ConsumerWidget {
 
     return Scaffold(
       backgroundColor: _bg(isDark),
-      body: CustomScrollView(
-        slivers: [
-          SliverToBoxAdapter(child: _Header()),
-          SliverPadding(
-            padding: const EdgeInsets.fromLTRB(16, 20, 16, 0),
-            sliver: SliverList(
-              delegate: SliverChildListDelegate([
-                // Ringkasan Hari Ini
-                _SectionTitle(
-                  'Ringkasan Hari Ini',
-                  action: 'Lihat semua',
-                  onAction: () =>
-                      ref.read(currentNavIndexProvider.notifier).state = 1,
-                ),
-                const SizedBox(height: 12),
-                stats.when(
-                  data:    (s)    => _SummaryGrid(stats: s),
-                  loading: ()     => _Shimmer(isDark: isDark, height: 180),
-                  error:   (e, _) => _ErrorWidget(msg: '$e'),
-                ),
-                const SizedBox(height: 24),
+      body: Column(
+        children: [
+          _Header(), // Header kini bersifat sticky dan compact
+          Expanded(
+            child: CustomScrollView(
+              slivers: [
+                SliverPadding(
+                  padding: const EdgeInsets.fromLTRB(16, 20, 16, 0),
+                  sliver: SliverList(
+                    delegate: SliverChildListDelegate([
+                      _SectionTitle(
+                        'Ringkasan Hari Ini',
+                        action: 'Lihat semua',
+                        onAction: () =>
+                            ref.read(currentNavIndexProvider.notifier).state = 1,
+                      ),
+                      const SizedBox(height: 12),
+                      stats.when(
+                        data:    (s)    => _SummaryGrid(stats: s),
+                        loading: ()     => _Shimmer(isDark: isDark, height: 180),
+                        error:   (e, _) => _ErrorWidget(msg: '$e'),
+                      ),
+                      const SizedBox(height: 24),
 
-                // Aksi Cepat
-                _SectionTitle('Aksi Cepat'),
-                const SizedBox(height: 12),
-                _QuickActions(),
-                const SizedBox(height: 24),
+                      _SectionTitle('Aksi Cepat'),
+                      const SizedBox(height: 12),
+                      _QuickActions(),
+                      const SizedBox(height: 24),
 
-                // Low Stock Banner
-                lowStock.when(
-                  data: (list) => list.isEmpty
-                      ? const SizedBox()
-                      : _LowStockBanner(
-                          products: list,
-                          onLihatStok: () => ref
-                              .read(currentNavIndexProvider.notifier)
-                              .state = 3,
-                        ),
-                  loading: () => const SizedBox(),
-                  error:   (_, __) => const SizedBox(),
-                ),
+                      lowStock.when(
+                        data: (list) => list.isEmpty
+                            ? const SizedBox()
+                            : _LowStockBanner(
+                                products: list,
+                                onLihatStok: () => ref
+                                    .read(currentNavIndexProvider.notifier)
+                                    .state = 3,
+                              ),
+                        loading: () => const SizedBox(),
+                        error:   (_, __) => const SizedBox(),
+                      ),
 
-                // Transaksi Terakhir
-                _SectionTitle(
-                  'Transaksi Terakhir',
-                  action: 'Lihat semua',
-                  onAction: () =>
-                      ref.read(currentNavIndexProvider.notifier).state = 1,
+                      _SectionTitle(
+                        'Transaksi Terakhir',
+                        action: 'Lihat semua',
+                        onAction: () =>
+                            ref.read(currentNavIndexProvider.notifier).state = 1,
+                      ),
+                      const SizedBox(height: 12),
+                      todayTx.when(
+                        data: (list) => list.isEmpty
+                            ? _EmptyTx(isDark: isDark)
+                            : _TxList(transactions: list.take(5).toList()),
+                        loading: () => _Shimmer(isDark: isDark, height: 80),
+                        error:   (e, _) => _ErrorWidget(msg: '$e'),
+                      ),
+                      const SizedBox(height: 100),
+                    ]),
+                  ),
                 ),
-                const SizedBox(height: 12),
-                todayTx.when(
-                  data: (list) => list.isEmpty
-                      ? _EmptyTx(isDark: isDark)
-                      : _TxList(transactions: list.take(5).toList()),
-                  loading: () => _Shimmer(isDark: isDark, height: 80),
-                  error:   (e, _) => _ErrorWidget(msg: '$e'),
-                ),
-                const SizedBox(height: 100),
-              ]),
+              ],
             ),
           ),
         ],
@@ -325,7 +316,7 @@ class _EmptyTx extends StatelessWidget {
       );
 }
 
-// ─── Header ───────────────────────────────────────────────────────────────────
+// ─── Header (Compact & Sticky) ────────────────────────────────────────────────
 
 class _Header extends ConsumerWidget {
   @override
@@ -335,167 +326,130 @@ class _Header extends ConsumerWidget {
     final headerBg = isDark ? const Color(0xFF134E4A) : AppColors.primary;
 
     return Container(
+      padding: EdgeInsets.only(
+        top: MediaQuery.of(context).padding.top + 10,
+        left: 16,
+        right: 16,
+        bottom: 12,
+      ),
       decoration: BoxDecoration(
         color: headerBg,
-        borderRadius: const BorderRadius.only(
-          bottomLeft:  Radius.circular(24),
-          bottomRight: Radius.circular(24),
-        ),
+        boxShadow: [
+          BoxShadow(
+              color: Colors.black.withOpacity(0.1),
+              blurRadius: 4,
+              offset: const Offset(0, 2))
+        ],
       ),
-      padding: EdgeInsets.only(
-        top:    MediaQuery.of(context).padding.top + 16,
-        left:   20,
-        right:  20,
-        bottom: 20,
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              const Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+          Expanded(
+            child: GestureDetector(
+              onTap: () => _showSwitchRoleSheet(context, ref),
+              child: Row(
                 children: [
-                  Text('Halo, Kasir 👋',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 20,
-                        fontWeight: FontWeight.w800,
-                        letterSpacing: -0.3,
-                      )),
-                  SizedBox(height: 2),
-                  Text('Selamat datang kembali',
-                      style: TextStyle(color: Colors.white70, fontSize: 13)),
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.2),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(Icons.storefront_outlined,
+                        color: Colors.white, size: 22),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Consumer(
+                      builder: (ctx, r, _) {
+                        final user = r.watch(authProvider);
+                        final isAdmin = user?.role == 'admin';
+                        return Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              settings.storeName.isNotEmpty
+                                  ? settings.storeName
+                                  : 'KasirKu',
+                              style: const TextStyle(
+                                  fontWeight: FontWeight.w700,
+                                  fontSize: 15,
+                                  color: Colors.white),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            Row(
+                              children: [
+                                Text(
+                                  isAdmin ? 'Admin' : 'Kasir',
+                                  style: const TextStyle(
+                                      fontSize: 11,
+                                      color: Colors.white70,
+                                      fontWeight: FontWeight.w600),
+                                ),
+                                const SizedBox(width: 4),
+                                const Icon(Icons.keyboard_arrow_down_rounded,
+                                    color: Colors.white70, size: 14),
+                              ],
+                            ),
+                          ],
+                        );
+                      },
+                    ),
+                  ),
                 ],
               ),
-              // BUG #1 FIX: Ganti dot merah hardcoded dengan Consumer yang
-              // watch unreadCountProvider. Dot hanya tampil jika count > 0.
-              Consumer(
-                builder: (context, ref, _) {
-                  final unreadCount = ref.watch(unreadCountProvider);
-                  return GestureDetector(
-                    onTap: () => Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => ProviderScope(
-                          parent: ProviderScope.containerOf(context),
-                          child: const NotifikasiScreen(),
+            ),
+          ),
+          Consumer(
+            builder: (context, ref, _) {
+              final unreadCount = ref.watch(unreadCountProvider);
+              return GestureDetector(
+                onTap: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => ProviderScope(
+                      parent: ProviderScope.containerOf(context),
+                      child: const NotifikasiScreen(),
+                    ),
+                  ),
+                ),
+                child: Stack(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.15),
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(Icons.notifications_outlined,
+                          color: Colors.white, size: 22),
+                    ),
+                    if (unreadCount > 0)
+                      Positioned(
+                        top: 0,
+                        right: 0,
+                        child: Container(
+                          width: 10,
+                          height: 10,
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFEF4444),
+                            shape: BoxShape.circle,
+                            border: Border.all(color: headerBg, width: 2),
+                          ),
                         ),
                       ),
-                    ),
-                    child: Stack(
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.all(10),
-                          decoration: BoxDecoration(
-                            color: Colors.white.withOpacity(0.15),
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: const Icon(Icons.notifications_outlined,
-                              color: Colors.white, size: 22),
-                        ),
-                        if (unreadCount > 0)
-                          Positioned(
-                            top: 6, right: 6,
-                            child: Container(
-                              width: 8, height: 8,
-                              decoration: const BoxDecoration(
-                                color: Color(0xFFEF4444),
-                                shape: BoxShape.circle,
-                              ),
-                            ),
-                          ),
-                      ],
-                    ),
-                  );
-                },
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-          // Kartu nama toko → tap untuk ganti role / kelola akun
-          GestureDetector(
-            onTap: () => _showSwitchRoleSheet(context, ref),
-            child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-            decoration: BoxDecoration(
-              color: _card(isDark),
-              borderRadius: BorderRadius.circular(14),
-            ),
-            child: Row(children: [
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: _priLight(isDark),
-                  borderRadius: BorderRadius.circular(10),
+                  ],
                 ),
-                child: const Icon(Icons.storefront_outlined,
-                    color: AppColors.primary, size: 22),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Consumer(
-                  builder: (ctx, r, _) {
-                    final user = r.watch(authProvider);
-                    final isAdmin = user?.role == 'admin';
-                    return Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          settings.storeName.isNotEmpty
-                              ? settings.storeName : 'KasirKu',
-                          style: TextStyle(
-                            fontWeight: FontWeight.w700,
-                            fontSize: 14,
-                            color: _textPrimary(isDark),
-                          ),
-                        ),
-                        Row(children: [
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 6, vertical: 1),
-                            decoration: BoxDecoration(
-                              color: isAdmin
-                                  ? AppColors.primary.withOpacity(0.12)
-                                  : AppColors.success.withOpacity(0.12),
-                              borderRadius: BorderRadius.circular(6),
-                            ),
-                            child: Text(
-                              isAdmin ? 'Admin' : 'Kasir',
-                              style: TextStyle(
-                                fontSize: 10,
-                                fontWeight: FontWeight.w700,
-                                color: isAdmin
-                                    ? AppColors.primary : AppColors.success,
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 6),
-                          Text(
-                            'Ketuk untuk ganti role',
-                            style: TextStyle(
-                              fontSize: 11,
-                              color: _textSub(isDark),
-                            ),
-                          ),
-                        ]),
-                      ],
-                    );
-                  },
-                ),
-              ),
-              Icon(Icons.swap_horiz_rounded,
-                  color: AppColors.primary, size: 22),
-            ]),
-          ),
+              );
+            },
           ),
         ],
       ),
     );
   }
 
-  /// Tampilkan bottom sheet pilihan: Ganti role (logout) atau Kelola Kasir (admin only)
   void _showSwitchRoleSheet(BuildContext context, WidgetRef ref) {
     final isDark    = Theme.of(context).brightness == Brightness.dark;
     final sheetBg   = isDark ? AppColors.darkSurface : Colors.white;
@@ -541,7 +495,6 @@ class _Header extends ConsumerWidget {
               ),
               const SizedBox(height: 20),
 
-              // Info role saat ini
               Container(
                 width: double.infinity,
                 padding: const EdgeInsets.all(14),
@@ -586,7 +539,6 @@ class _Header extends ConsumerWidget {
               ),
               const SizedBox(height: 16),
 
-              // Tombol Kelola Admin/Kasir — hanya admin
               if (isAdmin) ...[
                 SizedBox(
                   width: double.infinity,
@@ -618,7 +570,6 @@ class _Header extends ConsumerWidget {
                 const SizedBox(height: 10),
               ],
 
-              // Tombol ganti role (logout)
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton.icon(
@@ -666,8 +617,8 @@ class _Header extends ConsumerWidget {
           ),
           ElevatedButton(
             onPressed: () async {
-              Navigator.pop(ctx);     // tutup dialog
-              Navigator.pop(context); // tutup bottom sheet
+              Navigator.pop(ctx);
+              Navigator.pop(context);
               await ref.read(authProvider.notifier).logout();
               if (context.mounted) {
                 Navigator.of(context).pushAndRemoveUntil(
@@ -691,7 +642,6 @@ class _Header extends ConsumerWidget {
     );
   }
 }
-
 
 class _SectionTitle extends StatelessWidget {
   final String title;
@@ -881,11 +831,6 @@ class _QuickActions extends ConsumerWidget {
           onTap: () => ref.read(currentNavIndexProvider.notifier).state = 1),
     ];
 
-    // FITUR TABLET: deteksi lebar yang TERSEDIA untuk widget ini (bukan
-    // lebar layar device), supaya tetap proporsional baik dipakai full-width
-    // di mobile maupun di kolom sempit (sidebar kanan) saat tablet landscape.
-    // Di bawah ~360px untuk 4 kartu sejajar, kartu jadi terlalu padat,
-    // sehingga disusun ulang jadi grid 2x2.
     return LayoutBuilder(
       builder: (context, constraints) {
         final isNarrow = constraints.maxWidth < 360;
