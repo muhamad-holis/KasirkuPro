@@ -17,6 +17,7 @@ import 'package:mobile_scanner/mobile_scanner.dart';
 import '../../../core/utils/sound_service.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/currency.dart';
+import '../../../core/utils/responsive.dart';
 import '../../providers/kasir_provider.dart';
 import '../../providers/products_provider.dart';
 import '../../providers/database_provider.dart';
@@ -130,6 +131,8 @@ class _KasirScreenState extends ConsumerState<KasirScreen> {
       }
     });
 
+    final isTabletLandscape = Responsive.isTabletLandscape(context);
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('Kasir',
@@ -145,18 +148,48 @@ class _KasirScreenState extends ConsumerState<KasirScreen> {
             ),
         ],
       ),
-      body: Column(
-        children: [
-          _SearchBar(onFocused: _onSearchFocused),
-          _ProductResults(),
-          if (!cart.isEmpty)
-            Expanded(
-              child: _KasirBody(cart: cart),
+      // FITUR TABLET: di tablet landscape, tampilkan layout POS profesional
+      // 2 kolom — grid produk browsable di kiri (selalu terlihat) dan
+      // keranjang + ringkasan + tombol bayar di kanan (selalu terlihat).
+      // Tidak perlu pindah tab atau buka halaman baru untuk melihat produk
+      // sambil tetap melihat keranjang. Logic kasirProvider/addProduct/dll
+      // TIDAK diubah sama sekali — hanya disusun ulang secara visual.
+      body: isTabletLandscape
+          ? Row(
+              children: [
+                // ── Kolom kiri: cari + grid produk ─────────────────────────
+                Expanded(
+                  flex: 3,
+                  child: Column(
+                    children: [
+                      _SearchBar(onFocused: _onSearchFocused),
+                      _ProductResults(),
+                      const Expanded(child: _ProductGridTablet()),
+                    ],
+                  ),
+                ),
+                const VerticalDivider(width: 1),
+                // ── Kolom kanan: keranjang (sama seperti layout mobile) ────
+                Expanded(
+                  flex: 2,
+                  child: !cart.isEmpty
+                      ? _KasirBody(cart: cart)
+                      : const _EmptyCart(),
+                ),
+              ],
             )
-          else
-            const Expanded(child: _EmptyCart()),
-        ],
-      ),
+          : Column(
+              children: [
+                _SearchBar(onFocused: _onSearchFocused),
+                _ProductResults(),
+                if (!cart.isEmpty)
+                  Expanded(
+                    child: _KasirBody(cart: cart),
+                  )
+                else
+                  const Expanded(child: _EmptyCart()),
+              ],
+            ),
     );
   }
 
@@ -1285,7 +1318,218 @@ class _ProductResults extends ConsumerWidget {
   }
 }
 
+// FITUR TABLET: provider kategori terpisah khusus untuk grid produk di Kasir,
+// supaya tidak berbagi state dengan selectedCategoryProvider yang sudah
+// dipakai oleh Stok Screen (filteredStokProvider). Tanpa ini, memilih
+// kategori di Kasir akan ikut mengubah filter di Stok Screen, dan sebaliknya.
+final _kasirGridCategoryProvider = StateProvider<int?>((ref) => null);
+
 // _CartHeader sudah digantikan _KasirBody
+
+// ─── FITUR TABLET: Grid Produk Browsable (kolom kiri saat landscape) ──────────
+// Menampilkan semua produk dalam grid kartu yang bisa di-tap untuk langsung
+// ditambah ke keranjang. Memakai provider yang sudah ada (productsStreamProvider,
+// categoriesProvider, selectedCategoryProvider) dan addProduct() dari
+// kasirProvider — tidak ada provider atau logic bisnis baru yang ditambahkan.
+// Tujuannya supaya di tablet landscape, kasir bisa "browse & tap" produk
+// tanpa harus selalu mengetik di search bar, sambil keranjang tetap terlihat
+// di kolom kanan.
+
+class _ProductGridTablet extends ConsumerWidget {
+  const _ProductGridTablet();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final productsAsync = ref.watch(productsStreamProvider);
+    final categoriesAsync = ref.watch(categoriesProvider);
+    final selectedCategory = ref.watch(_kasirGridCategoryProvider);
+
+    return Column(
+      children: [
+        // ── Filter kategori (chip horizontal) ──────────────────────────────
+        categoriesAsync.when(
+          data: (categories) {
+            if (categories.isEmpty) return const SizedBox();
+            return SizedBox(
+              height: 44,
+              child: ListView(
+                scrollDirection: Axis.horizontal,
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                children: [
+                  _CategoryChip(
+                    label: 'Semua',
+                    selected: selectedCategory == null,
+                    onTap: () =>
+                        ref.read(_kasirGridCategoryProvider.notifier).state = null,
+                  ),
+                  ...categories.map((c) => _CategoryChip(
+                        label: c.name,
+                        selected: selectedCategory == c.id,
+                        onTap: () => ref
+                            .read(_kasirGridCategoryProvider.notifier)
+                            .state = c.id,
+                      )),
+                ],
+              ),
+            );
+          },
+          loading: () => const SizedBox(height: 44),
+          error: (_, __) => const SizedBox(height: 44),
+        ),
+        // ── Grid produk ─────────────────────────────────────────────────────
+        Expanded(
+          child: productsAsync.when(
+            data: (allProducts) {
+              final list = selectedCategory == null
+                  ? allProducts
+                  : allProducts
+                      .where((p) => p.categoryId == selectedCategory)
+                      .toList();
+
+              if (list.isEmpty) {
+                return Center(
+                  child: Text('Tidak ada produk',
+                      style: TextStyle(color: Colors.grey.shade500)),
+                );
+              }
+
+              return GridView.builder(
+                padding: const EdgeInsets.fromLTRB(12, 8, 12, 100),
+                gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: Responsive.gridColumns(context),
+                  crossAxisSpacing: 8,
+                  mainAxisSpacing: 8,
+                  childAspectRatio: 0.78,
+                ),
+                itemCount: list.length,
+                itemBuilder: (_, i) {
+                  final p = list[i];
+                  return _ProductGridCardKasir(product: p);
+                },
+              );
+            },
+            loading: () => const Center(child: CircularProgressIndicator()),
+            error: (e, _) => Center(child: Text('Error: $e')),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _CategoryChip extends StatelessWidget {
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  const _CategoryChip({
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(right: 8),
+      child: ChoiceChip(
+        label: Text(label),
+        selected: selected,
+        onSelected: (_) => onTap(),
+        selectedColor: AppColors.primary,
+        labelStyle: TextStyle(
+          fontSize: 12,
+          fontWeight: FontWeight.w600,
+          color: selected ? Colors.white : null,
+        ),
+      ),
+    );
+  }
+}
+
+class _ProductGridCardKasir extends ConsumerWidget {
+  final Product product;
+  const _ProductGridCardKasir({required this.product});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final outOfStock = product.stock <= 0;
+    final cardBg = isDark ? AppColors.darkCard : Colors.white;
+    final borderColor = isDark ? AppColors.darkBorder : Colors.grey.shade200;
+
+    return Material(
+      color: cardBg,
+      borderRadius: BorderRadius.circular(12),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(12),
+        onTap: outOfStock
+            ? null
+            : () {
+                ref.read(kasirProvider.notifier).addProduct(product);
+                HapticFeedback.lightImpact();
+              },
+        child: Container(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: borderColor),
+          ),
+          padding: const EdgeInsets.all(10),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Container(
+                  width: double.infinity,
+                  decoration: BoxDecoration(
+                    color: outOfStock
+                        ? Colors.grey.shade200
+                        : AppColors.primaryLight,
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Icon(
+                    Icons.inventory_2_outlined,
+                    size: 28,
+                    color: outOfStock ? Colors.grey.shade400 : AppColors.primary,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                product.name,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontSize: 12.5,
+                  fontWeight: FontWeight.w600,
+                  color: outOfStock
+                      ? Colors.grey
+                      : (isDark ? Colors.white : AppColors.textPrimary),
+                ),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                CurrencyFormatter.format(product.sellPrice),
+                style: const TextStyle(
+                  fontSize: 12.5,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.primary,
+                ),
+              ),
+              Text(
+                outOfStock ? 'Stok habis' : 'Stok: ${product.stock}',
+                style: TextStyle(
+                  fontSize: 10.5,
+                  color: outOfStock ? AppColors.danger : Colors.grey.shade500,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
 
 // ─── Cart List ────────────────────────────────────────────────────────────────
 

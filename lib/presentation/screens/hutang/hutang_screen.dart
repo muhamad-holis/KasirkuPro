@@ -11,6 +11,7 @@ import 'package:drift/drift.dart' show Value;
 import 'package:intl/intl.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/currency.dart';
+import '../../../core/utils/responsive.dart';
 import '../../../data/database/app_database.dart';
 import '../../providers/database_provider.dart';
 import '../../providers/hutang_provider.dart';
@@ -18,6 +19,14 @@ import '../../providers/hutang_provider.dart';
 // ─────────────────────────────────────────────────────────────────────────────
 // SCREEN UTAMA
 // ─────────────────────────────────────────────────────────────────────────────
+
+// FITUR TABLET: provider lokal untuk menyimpan hutang yang sedang dipilih
+// di layout master-detail tablet. Null = belum ada yang dipilih.
+// Dipakai oleh _DebtCard untuk "memberi tahu" screen utama hutang mana
+// yang ingin ditampilkan di panel detail kanan. Di mobile, provider ini
+// tetap ada tapi tidak digunakan (_DebtCard tetap buka bottom sheet biasa).
+final _selectedDebtProvider =
+    StateProvider<({Debt debt, String customerName})?>((ref) => null);
 
 class HutangScreen extends ConsumerStatefulWidget {
   const HutangScreen({super.key});
@@ -45,6 +54,73 @@ class _HutangScreenState extends ConsumerState<HutangScreen>
   @override
   Widget build(BuildContext context) {
     final summary = ref.watch(hutangSummaryProvider);
+    final selected = ref.watch(_selectedDebtProvider);
+    final isTabletLandscape = Responsive.isTabletLandscape(context);
+
+    // Widget daftar hutang (pakai di kedua layout)
+    final listWidget = Column(
+      children: [
+        summary.when(
+          data: (s) => _SummaryBar(summary: s),
+          loading: () => const SizedBox(height: 72),
+          error: (_, __) => const SizedBox(),
+        ),
+        Expanded(
+          child: TabBarView(
+            controller: _tab,
+            children: const [
+              _AllDebtsTab(),
+              _UnpaidDebtsTab(),
+              _DueTodayTab(),
+            ],
+          ),
+        ),
+      ],
+    );
+
+    // FITUR TABLET: master-detail 2 kolom saat tablet landscape —
+    // daftar hutang (dengan tab Semua/Belum Lunas/Jatuh Tempo) di kiri,
+    // detail hutang terpilih di kanan. _DebtCard meng-set
+    // _selectedDebtProvider saat di-tap alih-alih buka bottom sheet.
+    if (isTabletLandscape) {
+      return Scaffold(
+        appBar: AppBar(
+          title: const Text('Hutang Piutang',
+              style: TextStyle(fontWeight: FontWeight.w700)),
+          bottom: TabBar(
+            controller: _tab,
+            labelColor: Colors.white,
+            unselectedLabelColor: Colors.white60,
+            indicatorColor: Colors.white,
+            indicatorWeight: 3,
+            tabs: const [
+              Tab(text: 'Semua'),
+              Tab(text: 'Belum Lunas'),
+              Tab(text: 'Jatuh Tempo'),
+            ],
+          ),
+        ),
+        body: Row(
+          children: [
+            Expanded(flex: 2, child: listWidget),
+            const VerticalDivider(width: 1),
+            Expanded(
+              flex: 3,
+              child: selected == null
+                  ? const _NoSelectionPlaceholder(
+                      icon: Icons.receipt_long_outlined,
+                      label: 'Pilih hutang untuk melihat detail',
+                    )
+                  : _DebtDetailPanel(
+                      key: ValueKey(selected.debt.id),
+                      debt: selected.debt,
+                      customerName: selected.customerName,
+                    ),
+            ),
+          ],
+        ),
+      );
+    }
 
     return Scaffold(
       appBar: AppBar(
@@ -63,27 +139,7 @@ class _HutangScreenState extends ConsumerState<HutangScreen>
           ],
         ),
       ),
-      body: Column(
-        children: [
-          // ── Summary cards ──────────────────────────────────────────────────
-          summary.when(
-            data: (s) => _SummaryBar(summary: s),
-            loading: () => const SizedBox(height: 72),
-            error: (_, __) => const SizedBox(),
-          ),
-          // ── Tabs ───────────────────────────────────────────────────────────
-          Expanded(
-            child: TabBarView(
-              controller: _tab,
-              children: const [
-                _AllDebtsTab(),
-                _UnpaidDebtsTab(),
-                _DueTodayTab(),
-              ],
-            ),
-          ),
-        ],
-      ),
+      body: listWidget,
     );
   }
 }
@@ -506,6 +562,13 @@ class _DebtCard extends ConsumerWidget {
   }
 
   void _showDetail(BuildContext context, WidgetRef ref) {
+    // FITUR TABLET: set provider lokal agar screen utama menampilkan panel
+    // detail di kanan. Di mobile, tetap buka bottom sheet seperti semula.
+    if (Responsive.isTabletLandscape(context)) {
+      ref.read(_selectedDebtProvider.notifier).state =
+          (debt: debt, customerName: customerName);
+      return;
+    }
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -1091,6 +1154,239 @@ class _EmptyState extends StatelessWidget {
               style: TextStyle(
                   color: Colors.grey.shade500,
                   fontWeight: FontWeight.w500)),
+        ],
+      ),
+    );
+  }
+}
+
+// ─── FITUR TABLET: Placeholder saat belum ada hutang terpilih ───────────────
+
+class _NoSelectionPlaceholder extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  const _NoSelectionPlaceholder({
+    required this.icon,
+    required this.label,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return Container(
+      color: isDark ? AppColors.darkBg : Colors.grey.shade50,
+      child: Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(icon, size: 64, color: Colors.grey.shade300),
+            const SizedBox(height: 16),
+            Text(label,
+                style: TextStyle(
+                    color: Colors.grey.shade400, fontSize: 15)),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ─── FITUR TABLET: Panel detail hutang untuk layout master-detail ────────────
+// Konten identik dengan _DebtDetailSheet, namun dibungkus sebagai panel biasa
+// tanpa DraggableScrollableSheet. Tombol "Bayar Sekarang" tetap membuka
+// _BayarHutangSheet sebagai modal, karena pembayaran adalah aksi yang
+// memang layak tampil sebagai modal di semua device.
+
+class _DebtDetailPanel extends ConsumerWidget {
+  final Debt debt;
+  final String customerName;
+
+  const _DebtDetailPanel({
+    super.key,
+    required this.debt,
+    required this.customerName,
+  });
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final historyAsync = ref.watch(debtPaymentHistoryProvider(debt.id));
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final sisa = debt.amount - debt.paidAmount;
+    final isLunas = debt.status == 'paid';
+
+    return Container(
+      color: isDark ? AppColors.darkBg : Colors.grey.shade50,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // ── Header ────────────────────────────────────────────────────────
+          Container(
+            padding: const EdgeInsets.fromLTRB(20, 20, 20, 16),
+            decoration: BoxDecoration(
+              color: isDark ? AppColors.darkCard : Colors.white,
+              border: Border(
+                bottom: BorderSide(
+                  color: isDark
+                      ? AppColors.darkBorder
+                      : Colors.grey.shade200,
+                ),
+              ),
+            ),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(customerName,
+                          style: const TextStyle(
+                              fontSize: 17,
+                              fontWeight: FontWeight.w800)),
+                      Text(
+                        isLunas
+                            ? 'Lunas'
+                            : 'Sisa: ${CurrencyFormatter.format(sisa)}',
+                        style: TextStyle(
+                            color: isLunas
+                                ? AppColors.success
+                                : AppColors.danger,
+                            fontWeight: FontWeight.w600,
+                            fontSize: 13),
+                      ),
+                    ],
+                  ),
+                ),
+                _StatusBadge(debt.status, large: true),
+              ],
+            ),
+          ),
+
+          // ── Info ringkasan ────────────────────────────────────────────────
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
+            child: Row(
+              children: [
+                _InfoRow(
+                    label: 'Total',
+                    value: CurrencyFormatter.format(debt.amount)),
+                const SizedBox(width: 16),
+                _InfoRow(
+                    label: 'Bayar',
+                    value: CurrencyFormatter.format(debt.paidAmount),
+                    color: AppColors.success),
+                const SizedBox(width: 16),
+                _InfoRow(
+                    label: 'Sisa',
+                    value: CurrencyFormatter.format(sisa),
+                    color: isLunas ? Colors.grey : AppColors.danger),
+              ],
+            ),
+          ),
+
+          if (debt.dueDate != null)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
+              child: Row(
+                children: [
+                  const Icon(Icons.event_outlined,
+                      size: 14, color: Colors.grey),
+                  const SizedBox(width: 4),
+                  Text(
+                    'Jatuh tempo: ${DateFormat('dd MMMM yyyy', 'id').format(debt.dueDate!)}',
+                    style: TextStyle(
+                        fontSize: 12,
+                        color: debt.dueDate!.isBefore(DateTime.now()) &&
+                                !isLunas
+                            ? AppColors.danger
+                            : Colors.grey.shade600),
+                  ),
+                ],
+              ),
+            ),
+
+          if (debt.notes != null && debt.notes!.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 6, 20, 0),
+              child: Text('Catatan: ${debt.notes}',
+                  style: TextStyle(
+                      fontSize: 12, color: Colors.grey.shade500)),
+            ),
+
+          const Padding(
+            padding: EdgeInsets.fromLTRB(20, 16, 20, 0),
+            child: Text('Riwayat Pembayaran',
+                style:
+                    TextStyle(fontWeight: FontWeight.w700, fontSize: 14)),
+          ),
+          const SizedBox(height: 8),
+
+          // ── Riwayat pembayaran ────────────────────────────────────────────
+          Expanded(
+            child: historyAsync.when(
+              data: (payments) {
+                if (payments.isEmpty) {
+                  return Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.history_outlined,
+                            size: 40, color: Colors.grey.shade300),
+                        const SizedBox(height: 8),
+                        Text('Belum ada pembayaran',
+                            style: TextStyle(
+                                color: Colors.grey.shade400)),
+                      ],
+                    ),
+                  );
+                }
+                return ListView.separated(
+                  padding: const EdgeInsets.symmetric(horizontal: 20),
+                  itemCount: payments.length,
+                  separatorBuilder: (_, __) => const Divider(height: 1),
+                  itemBuilder: (_, i) =>
+                      _PaymentHistoryRow(payment: payments[i]),
+                );
+              },
+              loading: () =>
+                  const Center(child: CircularProgressIndicator()),
+              error: (e, _) => Center(child: Text('$e')),
+            ),
+          ),
+
+          // ── Tombol bayar ──────────────────────────────────────────────────
+          if (!isLunas)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 8, 20, 20),
+              child: SizedBox(
+                width: double.infinity,
+                child: FilledButton.icon(
+                  style: FilledButton.styleFrom(
+                    backgroundColor: AppColors.success,
+                    padding:
+                        const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12)),
+                  ),
+                  icon: const Icon(Icons.payments_outlined, size: 18),
+                  label: const Text('Bayar Sekarang',
+                      style: TextStyle(
+                          fontWeight: FontWeight.w700, fontSize: 15)),
+                  onPressed: () => showModalBottomSheet(
+                    context: context,
+                    isScrollControlled: true,
+                    shape: const RoundedRectangleBorder(
+                        borderRadius: BorderRadius.vertical(
+                            top: Radius.circular(24))),
+                    builder: (_) => ProviderScope(
+                      parent: ProviderScope.containerOf(context),
+                      child: _BayarHutangSheet(
+                          debt: debt,
+                          customerName: customerName),
+                    ),
+                  ),
+                ),
+              ),
+            ),
         ],
       ),
     );

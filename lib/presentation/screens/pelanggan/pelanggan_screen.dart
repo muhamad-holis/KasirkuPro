@@ -5,6 +5,7 @@ import 'package:drift/drift.dart' show Value;
 import 'package:intl/intl.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/currency.dart';
+import '../../../core/utils/responsive.dart';
 import '../../providers/customers_provider.dart';
 import '../../providers/database_provider.dart';
 import '../../../data/database/app_database.dart';
@@ -23,6 +24,12 @@ class PelangganScreen extends ConsumerStatefulWidget {
 class _PelangganScreenState extends ConsumerState<PelangganScreen> {
   final _searchCtrl = TextEditingController();
 
+  // FITUR TABLET: pelanggan yang sedang ditampilkan di panel detail kanan
+  // saat tablet landscape (master-detail). Tidak dipakai sama sekali di
+  // mobile — di mobile, detail tetap dibuka sebagai bottom sheet seperti
+  // semula tanpa state ini.
+  Customer? _selectedCustomer;
+
   @override
   void dispose() {
     _searchCtrl.dispose();
@@ -33,6 +40,111 @@ class _PelangganScreenState extends ConsumerState<PelangganScreen> {
   Widget build(BuildContext context) {
     final filtered = ref.watch(filteredCustomersProvider);
     final stats    = ref.watch(customerStatsProvider);
+    final isTabletLandscape = Responsive.isTabletLandscape(context);
+
+    // ── Daftar pelanggan (dipakai di kedua layout, mobile & tablet) ─────────
+    final listWidget = Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(12, 12, 12, 8),
+          child: TextField(
+            controller: _searchCtrl,
+            onChanged: (v) =>
+                ref.read(customerSearchProvider.notifier).state = v,
+            decoration: InputDecoration(
+              hintText: 'Cari nama, telepon, atau alamat...',
+              prefixIcon: const Icon(Icons.search, size: 20),
+              isDense: true,
+              suffixIcon: _searchCtrl.text.isNotEmpty
+                  ? IconButton(
+                      icon: const Icon(Icons.clear, size: 18),
+                      onPressed: () {
+                        _searchCtrl.clear();
+                        ref.read(customerSearchProvider.notifier).state = '';
+                      },
+                    )
+                  : null,
+            ),
+          ),
+        ),
+        stats.when(
+          data: (s) => _StatsBar(stats: s),
+          loading: () => const SizedBox(height: 36),
+          error: (_, __) => const SizedBox(),
+        ),
+        Expanded(
+          child: filtered.when(
+            data: (list) {
+              if (list.isEmpty) {
+                return _EmptyState(
+                  isSearching: _searchCtrl.text.isNotEmpty,
+                  onAdd: () => _showAddSheet(context),
+                );
+              }
+              return ListView.separated(
+                padding: const EdgeInsets.fromLTRB(12, 4, 12, 100),
+                itemCount: list.length,
+                separatorBuilder: (_, __) => const SizedBox(height: 6),
+                itemBuilder: (_, i) => _CustomerCard(
+                  customer: list[i],
+                  // FITUR TABLET: highlight kartu yang sedang dipilih
+                  // sebagai konteks visual master-detail.
+                  selected: isTabletLandscape &&
+                      _selectedCustomer?.id == list[i].id,
+                  onTap: () => _showDetail(context, list[i]),
+                  onEdit: () => _showEditSheet(context, list[i]),
+                  onDelete: () => _confirmDelete(context, list[i]),
+                ),
+              );
+            },
+            loading: () =>
+                const Center(child: CircularProgressIndicator()),
+            error: (e, _) =>
+                Center(child: Text('Error: $e')),
+          ),
+        ),
+      ],
+    );
+
+    // FITUR TABLET: master-detail 2 kolom saat tablet landscape — daftar
+    // pelanggan di kiri, detail pelanggan terpilih langsung di kanan tanpa
+    // perlu membuka bottom sheet. Memakai _CustomerDetailSheet yang sama
+    // dibungkus _CustomerDetailPanel (tanpa DraggableScrollableSheet/
+    // Navigator.pop) supaya konten dan logicnya identik dengan versi mobile.
+    if (isTabletLandscape) {
+      return Scaffold(
+        appBar: AppBar(
+          title: const Text('Pelanggan',
+              style: TextStyle(fontWeight: FontWeight.w700)),
+          actions: [
+            IconButton(
+              icon: const Icon(Icons.person_add_outlined),
+              tooltip: 'Tambah Pelanggan',
+              onPressed: () => _showAddSheet(context),
+            ),
+          ],
+        ),
+        body: Row(
+          children: [
+            Expanded(flex: 2, child: listWidget),
+            const VerticalDivider(width: 1),
+            Expanded(
+              flex: 3,
+              child: _selectedCustomer == null
+                  ? _NoSelectionPlaceholder(
+                      icon: Icons.person_outline,
+                      label: 'Pilih pelanggan untuk melihat detail',
+                    )
+                  : _CustomerDetailPanel(
+                      key: ValueKey(_selectedCustomer!.id),
+                      customer: _selectedCustomer!,
+                      onEdit: () => _showEditSheet(context, _selectedCustomer!),
+                    ),
+            ),
+          ],
+        ),
+      );
+    }
 
     return Scaffold(
       appBar: AppBar(
@@ -46,69 +158,7 @@ class _PelangganScreenState extends ConsumerState<PelangganScreen> {
           ),
         ],
       ),
-      body: Column(
-        children: [
-          // ── Search bar ──────────────────────────────────────────────────────
-          Padding(
-            padding: const EdgeInsets.fromLTRB(12, 12, 12, 8),
-            child: TextField(
-              controller: _searchCtrl,
-              onChanged: (v) =>
-                  ref.read(customerSearchProvider.notifier).state = v,
-              decoration: InputDecoration(
-                hintText: 'Cari nama, telepon, atau alamat...',
-                prefixIcon: const Icon(Icons.search, size: 20),
-                isDense: true,
-                suffixIcon: _searchCtrl.text.isNotEmpty
-                    ? IconButton(
-                        icon: const Icon(Icons.clear, size: 18),
-                        onPressed: () {
-                          _searchCtrl.clear();
-                          ref.read(customerSearchProvider.notifier).state = '';
-                        },
-                      )
-                    : null,
-              ),
-            ),
-          ),
-
-          // ── Stats bar ────────────────────────────────────────────────────────
-          stats.when(
-            data: (s) => _StatsBar(stats: s),
-            loading: () => const SizedBox(height: 36),
-            error: (_, __) => const SizedBox(),
-          ),
-
-          // ── List pelanggan ───────────────────────────────────────────────────
-          Expanded(
-            child: filtered.when(
-              data: (list) {
-                if (list.isEmpty) {
-                  return _EmptyState(
-                    isSearching: _searchCtrl.text.isNotEmpty,
-                    onAdd: () => _showAddSheet(context),
-                  );
-                }
-                return ListView.separated(
-                  padding: const EdgeInsets.fromLTRB(12, 4, 12, 100),
-                  itemCount: list.length,
-                  separatorBuilder: (_, __) => const SizedBox(height: 6),
-                  itemBuilder: (_, i) => _CustomerCard(
-                    customer: list[i],
-                    onTap: () => _showDetail(context, list[i]),
-                    onEdit: () => _showEditSheet(context, list[i]),
-                    onDelete: () => _confirmDelete(context, list[i]),
-                  ),
-                );
-              },
-              loading: () =>
-                  const Center(child: CircularProgressIndicator()),
-              error: (e, _) =>
-                  Center(child: Text('Error: $e')),
-            ),
-          ),
-        ],
-      ),
+      body: listWidget,
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () => _showAddSheet(context),
         icon: const Icon(Icons.person_add_outlined),
@@ -152,6 +202,13 @@ class _PelangganScreenState extends ConsumerState<PelangganScreen> {
   // ─── Buka detail pelanggan ────────────────────────────────────────────────
 
   void _showDetail(BuildContext context, Customer customer) {
+    // FITUR TABLET: di tablet landscape, tampilkan detail di panel kanan
+    // (master-detail) alih-alih bottom sheet, supaya daftar pelanggan tetap
+    // terlihat sambil melihat detail.
+    if (Responsive.isTabletLandscape(context)) {
+      setState(() => _selectedCustomer = customer);
+      return;
+    }
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -276,12 +333,15 @@ class _CustomerCard extends StatelessWidget {
   final VoidCallback onTap;
   final VoidCallback onEdit;
   final VoidCallback onDelete;
+  // FITUR TABLET: highlight kartu yang sedang ditampilkan di panel detail kanan
+  final bool selected;
 
   const _CustomerCard({
     required this.customer,
     required this.onTap,
     required this.onEdit,
     required this.onDelete,
+    this.selected = false,
   });
 
   @override
@@ -292,6 +352,13 @@ class _CustomerCard extends StatelessWidget {
 
     return Card(
       margin: EdgeInsets.zero,
+      // Highlight border saat terpilih di tablet
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: selected
+            ? const BorderSide(color: AppColors.primary, width: 2)
+            : BorderSide.none,
+      ),
       child: InkWell(
         borderRadius: BorderRadius.circular(16),
         onTap: onTap,
@@ -1491,6 +1558,236 @@ class _CustomerPointsSection extends ConsumerWidget {
           },
         ),
       ],
+    );
+  }
+}
+
+// ─── FITUR TABLET: Placeholder saat belum ada item terpilih ─────────────────
+
+class _NoSelectionPlaceholder extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  const _NoSelectionPlaceholder({required this.icon, required this.label});
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return Container(
+      color: isDark ? AppColors.darkBg : Colors.grey.shade50,
+      child: Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(icon, size: 64,
+                color: Colors.grey.shade300),
+            const SizedBox(height: 16),
+            Text(label,
+                style: TextStyle(
+                    color: Colors.grey.shade400,
+                    fontSize: 15)),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ─── FITUR TABLET: Panel detail pelanggan untuk layout master-detail ─────────
+// Konten identik dengan _CustomerDetailSheet (digunakan di HP sebagai bottom
+// sheet), namun dibungkus sebagai panel biasa (bukan DraggableScrollableSheet)
+// dan tanpa Navigator.pop — tombol Edit membuka sheet langsung via callback
+// onEdit yang diberikan dari _PelangganScreenState.
+// Dengan cara ini, tidak ada duplikasi logic bisnis — semua sub-widget
+// (_SectionTitle, _InfoRow, _CustomerTransactionsSection, dst) tetap dipakai
+// apa adanya dan identik antara versi HP dan versi tablet.
+
+class _CustomerDetailPanel extends ConsumerWidget {
+  final Customer customer;
+  final VoidCallback onEdit;
+
+  const _CustomerDetailPanel({
+    super.key,
+    required this.customer,
+    required this.onEdit,
+  });
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    return Container(
+      color: isDark ? AppColors.darkBg : Colors.grey.shade50,
+      child: Column(
+        children: [
+          // ── Header panel ──────────────────────────────────────────────────
+          Container(
+            padding: const EdgeInsets.fromLTRB(20, 20, 20, 16),
+            decoration: BoxDecoration(
+              color: isDark ? AppColors.darkCard : Colors.white,
+              border: Border(
+                bottom: BorderSide(
+                  color: isDark ? AppColors.darkBorder : Colors.grey.shade200,
+                ),
+              ),
+            ),
+            child: Row(
+              children: [
+                Container(
+                  width: 48,
+                  height: 48,
+                  decoration: BoxDecoration(
+                    color: AppColors.primaryLight,
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  child: Center(
+                    child: Text(
+                      customer.name.isNotEmpty
+                          ? customer.name[0].toUpperCase()
+                          : '?',
+                      style: const TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.w800,
+                          color: AppColors.primary),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(customer.name,
+                          style: const TextStyle(
+                              fontWeight: FontWeight.w800, fontSize: 16)),
+                      if (customer.phone != null &&
+                          customer.phone!.isNotEmpty)
+                        Text(customer.phone!,
+                            style: const TextStyle(
+                                color: AppColors.textSecondary,
+                                fontSize: 13)),
+                    ],
+                  ),
+                ),
+                // Tombol edit — memanggil callback dari parent (bukan
+                // Navigator.pop) supaya tidak menutup screen Pelanggan
+                OutlinedButton.icon(
+                  icon: const Icon(Icons.edit_outlined, size: 16),
+                  label: const Text('Edit'),
+                  onPressed: onEdit,
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: AppColors.primary,
+                    side: const BorderSide(color: AppColors.primary),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10)),
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          // ── Konten detail (identik dengan _CustomerDetailSheet) ───────────
+          Expanded(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Poin
+                  Container(
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      color: AppColors.warning.withOpacity(0.08),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                          color: AppColors.warning.withOpacity(0.3)),
+                    ),
+                    child: Row(children: [
+                      const Icon(Icons.stars_rounded,
+                          color: AppColors.warning, size: 20),
+                      const SizedBox(width: 10),
+                      Text('${customer.points} poin',
+                          style: const TextStyle(
+                              fontWeight: FontWeight.w700,
+                              color: AppColors.warning,
+                              fontSize: 15)),
+                      const Spacer(),
+                      Text('= Rp ${(customer.points * 100).toString()
+                              .replaceAllMapped(
+                                RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'),
+                                (m) => '${m[1]}.')}',
+                          style: const TextStyle(
+                              color: AppColors.warning, fontSize: 13)),
+                    ]),
+                  ),
+                  const SizedBox(height: 16),
+
+                  // Info
+                  _SectionTitle('Informasi'),
+                  const SizedBox(height: 8),
+                  _CustomerInfoSection(customer: customer),
+                  const SizedBox(height: 16),
+
+                  // Transaksi
+                  _SectionTitle('Riwayat Transaksi'),
+                  const SizedBox(height: 8),
+                  _CustomerTransactionsSection(customerId: customer.id),
+                  const SizedBox(height: 16),
+
+                  // Hutang
+                  _SectionTitle('Riwayat Hutang'),
+                  const SizedBox(height: 8),
+                  _CustomerDebtsSection(customerId: customer.id),
+                  const SizedBox(height: 32),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// Helper widget info pelanggan (reuse pattern dari _CustomerDetailSheet)
+class _CustomerInfoSection extends StatelessWidget {
+  final Customer customer;
+  const _CustomerInfoSection({required this.customer});
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: isDark ? AppColors.darkCard : Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+            color: isDark ? AppColors.darkBorder : Colors.grey.shade200),
+      ),
+      child: Column(
+        children: [
+          if (customer.phone != null && customer.phone!.isNotEmpty)
+            _InfoRow(
+                icon: Icons.phone_outlined,
+                label: 'Telepon',
+                value: customer.phone!),
+          if (customer.address != null && customer.address!.isNotEmpty)
+            _InfoRow(
+                icon: Icons.location_on_outlined,
+                label: 'Alamat',
+                value: customer.address!),
+          if (customer.email != null && customer.email!.isNotEmpty)
+            _InfoRow(
+                icon: Icons.email_outlined,
+                label: 'Email',
+                value: customer.email!),
+          if ((customer.phone == null || customer.phone!.isEmpty) &&
+              (customer.address == null || customer.address!.isEmpty) &&
+              (customer.email == null || customer.email!.isEmpty))
+            const Text('Tidak ada info tambahan',
+                style: TextStyle(color: AppColors.textSecondary)),
+        ],
+      ),
     );
   }
 }

@@ -12,6 +12,29 @@ class Responsive {
   static const double _tabletBreakpoint = 600;
   static const double _largeTabletBreakpoint = 900;
 
+  /// True jika layar tergolong HP (mobile), kebalikan dari isTablet().
+  /// Ditambahkan agar kondisi if/else di seluruh codebase lebih jelas
+  /// dibanding menulis "!Responsive.isTablet(context)" berulang-ulang.
+  static bool isMobile(BuildContext context) {
+    return !isTablet(context);
+  }
+
+  /// True jika tablet DAN dalam orientasi potrait (bukan landscape).
+  /// Dipakai saat layout tablet portrait perlu beda dari layout HP biasa,
+  /// tapi belum perlu sidebar penuh seperti landscape.
+  static bool isTabletPortrait(BuildContext context) {
+    final size = MediaQuery.of(context).size;
+    final isPortrait = size.height >= size.width;
+    return isTablet(context) && isPortrait;
+  }
+
+  /// True jika tablet besar (lebar >= 900dp), baik potrait maupun landscape.
+  /// Dipakai untuk keputusan layout yang butuh ruang ekstra lebar,
+  /// misalnya 3 kolom master-detail-detail atau grid yang lebih padat.
+  static bool isLargeTablet(BuildContext context) {
+    return MediaQuery.of(context).size.width >= _largeTabletBreakpoint;
+  }
+
   /// True jika lebar layar tergolong tablet (>= 600dp), baik potrait
   /// maupun landscape. Dipakai untuk keputusan layout umum.
   static bool isTablet(BuildContext context) {

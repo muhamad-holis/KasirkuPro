@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/currency.dart';
+import '../../../core/utils/responsive.dart';
 import '../../providers/dashboard_provider.dart';
 import '../../providers/products_provider.dart';
 import '../../providers/database_provider.dart';
@@ -115,6 +116,98 @@ class DashboardScreen extends ConsumerWidget {
     final stats    = ref.watch(dashboardStatsProvider);
     final lowStock = ref.watch(lowStockProvider);
     final todayTx  = ref.watch(todayTransactionsProvider);
+    final isTabletLandscape = Responsive.isTabletLandscape(context);
+
+    // FITUR TABLET: di tablet landscape, susun ulang widget yang sama
+    // (Summary, Aksi Cepat, LowStock Banner, Transaksi Terakhir) menjadi
+    // 2 kolom mengikuti referensi dashboard desktop — kiri berisi konten
+    // utama (ringkasan + transaksi), kanan berisi konten pendukung
+    // (aksi cepat + stok menipis). Tidak ada provider atau logic baru;
+    // widget-widget yang dipindah adalah widget yang sudah ada apa adanya.
+    if (isTabletLandscape) {
+      return Scaffold(
+        backgroundColor: _bg(isDark),
+        body: CustomScrollView(
+          slivers: [
+            SliverToBoxAdapter(child: _Header()),
+            SliverPadding(
+              padding: const EdgeInsets.fromLTRB(16, 20, 16, 24),
+              sliver: SliverToBoxAdapter(
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // ── Kolom kiri: Ringkasan + Transaksi Terakhir ──────────
+                    Expanded(
+                      flex: 3,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          _SectionTitle(
+                            'Ringkasan Hari Ini',
+                            action: 'Lihat semua',
+                            onAction: () => ref
+                                .read(currentNavIndexProvider.notifier)
+                                .state = 1,
+                          ),
+                          const SizedBox(height: 12),
+                          stats.when(
+                            data:    (s)    => _SummaryGrid(stats: s),
+                            loading: ()     => _Shimmer(isDark: isDark, height: 180),
+                            error:   (e, _) => _ErrorWidget(msg: '$e'),
+                          ),
+                          const SizedBox(height: 24),
+                          _SectionTitle(
+                            'Transaksi Terakhir',
+                            action: 'Lihat semua',
+                            onAction: () => ref
+                                .read(currentNavIndexProvider.notifier)
+                                .state = 1,
+                          ),
+                          const SizedBox(height: 12),
+                          todayTx.when(
+                            data: (list) => list.isEmpty
+                                ? _EmptyTx(isDark: isDark)
+                                : _TxList(transactions: list.take(5).toList()),
+                            loading: () => _Shimmer(isDark: isDark, height: 80),
+                            error:   (e, _) => _ErrorWidget(msg: '$e'),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 20),
+                    // ── Kolom kanan: Aksi Cepat + Stok Menipis ──────────────
+                    Expanded(
+                      flex: 2,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          _SectionTitle('Aksi Cepat'),
+                          const SizedBox(height: 12),
+                          _QuickActions(),
+                          const SizedBox(height: 24),
+                          lowStock.when(
+                            data: (list) => list.isEmpty
+                                ? const SizedBox()
+                                : _LowStockBanner(
+                                    products: list,
+                                    onLihatStok: () => ref
+                                        .read(currentNavIndexProvider.notifier)
+                                        .state = 3,
+                                  ),
+                            loading: () => const SizedBox(),
+                            error:   (_, __) => const SizedBox(),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
 
     return Scaffold(
       backgroundColor: _bg(isDark),
@@ -788,13 +881,34 @@ class _QuickActions extends ConsumerWidget {
           onTap: () => ref.read(currentNavIndexProvider.notifier).state = 1),
     ];
 
-    return Row(
-      children: actions.map((a) => Expanded(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 4),
-          child: _QACard(qa: a),
-        ),
-      )).toList(),
+    // FITUR TABLET: deteksi lebar yang TERSEDIA untuk widget ini (bukan
+    // lebar layar device), supaya tetap proporsional baik dipakai full-width
+    // di mobile maupun di kolom sempit (sidebar kanan) saat tablet landscape.
+    // Di bawah ~360px untuk 4 kartu sejajar, kartu jadi terlalu padat,
+    // sehingga disusun ulang jadi grid 2x2.
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final isNarrow = constraints.maxWidth < 360;
+        if (isNarrow) {
+          return GridView.count(
+            crossAxisCount: 2,
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            crossAxisSpacing: 8,
+            mainAxisSpacing: 8,
+            childAspectRatio: 1.3,
+            children: actions.map((a) => _QACard(qa: a)).toList(),
+          );
+        }
+        return Row(
+          children: actions.map((a) => Expanded(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 4),
+              child: _QACard(qa: a),
+            ),
+          )).toList(),
+        );
+      },
     );
   }
 }
