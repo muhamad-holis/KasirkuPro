@@ -1,10 +1,3 @@
-// lib/presentation/screens/laporan/laporan_screen.dart
-// ─────────────────────────────────────────────────────────────────────────────
-// Layar Laporan — Kasirku
-// Tab: Penjualan | Arus Kas | Laba Rugi | Kas | Stok | Kategori
-
-// ─────────────────────────────────────────────────────────────────────────────
-
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -37,7 +30,6 @@ class _LaporanScreenState extends ConsumerState<LaporanScreen>
   String _period = '7d';
   bool _exportingPdf = false;
 
-  // ── PDF color constants (accessible from all PDF builder methods) ──────────
   static const _pdfPrimary   = PdfColor.fromInt(0xFF0D9488);
   static const _pdfSuccess   = PdfColor.fromInt(0xFF10B981);
   static const _pdfDanger    = PdfColor.fromInt(0xFFEF4444);
@@ -130,7 +122,6 @@ class _LaporanScreenState extends ConsumerState<LaporanScreen>
       ),
       body: Column(
         children: [
-          // ── Filter periode ──────────────────────────────────────────────────
           SingleChildScrollView(
             scrollDirection: Axis.horizontal,
             padding: const EdgeInsets.fromLTRB(12, 10, 12, 4),
@@ -220,14 +211,10 @@ class _LaporanScreenState extends ConsumerState<LaporanScreen>
     await initializeDateFormatting('id', null);
     final doc = pw.Document();
     final now = DateTime.now();
-    final printDate =
-        DateFormat('dd MMMM yyyy, HH:mm', 'id').format(now);
+    final printDate = DateFormat('dd MMMM yyyy, HH:mm', 'id').format(now);
 
-
-    final omzet =
-        salesData.fold<double>(0, (s, r) => s + (r['omzet'] as num));
-    final txCount =
-        salesData.fold<int>(0, (s, r) => s + (r['jumlah'] as int));
+    final omzet = salesData.fold<double>(0, (s, r) => s + (r['omzet'] as num));
+    final txCount = salesData.fold<int>(0, (s, r) => s + (r['jumlah'] as int));
     final avgTx = txCount > 0 ? omzet / txCount : 0.0;
     final income = cashData['income'] ?? 0;
     final expense = cashData['expense'] ?? 0;
@@ -247,8 +234,7 @@ class _LaporanScreenState extends ConsumerState<LaporanScreen>
             padding: const pw.EdgeInsets.all(16),
             decoration: const pw.BoxDecoration(
               color: _pdfPrimary,
-              borderRadius:
-                  pw.BorderRadius.all(pw.Radius.circular(10)),
+              borderRadius: pw.BorderRadius.all(pw.Radius.circular(10)),
             ),
             child: pw.Row(
               mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
@@ -265,8 +251,7 @@ class _LaporanScreenState extends ConsumerState<LaporanScreen>
                       pw.Text(storeAddress,
                           style: pw.TextStyle(
                               fontSize: 10,
-                              color:
-                                  const PdfColor(1, 1, 1, 0.7))),
+                              color: const PdfColor(1, 1, 1, 0.7))),
                   ],
                 ),
                 pw.Column(
@@ -280,13 +265,11 @@ class _LaporanScreenState extends ConsumerState<LaporanScreen>
                     pw.Text(periodLabel,
                         style: pw.TextStyle(
                             fontSize: 10,
-                            color:
-                                const PdfColor(1, 1, 1, 0.7))),
+                            color: const PdfColor(1, 1, 1, 0.7))),
                     pw.Text('Dicetak: $printDate',
                         style: pw.TextStyle(
                             fontSize: 8,
-                            color:
-                                const PdfColor(1, 1, 1, 0.6))),
+                            color: const PdfColor(1, 1, 1, 0.6))),
                   ],
                 ),
               ],
@@ -296,7 +279,6 @@ class _LaporanScreenState extends ConsumerState<LaporanScreen>
         ],
       ),
       build: (ctx) => [
-        // ── Penjualan ──
         _pdfSectionTitle('Ringkasan Penjualan', _pdfPrimary),
         pw.SizedBox(height: 8),
         pw.Row(children: [
@@ -314,15 +296,13 @@ class _LaporanScreenState extends ConsumerState<LaporanScreen>
         ]),
         pw.SizedBox(height: 16),
 
-        // ── Laba Rugi ──
         _pdfSectionTitle('Laporan Laba Rugi', _pdfPrimary),
         pw.SizedBox(height: 8),
         pw.Container(
           padding: const pw.EdgeInsets.all(14),
           decoration: pw.BoxDecoration(
             color: _pdfLightGrey,
-            borderRadius:
-                const pw.BorderRadius.all(pw.Radius.circular(8)),
+            borderRadius: const pw.BorderRadius.all(pw.Radius.circular(8)),
           ),
           child: pw.Column(
             children: [
@@ -356,7 +336,6 @@ class _LaporanScreenState extends ConsumerState<LaporanScreen>
         ),
         pw.SizedBox(height: 16),
 
-        // ── Kas ──
         _pdfSectionTitle('Laporan Kas', _pdfPrimary),
         pw.SizedBox(height: 8),
         pw.Row(children: [
@@ -377,17 +356,14 @@ class _LaporanScreenState extends ConsumerState<LaporanScreen>
         ]),
         pw.SizedBox(height: 16),
 
-        // ── Stok ──
         if (lowStockProducts.isNotEmpty) ...[
           _pdfSectionTitle('Produk Stok Hampir Habis', _pdfWarning),
           pw.SizedBox(height: 8),
           pw.Table(
-            border:
-                pw.TableBorder.all(color: _pdfLightGrey, width: 0.5),
+            border: pw.TableBorder.all(color: _pdfLightGrey, width: 0.5),
             children: [
               pw.TableRow(
-                decoration:
-                    pw.BoxDecoration(color: _pdfWarning.shade(0.8)),
+                decoration: pw.BoxDecoration(color: _pdfWarning.shade(0.8)),
                 children: [
                   _pdfTableCell('Nama Produk', isHeader: true),
                   _pdfTableCell('Stok', isHeader: true),
@@ -400,8 +376,7 @@ class _LaporanScreenState extends ConsumerState<LaporanScreen>
                 return pw.TableRow(children: [
                   _pdfTableCell(p.name),
                   _pdfTableCell('${p.stock} ${p.unit}',
-                      color:
-                          isOut ? _pdfDanger : _pdfWarning),
+                      color: isOut ? _pdfDanger : _pdfWarning),
                   _pdfTableCell('${p.minStock} ${p.unit}'),
                   _pdfTableCell(
                       isOut ? 'Habis' : 'Hampir Habis',
@@ -418,8 +393,7 @@ class _LaporanScreenState extends ConsumerState<LaporanScreen>
             padding: const pw.EdgeInsets.all(12),
             decoration: pw.BoxDecoration(
               color: _pdfSuccess.shade(0.1),
-              borderRadius:
-                  const pw.BorderRadius.all(pw.Radius.circular(8)),
+              borderRadius: const pw.BorderRadius.all(pw.Radius.circular(8)),
             ),
             child: pw.Text('✓  Semua stok dalam kondisi aman',
                 style: pw.TextStyle(
@@ -428,8 +402,6 @@ class _LaporanScreenState extends ConsumerState<LaporanScreen>
                     fontSize: 10)),
           ),
         ],
-
-        // Footer
         pw.SizedBox(height: 20),
         pw.Divider(thickness: 0.5, color: _pdfGrey),
         pw.SizedBox(height: 6),
@@ -446,12 +418,10 @@ class _LaporanScreenState extends ConsumerState<LaporanScreen>
 
   pw.Widget _pdfSectionTitle(String title, PdfColor color) {
     return pw.Container(
-      padding:
-          const pw.EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      padding: const pw.EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: pw.BoxDecoration(
         color: color.shade(0.15),
-        borderRadius:
-            const pw.BorderRadius.all(pw.Radius.circular(6)),
+        borderRadius: const pw.BorderRadius.all(pw.Radius.circular(6)),
         border: pw.Border(left: pw.BorderSide(color: color, width: 4)),
       ),
       child: pw.Text(title,
@@ -468,16 +438,13 @@ class _LaporanScreenState extends ConsumerState<LaporanScreen>
       padding: const pw.EdgeInsets.all(12),
       decoration: pw.BoxDecoration(
         color: bg,
-        borderRadius:
-            const pw.BorderRadius.all(pw.Radius.circular(8)),
+        borderRadius: const pw.BorderRadius.all(pw.Radius.circular(8)),
         border: pw.Border.all(color: color.shade(0.3), width: 0.5),
       ),
       child: pw.Column(
         crossAxisAlignment: pw.CrossAxisAlignment.start,
         children: [
-          pw.Text(label,
-              style: const pw.TextStyle(
-                  fontSize: 8, color: _pdfGrey)),
+          pw.Text(label, style: const pw.TextStyle(fontSize: 8, color: _pdfGrey)),
           pw.SizedBox(height: 4),
           pw.Text(value,
               style: pw.TextStyle(
@@ -499,14 +466,12 @@ class _LaporanScreenState extends ConsumerState<LaporanScreen>
           pw.Text(label,
               style: pw.TextStyle(
                   fontSize: 9,
-                  fontWeight:
-                      bold ? pw.FontWeight.bold : pw.FontWeight.normal,
+                  fontWeight: bold ? pw.FontWeight.bold : pw.FontWeight.normal,
                   color: const PdfColor.fromInt(0xFF374151))),
           pw.Text(value,
               style: pw.TextStyle(
                   fontSize: 9,
-                  fontWeight:
-                      bold ? pw.FontWeight.bold : pw.FontWeight.normal,
+                  fontWeight: bold ? pw.FontWeight.bold : pw.FontWeight.normal,
                   color: color)),
         ],
       ),
@@ -516,8 +481,7 @@ class _LaporanScreenState extends ConsumerState<LaporanScreen>
   pw.Widget _pdfTableCell(String text,
       {bool isHeader = false, bool bold = false, PdfColor? color}) {
     return pw.Padding(
-      padding:
-          const pw.EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+      padding: const pw.EdgeInsets.symmetric(horizontal: 8, vertical: 5),
       child: pw.Text(
         text,
         style: pw.TextStyle(
@@ -533,8 +497,6 @@ class _LaporanScreenState extends ConsumerState<LaporanScreen>
     );
   }
 }
-
-// ─── Filter Chip ──────────────────────────────────────────────────────────────
 
 class _Chip extends StatelessWidget {
   final String label, value, current;
@@ -561,22 +523,6 @@ class _Chip extends StatelessWidget {
   }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// TAB 1 — PENJUALAN
-// ─────────────────────────────────────────────────────────────────────────────
-
-// FIX: Provider ini menggunakan StreamProvider + watchDailySalesChart agar
-// data penjualan di tab Laporan langsung update real-time setiap ada
-// transaksi baru, tanpa perlu restart aplikasi.
-final _salesChartProvider =
-    StreamProvider.autoDispose.family<List<Map<String, dynamic>>, _DateRange>(
-  (ref, range) => ref
-      .watch(databaseProvider)
-      .reportsDao
-      .watchDailySalesChart(range.start, range.end),
-);
-
-// Helper class untuk key di .family (DateTime tidak bisa langsung dipakai)
 class _DateRange {
   final DateTime start, end;
   const _DateRange(this.start, this.end);
@@ -591,14 +537,57 @@ class _DateRange {
   int get hashCode => Object.hash(start, end);
 }
 
+final _salesChartProvider =
+    StreamProvider.autoDispose.family<List<Map<String, dynamic>>, _DateRange>(
+  (ref, range) => ref
+      .watch(databaseProvider)
+      .reportsDao
+      .watchDailySalesChart(range.start, range.end),
+);
+
+// ── PROVIDER BARU UNTUK METODE PEMBAYARAN DAN PRODUK TERLARIS ────────────────
+
+final _paymentMethodProvider = FutureProvider.autoDispose.family<Map<String, double>, _DateRange>((ref, range) async {
+  final db = ref.watch(databaseProvider);
+  final txList = await db.transactionsDao.getTransactionsByDate(range.start, range.end);
+  double tunai = 0, qris = 0, transfer = 0, hutang = 0;
+  for (final tx in txList) {
+    final m = tx.paymentMethod?.toLowerCase() ?? 'tunai';
+    if (m == 'tunai') tunai += tx.total;
+    else if (m == 'qris') qris += tx.total;
+    else if (m == 'transfer') transfer += tx.total;
+    else if (m == 'hutang') hutang += tx.total;
+    else tunai += tx.total;
+  }
+  return {'Tunai': tunai, 'QRIS': qris, 'Transfer': transfer, 'Hutang': hutang};
+});
+
+final _topProductsProvider = FutureProvider.autoDispose.family<List<Map<String, dynamic>>, _DateRange>((ref, range) async {
+  final db = ref.watch(databaseProvider);
+  final txList = await db.transactionsDao.getTransactionsByDate(range.start, range.end);
+  Map<String, int> productQty = {};
+  Map<String, double> productOmzet = {};
+  for (final tx in txList) {
+    final items = await db.transactionsDao.getTransactionItems(tx.id);
+    for (final item in items) {
+      productQty[item.productName] = (productQty[item.productName] ?? 0) + item.quantity;
+      productOmzet[item.productName] = (productOmzet[item.productName] ?? 0) + item.subtotal;
+    }
+  }
+  final sorted = productQty.entries.toList()..sort((a, b) => b.value.compareTo(a.value));
+  return sorted.take(5).map((e) => {
+    'name': e.key,
+    'qty': e.value,
+    'omzet': productOmzet[e.key]!
+  }).toList();
+});
+
 class _SalesTab extends ConsumerWidget {
   final DateTime start, end;
   const _SalesTab({required this.start, required this.end});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    // FIX: ref.watch + StreamProvider menggantikan ref.read + FutureBuilder
-    // sehingga UI otomatis rebuild setiap ada transaksi baru masuk ke DB.
     final salesAsync = ref.watch(_salesChartProvider(_DateRange(start, end)));
 
     return salesAsync.when(
@@ -608,10 +597,8 @@ class _SalesTab extends ConsumerWidget {
             style: const TextStyle(color: AppColors.danger)),
       ),
       data: (data) {
-        final omzet =
-            data.fold<double>(0, (s, r) => s + (r['omzet'] as num));
-        final count =
-            data.fold<int>(0, (s, r) => s + (r['jumlah'] as int));
+        final omzet = data.fold<double>(0, (s, r) => s + (r['omzet'] as num));
+        final count = data.fold<int>(0, (s, r) => s + (r['jumlah'] as int));
         final avg = count > 0 ? omzet / count : 0.0;
 
         return SingleChildScrollView(
@@ -662,8 +649,7 @@ class _SalesTab extends ConsumerWidget {
                         x: e.key,
                         barRods: [
                           BarChartRodData(
-                            toY:
-                                (e.value['omzet'] as num).toDouble(),
+                            toY: (e.value['omzet'] as num).toDouble(),
                             color: AppColors.primary,
                             width: 14,
                             borderRadius: BorderRadius.circular(4),
@@ -711,8 +697,7 @@ class _SalesTab extends ConsumerWidget {
                   if (dateRaw is String) {
                     try {
                       final dt = DateTime.parse(dateRaw);
-                      dateStr =
-                          DateFormat('EEE, dd MMM', 'id').format(dt);
+                      dateStr = DateFormat('EEE, dd MMM', 'id').format(dt);
                     } catch (_) {
                       dateStr = dateRaw.toString();
                     }
@@ -724,8 +709,7 @@ class _SalesTab extends ConsumerWidget {
                     decoration: BoxDecoration(
                       color: Colors.white,
                       borderRadius: BorderRadius.circular(12),
-                      border:
-                          Border.all(color: Colors.grey.shade100),
+                      border: Border.all(color: Colors.grey.shade100),
                     ),
                     child: Row(children: [
                       Expanded(
@@ -748,6 +732,129 @@ class _SalesTab extends ConsumerWidget {
                     ]),
                   );
                 }),
+                
+                const SizedBox(height: 24),
+                // ── TAMBAHAN FITUR: DONUT CHART METODE PEMBAYARAN ────────────
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text('Metode Pembayaran',
+                      style: Theme.of(context)
+                          .textTheme
+                          .titleMedium
+                          ?.copyWith(fontWeight: FontWeight.w700)),
+                ),
+                const SizedBox(height: 12),
+                Consumer(builder: (ctx, ref, _) {
+                  final pmAsync = ref.watch(_paymentMethodProvider(_DateRange(start, end)));
+                  return pmAsync.when(
+                    loading: () => const CircularProgressIndicator(),
+                    error: (e, _) => Text('Error: $e'),
+                    data: (pm) {
+                      final total = pm.values.fold(0.0, (a, b) => a + b);
+                      if (total == 0) return const Text('Belum ada data', style: TextStyle(color: Colors.grey));
+                      return Container(
+                        padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 16),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(color: Colors.grey.shade200),
+                        ),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              flex: 1,
+                              child: SizedBox(
+                                height: 120,
+                                child: PieChart(
+                                  PieChartData(
+                                    sectionsSpace: 2,
+                                    centerSpaceRadius: 35,
+                                    sections: [
+                                      if (pm['Tunai']! > 0) PieChartSectionData(value: pm['Tunai']!, color: AppColors.success, title: '${(pm['Tunai']!/total*100).toStringAsFixed(0)}%', radius: 25, titleStyle: const TextStyle(fontSize: 10, color: Colors.white, fontWeight: FontWeight.bold)),
+                                      if (pm['QRIS']! > 0) PieChartSectionData(value: pm['QRIS']!, color: AppColors.info, title: '${(pm['QRIS']!/total*100).toStringAsFixed(0)}%', radius: 25, titleStyle: const TextStyle(fontSize: 10, color: Colors.white, fontWeight: FontWeight.bold)),
+                                      if (pm['Transfer']! > 0) PieChartSectionData(value: pm['Transfer']!, color: AppColors.primary, title: '${(pm['Transfer']!/total*100).toStringAsFixed(0)}%', radius: 25, titleStyle: const TextStyle(fontSize: 10, color: Colors.white, fontWeight: FontWeight.bold)),
+                                      if (pm['Hutang']! > 0) PieChartSectionData(value: pm['Hutang']!, color: AppColors.warning, title: '${(pm['Hutang']!/total*100).toStringAsFixed(0)}%', radius: 25, titleStyle: const TextStyle(fontSize: 10, color: Colors.white, fontWeight: FontWeight.bold)),
+                                    ],
+                                  )
+                                )
+                              )
+                            ),
+                            const SizedBox(width: 20),
+                            Expanded(
+                              flex: 1,
+                              child: Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  _Legend('Tunai (${CurrencyFormatter.formatCompact(pm['Tunai']!)})', AppColors.success), const SizedBox(height: 6),
+                                  _Legend('QRIS (${CurrencyFormatter.formatCompact(pm['QRIS']!)})', AppColors.info), const SizedBox(height: 6),
+                                  _Legend('Transfer (${CurrencyFormatter.formatCompact(pm['Transfer']!)})', AppColors.primary), const SizedBox(height: 6),
+                                  _Legend('Hutang (${CurrencyFormatter.formatCompact(pm['Hutang']!)})', AppColors.warning),
+                                ]
+                              )
+                            )
+                          ]
+                        ),
+                      );
+                    }
+                  );
+                }),
+                
+                const SizedBox(height: 24),
+                // ── TAMBAHAN FITUR: PRODUK TERLARIS ──────────────────────────
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text('Produk Terlaris',
+                      style: Theme.of(context)
+                          .textTheme
+                          .titleMedium
+                          ?.copyWith(fontWeight: FontWeight.w700)),
+                ),
+                const SizedBox(height: 12),
+                Consumer(builder: (ctx, ref, _) {
+                  final tpAsync = ref.watch(_topProductsProvider(_DateRange(start, end)));
+                  return tpAsync.when(
+                    loading: () => const CircularProgressIndicator(),
+                    error: (e, _) => Text('Error: $e'),
+                    data: (products) {
+                      if (products.isEmpty) return const Text('Belum ada data', style: TextStyle(color: Colors.grey));
+                      return Column(
+                        children: products.map((p) => Container(
+                          margin: const EdgeInsets.only(bottom: 8),
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: Colors.grey.shade100),
+                          ),
+                          child: Row(
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.all(10),
+                                decoration: BoxDecoration(color: AppColors.primary.withOpacity(0.1), borderRadius: BorderRadius.circular(8)),
+                                child: const Icon(Icons.star_rounded, color: AppColors.primary, size: 20),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(p['name'], style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+                                    const SizedBox(height: 2),
+                                    Text('${p['qty']} terjual', style: TextStyle(fontSize: 11, color: Colors.grey.shade500)),
+                                  ]
+                                )
+                              ),
+                              Text(CurrencyFormatter.formatCompact(p['omzet']), style: const TextStyle(fontWeight: FontWeight.w700, color: AppColors.success, fontSize: 13)),
+                            ]
+                          )
+                        )).toList()
+                      );
+                    }
+                  );
+                }),
+                const SizedBox(height: 100),
+
               ] else
                 const Padding(
                   padding: EdgeInsets.all(40),
@@ -761,14 +868,6 @@ class _SalesTab extends ConsumerWidget {
     );
   }
 }
-
-// ─────────────────────────────────────────────────────────────────────────────
-// TAB 2 — ARUS KAS (BARU)
-// ─────────────────────────────────────────────────────────────────────────────
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Widget Arus Kas — digunakan sebagai section di dalam tab Kas
-// ─────────────────────────────────────────────────────────────────────────────
 
 class _ArusKasSection extends ConsumerWidget {
   final DateRange range;
@@ -787,7 +886,6 @@ class _ArusKasSection extends ConsumerWidget {
             style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: AppColors.textPrimary)),
         const SizedBox(height: 12),
 
-        // ── Grafik Arus Kas Harian ────────────────────────────────────────────
         arusAsync.when(
           data: (rows) {
             if (rows.isEmpty) return const Padding(
@@ -870,10 +968,8 @@ class _ArusKasSection extends ConsumerWidget {
           loading: () => const Center(child: CircularProgressIndicator()),
           error: (e, _) => Text('Error: \$e'),
         ),
-
         const SizedBox(height: 16),
 
-        // ── Breakdown Kategori ────────────────────────────────────────────────
         incKatAsync.when(
           data: (items) {
             if (items.isEmpty) return const SizedBox();
@@ -931,7 +1027,6 @@ class _ArusKasTab extends ConsumerWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // ── Summary 3 kartu ────────────────────────────────────────────────
           summaryAsync.when(
             data: (s) => Column(children: [
               Row(children: [
@@ -959,13 +1054,11 @@ class _ArusKasTab extends ConsumerWidget {
                 color: s.saldo >= 0 ? AppColors.primary : AppColors.danger,
               ),
             ]),
-            loading: () =>
-                const Center(child: CircularProgressIndicator()),
+            loading: () => const Center(child: CircularProgressIndicator()),
             error: (e, _) => Text('Error: $e'),
           ),
           const SizedBox(height: 20),
 
-          // ── Grafik Arus Kas Harian ──────────────────────────────────────────
           arusAsync.when(
             data: (rows) {
               if (rows.isEmpty) return const SizedBox();
@@ -1015,9 +1108,7 @@ class _ArusKasTab extends ConsumerWidget {
                             reservedSize: 22,
                             getTitlesWidget: (v, _) {
                               final i = v.toInt();
-                              if (i >= rows.length) {
-                                return const SizedBox();
-                              }
+                              if (i >= rows.length) return const SizedBox();
                               final dt = DateTime.tryParse(rows[i].tanggal);
                               if (dt == null) return const SizedBox();
                               return Text(
@@ -1039,7 +1130,6 @@ class _ArusKasTab extends ConsumerWidget {
                     )),
                   ),
                   const SizedBox(height: 8),
-                  // Legenda
                   Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
@@ -1050,7 +1140,6 @@ class _ArusKasTab extends ConsumerWidget {
                   ),
                   const SizedBox(height: 20),
 
-                  // Detail tabel arus kas harian
                   const Text('Detail Arus Kas',
                       style: TextStyle(
                           fontWeight: FontWeight.w700, fontSize: 14)),
@@ -1066,8 +1155,7 @@ class _ArusKasTab extends ConsumerWidget {
                       decoration: BoxDecoration(
                         color: Colors.white,
                         borderRadius: BorderRadius.circular(12),
-                        border: Border.all(
-                            color: Colors.grey.shade100),
+                        border: Border.all(color: Colors.grey.shade100),
                       ),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1081,15 +1169,13 @@ class _ArusKasTab extends ConsumerWidget {
                           Row(children: [
                             Expanded(
                               child: Column(
-                                crossAxisAlignment:
-                                    CrossAxisAlignment.start,
+                                crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   const Text('Masuk',
                                       style: TextStyle(
                                           fontSize: 10,
                                           color: AppColors.textHint)),
-                                  Text(
-                                      CurrencyFormatter.format(r.masuk),
+                                  Text(CurrencyFormatter.format(r.masuk),
                                       style: const TextStyle(
                                           color: AppColors.success,
                                           fontWeight: FontWeight.w700,
@@ -1099,15 +1185,13 @@ class _ArusKasTab extends ConsumerWidget {
                             ),
                             Expanded(
                               child: Column(
-                                crossAxisAlignment:
-                                    CrossAxisAlignment.start,
+                                crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   const Text('Keluar',
                                       style: TextStyle(
                                           fontSize: 10,
                                           color: AppColors.textHint)),
-                                  Text(
-                                      CurrencyFormatter.format(r.keluar),
+                                  Text(CurrencyFormatter.format(r.keluar),
                                       style: const TextStyle(
                                           color: AppColors.danger,
                                           fontWeight: FontWeight.w700,
@@ -1116,8 +1200,7 @@ class _ArusKasTab extends ConsumerWidget {
                               ),
                             ),
                             Column(
-                              crossAxisAlignment:
-                                  CrossAxisAlignment.end,
+                              crossAxisAlignment: CrossAxisAlignment.end,
                               children: [
                                 const Text('Net',
                                     style: TextStyle(
@@ -1143,19 +1226,16 @@ class _ArusKasTab extends ConsumerWidget {
                 ],
               );
             },
-            loading: () =>
-                const Center(child: CircularProgressIndicator()),
+            loading: () => const Center(child: CircularProgressIndicator()),
             error: (e, _) => Text('Error: $e'),
           ),
 
           const SizedBox(height: 20),
 
-          // ── Breakdown Kas Masuk per Kategori ───────────────────────────────
           incKatAsync.when(
             data: (items) {
               if (items.isEmpty) return const SizedBox();
-              final total =
-                  items.fold<double>(0, (s, k) => s + k.total);
+              final total = items.fold<double>(0, (s, k) => s + k.total);
               return Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -1164,9 +1244,7 @@ class _ArusKasTab extends ConsumerWidget {
                           fontWeight: FontWeight.w700, fontSize: 14)),
                   const SizedBox(height: 8),
                   ...items.map((k) => _KatRow(
-                      item: k,
-                      total: total,
-                      color: AppColors.success)),
+                      item: k, total: total, color: AppColors.success)),
                   const SizedBox(height: 16),
                 ],
               );
@@ -1175,12 +1253,10 @@ class _ArusKasTab extends ConsumerWidget {
             error: (_, __) => const SizedBox(),
           ),
 
-          // ── Breakdown Kas Keluar per Kategori ──────────────────────────────
           expKatAsync.when(
             data: (items) {
               if (items.isEmpty) return const SizedBox();
-              final total =
-                  items.fold<double>(0, (s, k) => s + k.total);
+              final total = items.fold<double>(0, (s, k) => s + k.total);
               return Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -1189,9 +1265,7 @@ class _ArusKasTab extends ConsumerWidget {
                           fontWeight: FontWeight.w700, fontSize: 14)),
                   const SizedBox(height: 8),
                   ...items.map((k) => _KatRow(
-                      item: k,
-                      total: total,
-                      color: AppColors.danger)),
+                      item: k, total: total, color: AppColors.danger)),
                   const SizedBox(height: 80),
                 ],
               );
@@ -1204,10 +1278,6 @@ class _ArusKasTab extends ConsumerWidget {
     );
   }
 }
-
-// ─────────────────────────────────────────────────────────────────────────────
-// TAB 3 — LABA RUGI (BARU)
-// ─────────────────────────────────────────────────────────────────────────────
 
 class _LabaRugiTab extends ConsumerWidget {
   final DateRange range;
@@ -1254,14 +1324,12 @@ class _LabaRugiCard extends StatelessWidget {
       ),
       child: Column(
         children: [
-          // ── Header ──────────────────────────────────────────────────────────
           Container(
             width: double.infinity,
             padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
+            decoration: const BoxDecoration(
               color: AppColors.primary,
-              borderRadius:
-                  const BorderRadius.vertical(top: Radius.circular(16)),
+              borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
             ),
             child: Row(
               children: [
@@ -1277,19 +1345,15 @@ class _LabaRugiCard extends StatelessWidget {
                 ),
                 Text(
                   DateFormat('dd MMM yyyy', 'id').format(DateTime.now()),
-                  style: const TextStyle(
-                      color: Colors.white70, fontSize: 11),
+                  style: const TextStyle(color: Colors.white70, fontSize: 11),
                 ),
               ],
             ),
           ),
-
-          // ── Body ────────────────────────────────────────────────────────────
           Padding(
             padding: const EdgeInsets.all(16),
             child: Column(
               children: [
-                // Pendapatan
                 _LRRow(
                   label: 'Total Penjualan (Omzet)',
                   value: data.omzet,
@@ -1311,8 +1375,6 @@ class _LabaRugiCard extends StatelessWidget {
                   bold: true,
                 ),
                 const SizedBox(height: 8),
-
-                // Biaya operasional
                 if (data.kasIncomeNonSales > 0)
                   _LRRow(
                     label: 'Pendapatan Lain (non-penjualan)',
@@ -1327,8 +1389,6 @@ class _LabaRugiCard extends StatelessWidget {
                     prefix: '- ',
                   ),
                 const Divider(height: 20),
-
-                // Laba Bersih highlight
                 Container(
                   padding: const EdgeInsets.all(14),
                   decoration: BoxDecoration(
@@ -1374,7 +1434,6 @@ class _LabaRugiCard extends StatelessWidget {
                     ],
                   ),
                 ),
-
                 const SizedBox(height: 14),
                 _MarginBar(margin: data.marginPersen, omzet: data.omzet),
               ],
@@ -1392,7 +1451,6 @@ class _PenjelasanKaruCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Tidak tampilkan jika data kosong
     if (data.omzet == 0 && data.hpp == 0) return const SizedBox();
 
     String status;
@@ -1402,20 +1460,17 @@ class _PenjelasanKaruCard extends StatelessWidget {
 
     if (data.labaBersih > 0 && data.marginPersen >= 15) {
       status = 'Usaha Berjalan Baik 🎉';
-      deskripsi =
-          'Margin laba bersih ${data.marginPersen.toStringAsFixed(1)}% — cukup sehat untuk warung/UMKM. Pertahankan pengelolaan biaya operasional!';
+      deskripsi = 'Margin laba bersih ${data.marginPersen.toStringAsFixed(1)}% — cukup sehat untuk warung/UMKM. Pertahankan pengelolaan biaya operasional!';
       color = AppColors.success;
       icon = Icons.thumb_up_rounded;
     } else if (data.labaBersih > 0) {
       status = 'Usaha Menguntungkan ✅';
-      deskripsi =
-          'Margin ${data.marginPersen.toStringAsFixed(1)}% — masih untung, namun bisa ditingkatkan dengan mengurangi biaya atau menaikkan harga jual produk.';
+      deskripsi = 'Margin ${data.marginPersen.toStringAsFixed(1)}% — masih untung, namun bisa ditingkatkan dengan mengurangi biaya atau menaikkan harga jual produk.';
       color = AppColors.warning;
       icon = Icons.info_outline_rounded;
     } else {
       status = 'Perlu Perhatian ⚠️';
-      deskripsi =
-          'Usaha mengalami kerugian. Tinjau kembali harga jual, biaya operasional, dan HPP untuk meningkatkan profitabilitas.';
+      deskripsi = 'Usaha mengalami kerugian. Tinjau kembali harga jual, biaya operasional, dan HPP untuk meningkatkan profitabilitas.';
       color = AppColors.danger;
       icon = Icons.warning_amber_rounded;
     }
@@ -1481,8 +1536,7 @@ class _LRRow extends StatelessWidget {
             child: Text(label,
                 style: TextStyle(
                     fontSize: bold ? 13 : 12,
-                    fontWeight:
-                        bold ? FontWeight.w700 : FontWeight.normal,
+                    fontWeight: bold ? FontWeight.w700 : FontWeight.normal,
                     color: bold
                         ? (isDark ? Colors.white : Colors.black87)
                         : (isDark ? Colors.grey.shade400 : Colors.grey.shade700))),
@@ -1491,8 +1545,7 @@ class _LRRow extends StatelessWidget {
             '$prefix${CurrencyFormatter.format(value.abs())}',
             style: TextStyle(
                 fontSize: bold ? 14 : 12,
-                fontWeight:
-                    bold ? FontWeight.w800 : FontWeight.w600,
+                fontWeight: bold ? FontWeight.w800 : FontWeight.w600,
                 color: color),
           ),
         ],
@@ -1521,8 +1574,7 @@ class _MarginBar extends StatelessWidget {
         Row(
           children: [
             Text('Margin Laba Bersih: ',
-                style: TextStyle(
-                    fontSize: 11, color: Colors.grey.shade600)),
+                style: TextStyle(fontSize: 11, color: Colors.grey.shade600)),
             Text('${margin.toStringAsFixed(1)}%',
                 style: TextStyle(
                     fontSize: 12,
@@ -1553,10 +1605,6 @@ class _MarginBar extends StatelessWidget {
     );
   }
 }
-
-// ─────────────────────────────────────────────────────────────────────────────
-// TAB 4 — KAS (tetap ada, sama seperti sebelumnya)
-// ─────────────────────────────────────────────────────────────────────────────
 
 class _CashTab extends ConsumerStatefulWidget {
   final DateTime start, end;
@@ -1596,8 +1644,7 @@ class _CashTabState extends ConsumerState<_CashTab> {
         backgroundColor: AppColors.primary,
         icon: const Icon(Icons.add, color: Colors.white),
         label: const Text('Tambah Kas',
-            style:
-                TextStyle(color: Colors.white, fontWeight: FontWeight.w700)),
+            style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700)),
       ),
       body: FutureBuilder<Map<String, double>>(
         key: ValueKey(_refreshKey),
@@ -1623,12 +1670,10 @@ class _CashTabState extends ConsumerState<_CashTab> {
               return ListView(
                 padding: const EdgeInsets.fromLTRB(16, 16, 16, 100),
                 children: [
-                  // ── Arus Kas Harian (gabungan dari tab sebelumnya) ──────────
                   _ArusKasSection(range: widget.range),
                   const SizedBox(height: 20),
                   const Divider(),
                   const SizedBox(height: 12),
-                  // ── Ringkasan Kas Manual ────────────────────────────────────
                   const Text('Kas Manual',
                     style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: AppColors.textPrimary)),
                   const SizedBox(height: 12),
@@ -1654,9 +1699,7 @@ class _CashTabState extends ConsumerState<_CashTab> {
                     title: 'Saldo Bersih',
                     value: CurrencyFormatter.format(saldo),
                     icon: Icons.account_balance_wallet_rounded,
-                    color: saldo >= 0
-                        ? AppColors.primary
-                        : AppColors.danger,
+                    color: saldo >= 0 ? AppColors.primary : AppColors.danger,
                   ),
                   const SizedBox(height: 20),
 
@@ -1695,8 +1738,7 @@ class _CashTabState extends ConsumerState<_CashTab> {
                               size: 48, color: Colors.grey.shade300),
                           const SizedBox(height: 8),
                           Text('Belum ada catatan kas',
-                              style:
-                                  TextStyle(color: Colors.grey.shade400)),
+                              style: TextStyle(color: Colors.grey.shade400)),
                         ],
                       ),
                     )
@@ -1711,10 +1753,6 @@ class _CashTabState extends ConsumerState<_CashTab> {
     );
   }
 }
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Widgets Shared Kas
-// ─────────────────────────────────────────────────────────────────────────────
 
 class _ActionBtn extends StatelessWidget {
   final String label;
@@ -1796,8 +1834,7 @@ class _CashFlowTile extends StatelessWidget {
               Text(flow.category,
                   style: const TextStyle(
                       fontWeight: FontWeight.w700, fontSize: 13)),
-              if (flow.description != null &&
-                  flow.description!.isNotEmpty)
+              if (flow.description != null && flow.description!.isNotEmpty)
                 Text(flow.description!,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
@@ -1829,13 +1866,8 @@ class _CashFlowTile extends StatelessWidget {
   }
 
   String _fmtDate(DateTime dt) {
-    final months = [
-      'Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun',
-      'Jul', 'Ags', 'Sep', 'Okt', 'Nov', 'Des'
-    ];
-    return '${dt.day} ${months[dt.month - 1]} • '
-        '${dt.hour.toString().padLeft(2, '0')}:'
-        '${dt.minute.toString().padLeft(2, '0')}';
+    final months = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Ags', 'Sep', 'Okt', 'Nov', 'Des'];
+    return '${dt.day} ${months[dt.month - 1]} • ${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
   }
 }
 
@@ -1857,17 +1889,10 @@ class _CashFlowFormState extends ConsumerState<_CashFlowForm> {
   bool _saving = false;
 
   static const _incomeCategories = [
-    'Penjualan',
-    'Modal Awal',
-    'Pinjaman',
-    'Lainnya',
+    'Penjualan', 'Modal Awal', 'Pinjaman', 'Lainnya',
   ];
   static const _expenseCategories = [
-    'Pembelian Stok',
-    'Biaya Operasional',
-    'Gaji',
-    'Utilitas',
-    'Lainnya',
+    'Pembelian Stok', 'Biaya Operasional', 'Gaji', 'Utilitas', 'Lainnya',
   ];
 
   List<String> get _categories =>
@@ -1932,8 +1957,7 @@ class _CashFlowFormState extends ConsumerState<_CashFlowForm> {
       ),
       decoration: const BoxDecoration(
         color: Colors.white,
-        borderRadius:
-            BorderRadius.vertical(top: Radius.circular(24)),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -2026,8 +2050,7 @@ class _CashFlowFormState extends ConsumerState<_CashFlowForm> {
                         : Colors.grey.shade100,
                     borderRadius: BorderRadius.circular(20),
                     border: Border.all(
-                        color:
-                            sel ? accentColor : Colors.transparent),
+                        color: sel ? accentColor : Colors.transparent),
                   ),
                   child: Text(cat,
                       style: TextStyle(
@@ -2053,18 +2076,15 @@ class _CashFlowFormState extends ConsumerState<_CashFlowForm> {
               fillColor: Colors.grey.shade50,
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(12),
-                borderSide:
-                    BorderSide(color: Colors.grey.shade200),
+                borderSide: BorderSide(color: Colors.grey.shade200),
               ),
               enabledBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(12),
-                borderSide:
-                    BorderSide(color: Colors.grey.shade200),
+                borderSide: BorderSide(color: Colors.grey.shade200),
               ),
               focusedBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(12),
-                borderSide:
-                    BorderSide(color: accentColor, width: 1.5),
+                borderSide: BorderSide(color: accentColor, width: 1.5),
               ),
             ),
           ),
@@ -2077,18 +2097,15 @@ class _CashFlowFormState extends ConsumerState<_CashFlowForm> {
               fillColor: Colors.grey.shade50,
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(12),
-                borderSide:
-                    BorderSide(color: Colors.grey.shade200),
+                borderSide: BorderSide(color: Colors.grey.shade200),
               ),
               enabledBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(12),
-                borderSide:
-                    BorderSide(color: Colors.grey.shade200),
+                borderSide: BorderSide(color: Colors.grey.shade200),
               ),
               focusedBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(12),
-                borderSide:
-                    BorderSide(color: accentColor, width: 1.5),
+                borderSide: BorderSide(color: accentColor, width: 1.5),
               ),
             ),
           ),
@@ -2111,9 +2128,7 @@ class _CashFlowFormState extends ConsumerState<_CashFlowForm> {
                       child: CircularProgressIndicator(
                           color: Colors.white, strokeWidth: 2))
                   : Text(
-                      isIncome
-                          ? 'Simpan Kas Masuk'
-                          : 'Simpan Kas Keluar',
+                      isIncome ? 'Simpan Kas Masuk' : 'Simpan Kas Keluar',
                       style: const TextStyle(
                           fontWeight: FontWeight.w700, fontSize: 15)),
             ),
@@ -2123,10 +2138,6 @@ class _CashFlowFormState extends ConsumerState<_CashFlowForm> {
     );
   }
 }
-
-// ─────────────────────────────────────────────────────────────────────────────
-// TAB 5 — STOK
-// ─────────────────────────────────────────────────────────────────────────────
 
 class _StockTab extends ConsumerWidget {
   const _StockTab();
@@ -2170,8 +2181,7 @@ class _StockTab extends ConsumerWidget {
                 leading: Container(
                   padding: const EdgeInsets.all(8),
                   decoration: BoxDecoration(
-                    color:
-                        (isOut ? AppColors.danger : AppColors.warning)
+                    color: (isOut ? AppColors.danger : AppColors.warning)
                             .withOpacity(0.1),
                     borderRadius: BorderRadius.circular(10),
                   ),
@@ -2179,15 +2189,12 @@ class _StockTab extends ConsumerWidget {
                     isOut
                         ? Icons.remove_circle_outline
                         : Icons.warning_amber_rounded,
-                    color: isOut
-                        ? AppColors.danger
-                        : AppColors.warning,
+                    color: isOut ? AppColors.danger : AppColors.warning,
                     size: 20,
                   ),
                 ),
                 title: Text(p.name,
-                    style:
-                        const TextStyle(fontWeight: FontWeight.w600)),
+                    style: const TextStyle(fontWeight: FontWeight.w600)),
                 subtitle: Text('Stok minimum: ${p.minStock} ${p.unit}'),
                 trailing: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
@@ -2195,18 +2202,13 @@ class _StockTab extends ConsumerWidget {
                   children: [
                     Text('${p.stock} ${p.unit}',
                         style: TextStyle(
-                            color: isOut
-                                ? AppColors.danger
-                                : AppColors.warning,
+                            color: isOut ? AppColors.danger : AppColors.warning,
                             fontWeight: FontWeight.w700,
                             fontSize: 15)),
-                    Text(
-                        isOut ? 'Habis' : 'Hampir habis',
+                    Text(isOut ? 'Habis' : 'Hampir habis',
                         style: TextStyle(
                             fontSize: 10,
-                            color: isOut
-                                ? AppColors.danger
-                                : AppColors.warning)),
+                            color: isOut ? AppColors.danger : AppColors.warning)),
                   ],
                 ),
               ),
@@ -2217,10 +2219,6 @@ class _StockTab extends ConsumerWidget {
     );
   }
 }
-
-// ─────────────────────────────────────────────────────────────────────────────
-// TAB 6 — KATEGORI
-// ─────────────────────────────────────────────────────────────────────────────
 
 class _CategoryTab extends StatelessWidget {
   final DateTime start, end;
@@ -2298,11 +2296,9 @@ class _CategoryTab extends StatelessWidget {
               final i = entry.key;
               final row = entry.value;
               final color = colors[i % colors.length];
-              final omzet =
-                  (row['total_omzet'] as num).toDouble();
+              final omzet = (row['total_omzet'] as num).toDouble();
               final qty = (row['total_qty'] as num).toInt();
-              final pct =
-                  totalOmzet > 0 ? omzet / totalOmzet : 0.0;
+              final pct = totalOmzet > 0 ? omzet / totalOmzet : 0.0;
 
               return Container(
                 margin: const EdgeInsets.only(bottom: 10),
@@ -2310,8 +2306,7 @@ class _CategoryTab extends StatelessWidget {
                 decoration: BoxDecoration(
                   color: Theme.of(context).cardColor,
                   borderRadius: BorderRadius.circular(14),
-                  border:
-                      Border.all(color: color.withOpacity(0.2)),
+                  border: Border.all(color: color.withOpacity(0.2)),
                 ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -2321,12 +2316,10 @@ class _CategoryTab extends StatelessWidget {
                           width: 10,
                           height: 10,
                           decoration: BoxDecoration(
-                              color: color,
-                              shape: BoxShape.circle)),
+                              color: color, shape: BoxShape.circle)),
                       const SizedBox(width: 8),
                       Expanded(
-                          child: Text(
-                              row['category_name'] ?? '-',
+                          child: Text(row['category_name'] ?? '-',
                               style: const TextStyle(
                                   fontWeight: FontWeight.w700,
                                   fontSize: 14))),
@@ -2348,8 +2341,7 @@ class _CategoryTab extends StatelessWidget {
                     ),
                     const SizedBox(height: 6),
                     Row(
-                      mainAxisAlignment:
-                          MainAxisAlignment.spaceBetween,
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         Text('$qty item terjual',
                             style: TextStyle(
@@ -2375,15 +2367,10 @@ class _CategoryTab extends StatelessWidget {
   }
 
   Future<List<Map<String, dynamic>>> _load(BuildContext context) {
-    final db =
-        ProviderScope.containerOf(context).read(databaseProvider);
+    final db = ProviderScope.containerOf(context).read(databaseProvider);
     return db.reportsDao.getSalesByCategory(start, end);
   }
 }
-
-// ─────────────────────────────────────────────────────────────────────────────
-// SHARED WIDGETS
-// ─────────────────────────────────────────────────────────────────────────────
 
 class _InfoCard extends StatelessWidget {
   final String title, value;
@@ -2502,13 +2489,12 @@ class _Legend extends StatelessWidget {
         Container(
           width: 10,
           height: 10,
-          decoration:
-              BoxDecoration(color: color, shape: BoxShape.circle),
+          decoration: BoxDecoration(color: color, shape: BoxShape.circle),
         ),
-        const SizedBox(width: 4),
+        const SizedBox(width: 6),
         Text(label,
             style: const TextStyle(
-                fontSize: 11, color: AppColors.textSecondary)),
+                fontSize: 11, color: AppColors.textSecondary, fontWeight: FontWeight.w600)),
       ],
     );
   }
