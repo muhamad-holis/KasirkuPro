@@ -10,7 +10,7 @@ import '../screens/pelanggan/pelanggan_screen.dart';
 import '../screens/hutang/hutang_screen.dart';
 import '../screens/notifikasi/notifikasi_screen.dart';
 import '../screens/kas/kas_screen.dart';
-import '../screens/login/login_screen.dart'; // <-- Import tambahan untuk LoginScreen()
+import '../screens/login/login_screen.dart'; 
 import '../../core/theme/app_theme.dart';
 import '../../core/utils/responsive.dart';
 import '../providers/auth_provider.dart';
@@ -105,12 +105,6 @@ class _MainNavigationState extends ConsumerState<MainNavigation> {
     final idx      = ref.watch(currentNavIndexProvider);
     final aktifUser = ref.watch(authProvider);
 
-    // BUG #3 FIX: Auto-redirect ke LoginScreen jika authProvider null.
-    // Sebelumnya logout hanya clear SecureStorage + manual navigate,
-    // tapi Riverpod state di memori masih ada sehingga saat app di-resume
-    // tanpa restart penuh, user masih bisa akses dashboard.
-    // Dengan listen di build(), setiap perubahan authProvider ke null
-    // akan langsung redirect tanpa mengandalkan Navigator manual.
     if (aktifUser == null) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (context.mounted) {
@@ -125,9 +119,6 @@ class _MainNavigationState extends ConsumerState<MainNavigation> {
       );
     }
 
-    // FITUR TABLET: di tablet landscape, gunakan NavigationRail (sidebar)
-    // alih-alih bottom navigation bar agar lebih nyaman dipakai dalam
-    // genggaman dua tangan / posisi di meja kasir yang landscape.
     final isTabletLandscape = Responsive.isTabletLandscape(context);
 
     return PopScope(
@@ -153,9 +144,6 @@ class _MainNavigationState extends ConsumerState<MainNavigation> {
             : IndexedStack(index: idx, children: _screens),
         bottomNavigationBar:
             isTabletLandscape ? null : _BottomNavBar(currentIndex: idx, ref: ref),
-        // FITUR TABLET: tombol "Buka Kasir" mengambang di pojok kanan bawah,
-        // mengikuti gaya dashboard desktop. Hanya tampil di tablet landscape
-        // dan saat user tidak sedang berada di tab Kasir.
         floatingActionButton: (isTabletLandscape && idx != 2)
             ? FloatingActionButton.extended(
                 onPressed: () =>
@@ -210,9 +198,6 @@ class _MainNavigationState extends ConsumerState<MainNavigation> {
 }
 
 // ─── Tab Lainnya dengan Nested Navigator ─────────────────────────────────────
-// Nested Navigator memungkinkan push sub-screen (Pelanggan, Hutang, dll)
-// tanpa bottom nav hilang. Bottom nav tetap kelihatan karena ada di Scaffold
-// luar, bukan di dalam Navigator ini.
 
 class _LainnyaTab extends StatelessWidget {
   const _LainnyaTab();
@@ -238,205 +223,209 @@ class _LainnyaHomeScreen extends ConsumerWidget {
     final isDark    = Theme.of(context).brightness == Brightness.dark;
     final aktifUser = ref.watch(authProvider);
     final isAdmin   = aktifUser?.isAdmin ?? false;
-    final titleColor = isDark ? Colors.white : AppColors.textPrimary;
-    final subColor   = isDark ? const Color(0xFF94A3B8) : AppColors.textSecondary;
+    
+    // PERUBAHAN: Warna Header dibuat hijau sesuai instruksi
+    final headerBg = isDark ? const Color(0xFF134E4A) : AppColors.primary;
 
     return Scaffold(
-      body: SafeArea(
-        child: CustomScrollView(
-          slivers: [
-            // ── Header ──────────────────────────────────────────────────────
-            SliverToBoxAdapter(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(20, 20, 20, 8),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text('Menu',
-                            style: TextStyle(fontSize: 22,
-                                fontWeight: FontWeight.w800,
-                                color: titleColor)),
-                        const SizedBox(height: 4),
-                        if (aktifUser != null)
-                          Row(children: [
-                            const Icon(Icons.person_rounded,
-                                size: 13, color: AppColors.primary),
-                            const SizedBox(width: 4),
-                            Text(aktifUser.name,
-                                style: const TextStyle(
-                                    fontSize: 12, color: AppColors.primary,
-                                    fontWeight: FontWeight.w600)),
-                            const SizedBox(width: 6),
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 6, vertical: 1),
-                              decoration: BoxDecoration(
-                                color: isAdmin
-                                    ? AppColors.primary.withOpacity(0.1)
-                                    : AppColors.success.withOpacity(0.1),
-                                borderRadius: BorderRadius.circular(20),
-                              ),
-                              child: Text(isAdmin ? 'Admin' : 'Kasir',
-                                  style: TextStyle(
-                                      fontSize: 10,
-                                      fontWeight: FontWeight.w700,
-                                      color: isAdmin
-                                          ? AppColors.primary
-                                          : AppColors.success)),
+      backgroundColor: isDark ? AppColors.darkBg : AppColors.bg,
+      body: CustomScrollView(
+        slivers: [
+          // ── Header (Berwarna Hijau) ───────────────────────────────────────────
+          SliverToBoxAdapter(
+            child: Container(
+              padding: EdgeInsets.only(
+                top: MediaQuery.of(context).padding.top + 20, // Menghindari status bar
+                left: 20, 
+                right: 20, 
+                bottom: 24
+              ),
+              decoration: BoxDecoration(
+                color: headerBg,
+                borderRadius: const BorderRadius.vertical(
+                  bottom: Radius.circular(24),
+                ),
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text('Menu',
+                          style: TextStyle(
+                              fontSize: 22,
+                              fontWeight: FontWeight.w800,
+                              color: Colors.white)),
+                      const SizedBox(height: 4),
+                      if (aktifUser != null)
+                        Row(children: [
+                          const Icon(Icons.person_rounded,
+                              size: 13, color: Colors.white),
+                          const SizedBox(width: 4),
+                          Text(aktifUser.name,
+                              style: const TextStyle(
+                                  fontSize: 12, 
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.w600)),
+                          const SizedBox(width: 6),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 6, vertical: 1),
+                            decoration: BoxDecoration(
+                              color: Colors.white.withOpacity(0.2),
+                              borderRadius: BorderRadius.circular(20),
                             ),
-                          ]),
-                      ],
-                    ),
-                    // Tombol logout
-                    GestureDetector(
-                      onTap: () => _doLogout(context, ref),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 12, vertical: 8),
-                        decoration: BoxDecoration(
-                          color: AppColors.danger.withOpacity(0.1),
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        child: const Row(children: [
-                          Icon(Icons.logout_rounded,
-                              size: 16, color: AppColors.danger),
-                          SizedBox(width: 4),
-                          Text('Logout', style: TextStyle(
-                              fontSize: 12, color: AppColors.danger,
-                              fontWeight: FontWeight.w700)),
+                            child: Text(isAdmin ? 'Admin' : 'Kasir',
+                                style: const TextStyle(
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.w700,
+                                    color: Colors.white)),
+                          ),
                         ]),
+                    ],
+                  ),
+                  // Tombol logout dengan warna kontras
+                  GestureDetector(
+                    onTap: () => _doLogout(context, ref),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 8),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.15),
+                        borderRadius: BorderRadius.circular(10),
                       ),
+                      child: const Row(children: [
+                        Icon(Icons.logout_rounded,
+                            size: 16, color: Colors.white),
+                        SizedBox(width: 4),
+                        Text('Logout', style: TextStyle(
+                            fontSize: 12, color: Colors.white,
+                            fontWeight: FontWeight.w700)),
+                      ]),
                     ),
-                  ],
-                ),
+                  ),
+                ],
               ),
             ),
+          ),
 
-            // ── Grid menu ────────────────────────────────────────────────────
-            SliverPadding(
-              padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
-              sliver: SliverGrid(
-                // FITUR TABLET: jumlah kolom menyesuaikan lebar layar
-                gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount: Responsive.gridColumns(context),
-                  mainAxisSpacing: 12,
-                  crossAxisSpacing: 12,
-                  childAspectRatio: 0.95,
-                ),
-                delegate: SliverChildListDelegate([
-                  // ── Aksi cepat (dipindah dari Dashboard) ──────────────────
-                  _MenuCard(
-                    icon: Icons.shopping_cart_outlined,
-                    label: 'Mulai Kasir',
-                    description: 'Transaksi penjualan',
-                    color: AppColors.primary,
-                    onTap: () =>
-                        ref.read(currentNavIndexProvider.notifier).state = 2,
-                  ),
-                  _MenuCard(
-                    icon: Icons.add_box_outlined,
-                    label: 'Tambah Produk',
-                    description: 'Kelola stok produk',
-                    color: AppColors.success,
-                    onTap: () =>
-                        ref.read(currentNavIndexProvider.notifier).state = 3,
-                  ),
-                  _MenuCard(
-                    icon: Icons.history_rounded,
-                    label: 'Riwayat Transaksi',
-                    description: 'Lihat semua transaksi',
-                    color: AppColors.info,
-                    onTap: () =>
-                        ref.read(currentNavIndexProvider.notifier).state = 1,
-                  ),
-                  _MenuCard(
-                    icon: Icons.insert_chart_outlined_rounded,
-                    label: 'Laporan Hari Ini',
-                    description: 'Ringkasan penjualan',
-                    color: AppColors.warning,
-                    onTap: () =>
-                        ref.read(currentNavIndexProvider.notifier).state = 1,
-                  ),
-                  // ── Kas & Keuangan ─────────────────────────────────────────
-                  _MenuCard(
-                    icon: Icons.payments_rounded,
-                    label: 'Kas & Keuangan',
-                    description: 'Kas masuk & keluar',
-                    color: AppColors.success,
-                    onTap: () => MainNavigation.navigateToKas(context),
-                  ),
-                  // ── Menu lainnya ────────────────────────────────────────────
-                  _MenuCard(
-                    icon: Icons.people_rounded,
-                    label: 'Pelanggan',
-                    description: 'Kelola data pelanggan',
-                    color: AppColors.primary,
-                    onTap: () => Navigator.push(context,
-                        MaterialPageRoute(builder: (_) => ProviderScope(
-                          parent: ProviderScope.containerOf(context),
-                          child: const PelangganScreen()))),
-                  ),
-                  _MenuCard(
-                    icon: Icons.account_balance_wallet_rounded,
-                    label: 'Hutang',
-                    description: 'Catat hutang piutang',
-                    color: AppColors.warning,
-                    onTap: () => Navigator.push(context,
-                        MaterialPageRoute(builder: (_) => ProviderScope(
-                          parent: ProviderScope.containerOf(context),
-                          child: const HutangScreen()))),
-                  ),
-                  _MenuCard(
-                    icon: Icons.notifications_rounded,
-                    label: 'Notifikasi',
-                    description: 'Stok & jatuh tempo',
-                    color: AppColors.info,
-                    onTap: () => Navigator.push(context,
-                        MaterialPageRoute(builder: (_) => ProviderScope(
-                          parent: ProviderScope.containerOf(context),
-                          child: const NotifikasiScreen()))),
-                  ),
-                  _MenuCard(
-                    icon: Icons.calculate_rounded,
-                    label: 'Kalkulator',
-                    description: 'Hitung cepat',
-                    color: AppColors.info,
-                    onTap: () => showDialog(
-                      context: context,
-                      builder: (_) => const _KalkulatorDialog(),
-                    ),
-                  ),
-                  // Pengaturan & Kelola Kasir hanya untuk Admin
-                  if (isAdmin) ...[
-                    _MenuCard(
-                      icon: Icons.people_alt_rounded,
-                      label: 'Kelola Kasir',
-                      description: 'Tambah & atur akun',
-                      color: AppColors.success,
-                      onTap: () => Navigator.push(context,
-                          MaterialPageRoute(builder: (_) => ProviderScope(
-                            parent: ProviderScope.containerOf(context),
-                            child: const KasirManagementScreen()))),
-                    ),
-                    _MenuCard(
-                      icon: Icons.settings_rounded,
-                      label: 'Pengaturan',
-                      description: 'Toko, struk & printer',
-                      color: AppColors.textSecondary,
-                      onTap: () => Navigator.push(context,
-                          MaterialPageRoute(builder: (_) => ProviderScope(
-                            parent: ProviderScope.containerOf(context),
-                            child: const SettingsScreen()))),
-                    ),
-                  ],
-                ]),
+          // ── Grid menu ────────────────────────────────────────────────────
+          SliverPadding(
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
+            sliver: SliverGrid(
+              gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: Responsive.gridColumns(context),
+                mainAxisSpacing: 12,
+                crossAxisSpacing: 12,
+                childAspectRatio: 0.95,
               ),
+              delegate: SliverChildListDelegate([
+                _MenuCard(
+                  icon: Icons.shopping_cart_outlined,
+                  label: 'Mulai Kasir',
+                  description: 'Transaksi penjualan',
+                  color: AppColors.primary,
+                  onTap: () =>
+                      ref.read(currentNavIndexProvider.notifier).state = 2,
+                ),
+                _MenuCard(
+                  icon: Icons.add_box_outlined,
+                  label: 'Tambah Produk',
+                  description: 'Kelola stok produk',
+                  color: AppColors.success,
+                  onTap: () =>
+                      ref.read(currentNavIndexProvider.notifier).state = 3,
+                ),
+                _MenuCard(
+                  icon: Icons.history_rounded,
+                  label: 'Riwayat Transaksi',
+                  description: 'Lihat semua transaksi',
+                  color: AppColors.info,
+                  onTap: () =>
+                      ref.read(currentNavIndexProvider.notifier).state = 1,
+                ),
+                _MenuCard(
+                  icon: Icons.insert_chart_outlined_rounded,
+                  label: 'Laporan Hari Ini',
+                  description: 'Ringkasan penjualan',
+                  color: AppColors.warning,
+                  onTap: () =>
+                      ref.read(currentNavIndexProvider.notifier).state = 1,
+                ),
+                _MenuCard(
+                  icon: Icons.payments_rounded,
+                  label: 'Kas & Keuangan',
+                  description: 'Kas masuk & keluar',
+                  color: AppColors.success,
+                  onTap: () => MainNavigation.navigateToKas(context),
+                ),
+                _MenuCard(
+                  icon: Icons.people_rounded,
+                  label: 'Pelanggan',
+                  description: 'Kelola data pelanggan',
+                  color: AppColors.primary,
+                  onTap: () => Navigator.push(context,
+                      MaterialPageRoute(builder: (_) => ProviderScope(
+                        parent: ProviderScope.containerOf(context),
+                        child: const PelangganScreen()))),
+                ),
+                _MenuCard(
+                  icon: Icons.account_balance_wallet_rounded,
+                  label: 'Hutang',
+                  description: 'Catat hutang piutang',
+                  color: AppColors.warning,
+                  onTap: () => Navigator.push(context,
+                      MaterialPageRoute(builder: (_) => ProviderScope(
+                        parent: ProviderScope.containerOf(context),
+                        child: const HutangScreen()))),
+                ),
+                _MenuCard(
+                  icon: Icons.notifications_rounded,
+                  label: 'Notifikasi',
+                  description: 'Stok & jatuh tempo',
+                  color: AppColors.info,
+                  onTap: () => Navigator.push(context,
+                      MaterialPageRoute(builder: (_) => ProviderScope(
+                        parent: ProviderScope.containerOf(context),
+                        child: const NotifikasiScreen()))),
+                ),
+                _MenuCard(
+                  icon: Icons.calculate_rounded,
+                  label: 'Kalkulator',
+                  description: 'Hitung cepat',
+                  color: AppColors.info,
+                  onTap: () => showDialog(
+                    context: context,
+                    builder: (_) => const _KalkulatorDialog(),
+                  ),
+                ),
+                if (isAdmin) ...[
+                  _MenuCard(
+                    icon: Icons.people_alt_rounded,
+                    label: 'Kelola Kasir',
+                    description: 'Tambah & atur akun',
+                    color: AppColors.success,
+                    onTap: () => Navigator.push(context,
+                        MaterialPageRoute(builder: (_) => ProviderScope(
+                          parent: ProviderScope.containerOf(context),
+                          child: const KasirManagementScreen()))),
+                  ),
+                  _MenuCard(
+                    icon: Icons.settings_rounded,
+                    label: 'Pengaturan',
+                    description: 'Toko, struk & printer',
+                    color: AppColors.textSecondary,
+                    onTap: () => Navigator.push(context,
+                        MaterialPageRoute(builder: (_) => ProviderScope(
+                          parent: ProviderScope.containerOf(context),
+                          child: const SettingsScreen()))),
+                  ),
+                ],
+              ]),
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
@@ -574,19 +563,14 @@ class _BottomNavBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    // Samakan warna bar dengan warna header (AppBar)
     final navBg = isDark ? const Color(0xFF134E4A) : AppColors.primary;
     final shadowColor = Colors.black.withOpacity(isDark ? 0.35 : 0.15);
     final inactiveColor = Colors.white.withOpacity(0.65);
 
-    // BUG FIX: Cek role untuk blokir total akses tab Stok bagi Kasir.
-    // Kasir tidak boleh membuka tab Stok sama sekali (bukan hanya read-only).
     final isAdmin = ref.read(isAdminProvider);
 
     const double barHeight = 72;
     const double fabSize = 58;
-    // Ruang ekstra di atas bar agar tombol Kasir bisa "mengambang"
-    // melewati garis bar (mirip aplikasi Dana), tanpa overflow Stack.
     const double floatHeadroom = 20;
     const double cornerRadius = 24;
     final bottomInset = MediaQuery.of(context).padding.bottom;
@@ -596,7 +580,6 @@ class _BottomNavBar extends StatelessWidget {
       child: Stack(
         alignment: Alignment.bottomCenter,
         children: [
-          // ── Bar navigasi (warna header + lengkungan kiri-kanan) ─────────
           Container(
             height: barHeight + bottomInset,
             padding: EdgeInsets.only(bottom: bottomInset),
@@ -617,7 +600,6 @@ class _BottomNavBar extends StatelessWidget {
             ),
             child: Row(
               children: [
-                // 0 – Dashboard
                 _NavItem(
                   index: 0,
                   current: currentIndex,
@@ -626,7 +608,6 @@ class _BottomNavBar extends StatelessWidget {
                   label: 'Dashboard',
                   ref: ref,
                 ),
-                // 1 – Laporan
                 _NavItem(
                   index: 1,
                   current: currentIndex,
@@ -635,9 +616,7 @@ class _BottomNavBar extends StatelessWidget {
                   label: 'Laporan',
                   ref: ref,
                 ),
-                // 2 – ruang kosong untuk tombol Kasir yang mengambang
                 const Expanded(child: SizedBox()),
-                // 3 – Stok (blokir total untuk Kasir)
                 isAdmin
                     ? _NavItem(
                         index: 3,
@@ -651,7 +630,6 @@ class _BottomNavBar extends StatelessWidget {
                         icon: Icons.inventory_2_outlined,
                         label: 'Stok',
                       ),
-                // 4 – Lainnya (tab, bukan bottom sheet)
                 _NavItem(
                   index: 4,
                   current: currentIndex,
@@ -659,7 +637,6 @@ class _BottomNavBar extends StatelessWidget {
                   activeIcon: Icons.grid_view_rounded,
                   label: 'Menu',
                   ref: ref,
-                  // Jika sudah di tab Lainnya & tap lagi → pop ke grid home
                   onRetap: () {
                     if (_lainnyaNavKey.currentState?.canPop() ?? false) {
                       _lainnyaNavKey.currentState!.popUntil((route) => route.isFirst);
@@ -669,7 +646,6 @@ class _BottomNavBar extends StatelessWidget {
               ],
             ),
           ),
-          // ── Tombol Kasir mengambang (lebih besar, ala Dana) ─────────────
           Positioned(
             top: 0,
             child: GestureDetector(
@@ -725,7 +701,6 @@ class _NavItem extends StatelessWidget {
   final IconData icon, activeIcon;
   final String label;
   final WidgetRef ref;
-  /// Dipanggil ketika tab sudah aktif lalu di-tap lagi (misal: scroll ke atas)
   final VoidCallback? onRetap;
 
   const _NavItem({
@@ -933,8 +908,6 @@ class _KalkulatorDialogState extends State<_KalkulatorDialog> {
 }
 
 // ─── Nav Item Diblokir (untuk Kasir) ──────────────────────────────────────────
-// Tampil di posisi yang sama seperti _NavItem biasa, tapi tap-nya
-// menampilkan info "akses ditolak" alih-alih pindah tab.
 
 class _NavItemBlocked extends StatelessWidget {
   final IconData icon;
@@ -985,9 +958,6 @@ class _NavItemBlocked extends StatelessWidget {
 }
 
 // ─── Guard Tab Stok ───────────────────────────────────────────────────────────
-// Pengaman ganda selain menyembunyikan nav item: jika index 3 entah bagaimana
-// tetap teraktivasi (misal lewat deep link atau state lama), tampilkan halaman
-// akses ditolak alih-alih StokScreen. Kasir tidak bisa membuka Stok sama sekali.
 
 class _StokTabGuard extends ConsumerWidget {
   const _StokTabGuard();
@@ -1028,13 +998,7 @@ class _StokTabGuard extends ConsumerWidget {
   }
 }
 
-// ─── FITUR TABLET: Side Navigation Rail (gaya sidebar desktop) ────────────
-// Pengganti _BottomNavBar saat tablet dalam orientasi landscape.
-// Desain mengikuti referensi dashboard desktop: sidebar lebar dengan
-// brand header, item nav horizontal (icon + label sejajar), dan info
-// user di bagian bawah. Warna tetap memakai hijau khas Kasirku.
-// Logic guard isAdmin untuk tab Stok tetap dipertahankan sama seperti
-// _BottomNavBar, supaya kasir tidak bisa mengakses Stok lewat sidebar juga.
+// ─── FITUR TABLET: Side Navigation Rail ───────────────────────────────────────
 
 class _SideNavRail extends StatelessWidget {
   final int currentIndex;
@@ -1059,7 +1023,6 @@ class _SideNavRail extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            // ── Brand header ────────────────────────────────────────────
             Padding(
               padding: const EdgeInsets.fromLTRB(20, 20, 20, 24),
               child: Row(
@@ -1094,7 +1057,6 @@ class _SideNavRail extends StatelessWidget {
               ),
             ),
 
-            // ── Item navigasi ───────────────────────────────────────────
             Expanded(
               child: ListView(
                 padding: const EdgeInsets.symmetric(horizontal: 12),
@@ -1154,7 +1116,6 @@ class _SideNavRail extends StatelessWidget {
               ),
             ),
 
-            // ── Info user aktif ─────────────────────────────────────────
             Container(
               margin: const EdgeInsets.all(12),
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
