@@ -1776,14 +1776,14 @@ class _CustomerInfoSection extends StatelessWidget {
                 icon: Icons.location_on_outlined,
                 label: 'Alamat',
                 value: customer.address!),
-          if (customer.email != null && customer.email!.isNotEmpty)
+          if (customer.notes != null && customer.notes!.isNotEmpty)
             _InfoRow(
-                icon: Icons.email_outlined,
-                label: 'Email',
-                value: customer.email!),
+                icon: Icons.notes_outlined,
+                label: 'Catatan',
+                value: customer.notes!),
           if ((customer.phone == null || customer.phone!.isEmpty) &&
               (customer.address == null || customer.address!.isEmpty) &&
-              (customer.email == null || customer.email!.isEmpty))
+              (customer.notes == null || customer.notes!.isEmpty))
             const Text('Tidak ada info tambahan',
                 style: TextStyle(color: AppColors.textSecondary)),
         ],
