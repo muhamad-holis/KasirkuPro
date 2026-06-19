@@ -35,19 +35,24 @@ class Responsive {
     return MediaQuery.of(context).size.width >= _largeTabletBreakpoint;
   }
 
-  /// True jika lebar layar tergolong tablet (>= 600dp), baik potrait
-  /// maupun landscape. Dipakai untuk keputusan layout umum.
+  /// True jika layar tergolong tablet, baik portrait maupun landscape.
+  /// Portrait: cek shortestSide >= 600dp (lebar fisik tablet).
+  /// Landscape: cek width >= 600dp (HP landscape lebar ~800dp+ juga masuk).
   static bool isTablet(BuildContext context) {
-    return MediaQuery.of(context).size.shortestSide >= _tabletBreakpoint;
+    final size = MediaQuery.of(context).size;
+    final isLandscape = size.width > size.height;
+    return isLandscape
+        ? size.width >= _tabletBreakpoint
+        : size.shortestSide >= _tabletBreakpoint;
   }
 
-  /// True hanya jika tablet DAN dalam orientasi landscape.
-  /// Dipakai khusus untuk keputusan: tampilkan sidebar (NavigationRail)
-  /// alih-alih bottom navigation bar.
+  /// True hanya jika layar dalam orientasi landscape DAN lebar >= 600dp.
+  /// Dipakai untuk: tampilkan sidebar alih-alih bottom nav, layout 2 kolom.
+  /// HP landscape (width ~800dp) akan terdeteksi benar dengan kondisi ini.
   static bool isTabletLandscape(BuildContext context) {
     final size = MediaQuery.of(context).size;
     final isLandscape = size.width > size.height;
-    return isTablet(context) && isLandscape;
+    return isLandscape && size.width >= _tabletBreakpoint;
   }
 
   /// Jumlah kolom grid yang disarankan berdasarkan lebar layar saat ini.
