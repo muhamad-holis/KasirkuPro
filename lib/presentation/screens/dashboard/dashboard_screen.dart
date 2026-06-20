@@ -327,18 +327,21 @@ class _Header extends ConsumerWidget {
 
     return Container(
       padding: EdgeInsets.only(
-        top: MediaQuery.of(context).padding.top + 10,
+        top: MediaQuery.of(context).padding.top + 20,
         left: 16,
         right: 16,
-        bottom: 12,
+        bottom: 24,
       ),
       decoration: BoxDecoration(
         color: headerBg,
+        borderRadius: const BorderRadius.vertical(
+          bottom: Radius.circular(24),
+        ),
         boxShadow: [
           BoxShadow(
               color: Colors.black.withOpacity(0.1),
-              blurRadius: 4,
-              offset: const Offset(0, 2))
+              blurRadius: 8,
+              offset: const Offset(0, 4))
         ],
       ),
       child: Row(

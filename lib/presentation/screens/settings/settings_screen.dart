@@ -1187,6 +1187,108 @@ class _AboutSheet extends StatelessWidget {
             ),
 
             const SizedBox(height: 20),
+
+            // ── Donasi / Kopi ────────────────────────────────────────────────
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(18),
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [
+                    const Color(0xFFFFF8E7),
+                    const Color(0xFFFFF3CC),
+                  ],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(
+                    color: const Color(0xFFFFD666).withOpacity(0.6), width: 1),
+              ),
+              child: Column(
+                children: [
+                  // Icon kopi
+                  Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFFFD666).withOpacity(0.3),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Text('☕',
+                        style: TextStyle(fontSize: 24)),
+                  ),
+                  const SizedBox(height: 10),
+                  const Text(
+                    'Dukung Pengembangan',
+                    style: TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w800,
+                      color: Color(0xFF92400E),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  const Text(
+                    'KasirkuPro dikembangkan dengan ❤️ untuk membantu UMKM Indonesia. '
+                    'Jika aplikasi ini bermanfaat dan kamu ingin mendukung pengembangan, '
+                    'secangkir kopi sangat berarti bagi saya ☕',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 12.5,
+                      color: Color(0xFF92400E),
+                      height: 1.6,
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                  // Placeholder QR Code — ganti dengan Image.asset('assets/images/qris.png')
+                  // setelah file QRIS ditambahkan ke assets
+                  Container(
+                    width: 180,
+                    height: 180,
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                          color: const Color(0xFFFFD666), width: 2),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.08),
+                          blurRadius: 8,
+                          offset: const Offset(0, 2),
+                        ),
+                      ],
+                    ),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(10),
+                      child: Image.asset(
+                        'assets/images/qris.png',
+                        fit: BoxFit.cover,
+                        width: 180,
+                        height: 180,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 14, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFFFD666).withOpacity(0.4),
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: const Text(
+                      'Scan QRIS untuk traktir kopi 😄',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                        color: Color(0xFF92400E),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
+            const SizedBox(height: 20),
             Text(
               '© 2026 Artholic Studio. All rights reserved.',
               style: TextStyle(
