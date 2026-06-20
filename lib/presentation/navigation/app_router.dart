@@ -11,6 +11,7 @@ import '../screens/hutang/hutang_screen.dart';
 import '../screens/notifikasi/notifikasi_screen.dart';
 import '../screens/kas/kas_screen.dart';
 import '../screens/login/login_screen.dart'; 
+import '../screens/supplier/supplier_screen.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/utils/responsive.dart';
 import '../providers/auth_provider.dart';
@@ -369,6 +370,16 @@ class _LainnyaHomeScreen extends ConsumerWidget {
                       MaterialPageRoute(builder: (_) => ProviderScope(
                         parent: ProviderScope.containerOf(context),
                         child: const PelangganScreen()))),
+                ),
+                _MenuCard(
+                  icon: Icons.local_shipping_rounded,
+                  label: 'Pemasok',
+                  description: 'Data supplier & sales',
+                  color: AppColors.info,
+                  onTap: () => Navigator.push(context,
+                      MaterialPageRoute(builder: (_) => ProviderScope(
+                        parent: ProviderScope.containerOf(context),
+                        child: const SupplierScreen()))),
                 ),
                 _MenuCard(
                   icon: Icons.account_balance_wallet_rounded,

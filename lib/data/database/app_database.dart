@@ -18,6 +18,7 @@ part 'tables/settings_table.dart';
 part 'tables/sync_queue_table.dart';
 part 'tables/users_table.dart';
 part 'tables/audit_logs_table.dart';
+part 'tables/suppliers_table.dart';
 
 part 'daos/products_dao.dart';
 part 'daos/categories_dao.dart';
@@ -29,6 +30,7 @@ part 'daos/sync_dao.dart';
 part 'daos/stock_movements_dao.dart';
 part 'daos/settings_dao.dart';
 part 'daos/users_dao.dart';
+part 'daos/suppliers_dao.dart';
 
 part 'app_database.g.dart';
 
@@ -45,18 +47,20 @@ LazyDatabase _openConnection() {
     Categories, Products, Customers, Transactions,
     TransactionItems, Debts, StockMovements,
     CashFlows, Settings, SyncQueue, Users, AuditLogs,
+    Suppliers,
   ],
   daos: [
     ProductsDao, CategoriesDao, TransactionsDao,
     CustomersDao, DebtsDao, ReportsDao, SyncDao,
     StockMovementsDao, SettingsDao, UsersDao,
+    SuppliersDao,
   ],
 )
 class AppDatabase extends _$AppDatabase {
   AppDatabase() : super(_openConnection());
 
   @override
-  int get schemaVersion => 5;
+  int get schemaVersion => 6;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -133,6 +137,21 @@ class AppDatabase extends _$AppDatabase {
             "ALTER TABLE cash_flows ADD COLUMN category TEXT NOT NULL DEFAULT 'Lainnya'"
           );
         } catch (_) {}
+      }
+      if (from < 6) {
+        // Tambah tabel suppliers (pemasok)
+        await customStatement(
+          "CREATE TABLE IF NOT EXISTS suppliers ("
+          "id INTEGER PRIMARY KEY AUTOINCREMENT,"
+          "name TEXT NOT NULL,"
+          "company TEXT,"
+          "products TEXT,"
+          "phone TEXT,"
+          "address TEXT,"
+          "notes TEXT,"
+          "created_at INTEGER NOT NULL DEFAULT (strftime('%s','now') * 1000)"
+          ")"
+        );
       }
     },
     beforeOpen: (details) async {
