@@ -5,7 +5,6 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:intl/date_symbol_data_local.dart';
-import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
@@ -15,6 +14,7 @@ import 'package:image/image.dart' as img;
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/currency.dart';
 import '../../../core/utils/responsive.dart';
+import '../../../core/utils/receipt_pdf_builder.dart';
 import '../../providers/database_provider.dart';
 import '../../providers/settings_provider.dart';
 import '../../../data/database/app_database.dart';
@@ -576,6 +576,7 @@ class _CetakSheetState extends ConsumerState<_CetakSheet> {
   bool _pdfing    = false;
   List<TransactionItem> _items = [];
   bool _loaded = false;
+  String? _customerName;
 
   @override
   void initState() {
@@ -586,7 +587,24 @@ class _CetakSheetState extends ConsumerState<_CetakSheet> {
   Future<void> _loadItems() async {
     final db = ref.read(databaseProvider);
     final items = await db.transactionsDao.getTransactionItems(widget.tx.id);
-    if (mounted) setState(() { _items = items; _loaded = true; });
+
+    // PERUBAHAN #4: ambil nama pelanggan (jika transaksi ini terkait
+    // pelanggan tertentu) untuk ditampilkan di struk — murni untuk
+    // tampilan, tidak memengaruhi data transaksi yang sudah tersimpan.
+    String? customerName;
+    final customerId = widget.tx.customerId;
+    if (customerId != null) {
+      final customer = await db.customersDao.getCustomerById(customerId);
+      customerName = customer?.name;
+    }
+
+    if (mounted) {
+      setState(() {
+        _items = items;
+        _loaded = true;
+        _customerName = customerName;
+      });
+    }
   }
 
   String _methodLabel(String m) {
@@ -771,6 +789,24 @@ class _CetakSheetState extends ConsumerState<_CetakSheet> {
     }
   }
 
+  // ── PERUBAHAN #10: loader logo footer permanen KasirKu Pro ─────────────────
+  // Berbeda dengan _loadLogoImage di atas, loader ini SELALU memakai
+  // assets/images/app_icon.png dan TIDAK pernah memakai logo custom toko.
+  Future<img.Image?> _loadFooterAppIcon({int maxWidth = 90}) async {
+    try {
+      final data = await rootBundle.load('assets/images/app_icon.png');
+      final bytes = data.buffer.asUint8List();
+      var original = img.decodeImage(bytes);
+      if (original == null) return null;
+      if (original.width > maxWidth) {
+        original = img.copyResize(original, width: maxWidth);
+      }
+      return img.grayscale(original);
+    } catch (_) {
+      return null;
+    }
+  }
+
   // ── Cetak Bluetooth ───────────────────────────────────────────────────────
 
   Future<void> _cetakBluetooth() async {
@@ -937,6 +973,11 @@ class _CetakSheetState extends ConsumerState<_CetakSheet> {
 
   // ── Share PDF ─────────────────────────────────────────────────────────────
 
+  // ── PERUBAHAN: _sharePdf sekarang hanya menyiapkan data & memanggil
+  // ReceiptPdfBuilder (lib/core/utils/receipt_pdf_builder.dart) untuk urusan
+  // layout/tampilan. Semua angka (subtotal/diskon/pajak/total/dibayar/
+  // kembali) tetap dibaca apa adanya dari widget.tx yang sudah tersimpan di
+  // database — TIDAK ada perhitungan ulang/baru di sini maupun di builder.
   Future<void> _sharePdf() async {
     setState(() => _pdfing = true);
     try {
@@ -948,7 +989,7 @@ class _CetakSheetState extends ConsumerState<_CetakSheet> {
       final storeNote   = settings.storeNote ?? '';
       final logoMaxWidth = settings.receiptSize == '80mm' ? 300 : 200;
 
-      // Load logo jika aktif
+      // Logo header: custom (mengikuti Pengaturan > Struk), opsional.
       pw.MemoryImage? logoImage;
       if (settings.showLogo) {
         final logoImg = await _loadLogoImage(logoMaxWidth);
@@ -957,145 +998,51 @@ class _CetakSheetState extends ConsumerState<_CetakSheet> {
         }
       }
 
-      final doc     = pw.Document();
-      final dateStr = DateFormat('dd/MM/yyyy HH:mm', 'id')
-          .format(widget.tx.createdAt.toLocal());
+      // Logo footer: PERMANEN, selalu assets/images/app_icon.png.
+      pw.MemoryImage? footerLogoImage;
+      final footerIcon = await _loadFooterAppIcon();
+      if (footerIcon != null) {
+        footerLogoImage = pw.MemoryImage(img.encodePng(footerIcon));
+      }
 
-      const double fontSize    = 8;
-      const double fontSizeSm  = 7;
-      const double fontSizeLg  = 10;
-      const String divider     = '--------------------------------';
-      const String dividerDash = '- - - - - - - - - - - - - - - -';
+      final items = _items
+          .map((item) => ReceiptPdfItem(
+                name: item.productName,
+                quantity: item.quantity,
+                price: item.price,
+                subtotal: item.subtotal,
+              ))
+          .toList();
 
-      pw.Widget row(String left, String right, {bool bold = false}) =>
-          pw.Row(
-            mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-            children: [
-              pw.Text(left,
-                  style: pw.TextStyle(
-                      fontSize: fontSize,
-                      fontWeight: bold
-                          ? pw.FontWeight.bold
-                          : pw.FontWeight.normal)),
-              pw.Text(right,
-                  style: pw.TextStyle(
-                      fontSize: fontSize,
-                      fontWeight: bold
-                          ? pw.FontWeight.bold
-                          : pw.FontWeight.normal)),
-            ],
-          );
+      // Persentase pajak hanya untuk label tampilan (mis. "Pajak (5%)"),
+      // dihitung dari subtotal & taxAmount yang SUDAH tersimpan — bukan
+      // perhitungan transaksi baru.
+      final taxPercent = widget.tx.subtotal > 0
+          ? (widget.tx.taxAmount / widget.tx.subtotal * 100)
+          : 0.0;
 
-      doc.addPage(pw.Page(
-        pageFormat: PdfPageFormat.roll57,
-        margin: const pw.EdgeInsets.symmetric(horizontal: 6, vertical: 10),
-        build: (ctx) => pw.Column(
-          crossAxisAlignment: pw.CrossAxisAlignment.stretch,
-          children: [
-            // ── Logo (jika ada) ──────────────────────────────────────────
-            if (logoImage != null) ...[
-              pw.Center(
-                child: pw.Image(logoImage, width: 60, height: 60,
-                    fit: pw.BoxFit.contain),
-              ),
-              pw.SizedBox(height: 4),
-            ],
+      final pdfBytes = await ReceiptPdfBuilder.build(
+        storeName: storeName,
+        storeAddress: storeAddress,
+        storePhone: storePhone,
+        storeNote: storeNote,
+        invoiceNumber: widget.tx.invoiceNumber,
+        date: widget.tx.createdAt.toLocal(),
+        paymentMethodLabel: _methodLabel(widget.tx.paymentMethod),
+        kasirName: widget.tx.kasirName,
+        customerName: _customerName,
+        items: items,
+        discount: widget.tx.discountAmount,
+        tax: widget.tx.taxAmount,
+        taxPercent: taxPercent,
+        total: widget.tx.total,
+        amountPaid: widget.tx.amountPaid,
+        change: widget.tx.change,
+        receiptSize: settings.receiptSize,
+        logoImage: logoImage,
+        footerLogoImage: footerLogoImage,
+      );
 
-            // ── Header Toko ──────────────────────────────────────────────
-            pw.Text(storeName,
-                style: pw.TextStyle(
-                    fontSize: fontSizeLg + 2,
-                    fontWeight: pw.FontWeight.bold),
-                textAlign: pw.TextAlign.center),
-            if (storeAddress.isNotEmpty) ...[
-              pw.SizedBox(height: 2),
-              pw.Text(storeAddress,
-                  style: const pw.TextStyle(fontSize: fontSizeSm),
-                  textAlign: pw.TextAlign.center),
-            ],
-            if (storePhone.isNotEmpty) ...[
-              pw.SizedBox(height: 1),
-              pw.Text('Telp: $storePhone',
-                  style: const pw.TextStyle(fontSize: fontSizeSm),
-                  textAlign: pw.TextAlign.center),
-            ],
-            pw.SizedBox(height: 4),
-            pw.Text(divider,
-                style: const pw.TextStyle(fontSize: fontSizeSm),
-                textAlign: pw.TextAlign.center),
-            pw.SizedBox(height: 3),
-
-            // ── Info Invoice ─────────────────────────────────────────────
-            row('No', ': ${widget.tx.invoiceNumber}'),
-            pw.SizedBox(height: 2),
-            row('Tgl', ': $dateStr'),
-            pw.SizedBox(height: 2),
-            row('Metode', ': ${_methodLabel(widget.tx.paymentMethod)}'),
-            pw.SizedBox(height: 3),
-            pw.Text(divider,
-                style: const pw.TextStyle(fontSize: fontSizeSm),
-                textAlign: pw.TextAlign.center),
-            pw.SizedBox(height: 3),
-
-            // ── Item List ────────────────────────────────────────────────
-            ..._items.map((item) => pw.Padding(
-              padding: const pw.EdgeInsets.only(bottom: 4),
-              child: pw.Column(
-                crossAxisAlignment: pw.CrossAxisAlignment.start,
-                children: [
-                  pw.Text(item.productName,
-                      style: pw.TextStyle(
-                          fontSize: fontSize,
-                          fontWeight: pw.FontWeight.bold)),
-                  pw.Row(
-                    mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                    children: [
-                      pw.Text(
-                        '  ${item.quantity} x ${CurrencyFormatter.format(item.price)}',
-                        style: const pw.TextStyle(fontSize: fontSizeSm)),
-                      pw.Text(
-                        CurrencyFormatter.format(item.subtotal),
-                        style: pw.TextStyle(
-                            fontSize: fontSize,
-                            fontWeight: pw.FontWeight.bold)),
-                    ],
-                  ),
-                ],
-              ),
-            )),
-
-            pw.Text(divider,
-                style: const pw.TextStyle(fontSize: fontSizeSm),
-                textAlign: pw.TextAlign.center),
-            pw.SizedBox(height: 3),
-
-            // ── Total ────────────────────────────────────────────────────
-            row('TOTAL', CurrencyFormatter.format(widget.tx.total),
-                bold: true),
-
-            pw.SizedBox(height: 6),
-            pw.Text(dividerDash,
-                style: const pw.TextStyle(fontSize: fontSizeSm),
-                textAlign: pw.TextAlign.center),
-            pw.SizedBox(height: 4),
-
-            // ── Footer ───────────────────────────────────────────────────
-            pw.Text(
-              storeNote.isNotEmpty
-                  ? storeNote
-                  : 'Terima kasih sudah berbelanja!',
-              style: pw.TextStyle(
-                  fontSize: fontSize, fontWeight: pw.FontWeight.bold),
-              textAlign: pw.TextAlign.center),
-            pw.SizedBox(height: 2),
-            pw.Text('Simpan struk ini sebagai bukti pembelian',
-                style: const pw.TextStyle(fontSize: fontSizeSm),
-                textAlign: pw.TextAlign.center),
-          ],
-        ),
-      ));
-
-      final pdfBytes = await doc.save();
       final dir  = await getTemporaryDirectory();
       final file = File('${dir.path}/${widget.tx.invoiceNumber}.pdf');
       await file.writeAsBytes(pdfBytes);

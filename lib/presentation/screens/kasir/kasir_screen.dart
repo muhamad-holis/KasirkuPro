@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:drift/drift.dart' show Value;
-import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'dart:io';
 import 'package:path_provider/path_provider.dart';
@@ -18,6 +17,7 @@ import '../../../core/utils/sound_service.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/currency.dart';
 import '../../../core/utils/responsive.dart';
+import '../../../core/utils/receipt_pdf_builder.dart';
 import '../../providers/kasir_provider.dart';
 import '../../providers/products_provider.dart';
 import '../../providers/database_provider.dart';
@@ -3167,6 +3167,7 @@ class _PaymentSheetState extends ConsumerState<_PaymentSheet> {
         // Solusi: ambil navigator dari root context terlebih dahulu,
         // lalu pop sheet, lalu tampilkan dialog menggunakan navigator tersebut.
         final kasirName = ref.read(authProvider)?.name;
+        final customerName = _selectedCustomer?.name;
         final nav = Navigator.of(context);
         nav.pop(); // Tutup PaymentSheet
 
@@ -3174,8 +3175,8 @@ class _PaymentSheetState extends ConsumerState<_PaymentSheet> {
         // baru tampilkan dialog sukses di atas halaman Kasir.
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (nav.context.mounted) {
-            _showSuccessDialog(
-                nav.context, invoiceNumber, cart, amountPaid, kasirName);
+            _showSuccessDialog(nav.context, invoiceNumber, cart, amountPaid,
+                kasirName, customerName);
           }
         });
       }
@@ -3197,6 +3198,7 @@ class _PaymentSheetState extends ConsumerState<_PaymentSheet> {
     KasirState cart,
     double amountPaid,
     String? kasirName,
+    String? customerName,
   ) {
     final change = amountPaid - cart.total;
     showDialog(
@@ -3211,6 +3213,7 @@ class _PaymentSheetState extends ConsumerState<_PaymentSheet> {
           change: change,
           paymentMethod: _method,
           kasirName: kasirName,
+          customerName: customerName,
         ),
       ),
     );
@@ -3226,6 +3229,7 @@ class _SuccessDialog extends ConsumerStatefulWidget {
   final double change;
   final String paymentMethod;
   final String? kasirName;
+  final String? customerName;
 
   const _SuccessDialog({
     required this.invoiceNumber,
@@ -3234,6 +3238,7 @@ class _SuccessDialog extends ConsumerStatefulWidget {
     required this.change,
     required this.paymentMethod,
     this.kasirName,
+    this.customerName,
   });
 
   @override
@@ -3444,6 +3449,25 @@ class _SuccessDialogState extends ConsumerState<_SuccessDialog> {
     }
   }
 
+  // ── PERUBAHAN #10: loader logo footer permanen KasirKu Pro ─────────────────
+  // Berbeda dengan _loadLogoImage di atas, loader ini SELALU memakai
+  // assets/images/app_icon.png dan TIDAK pernah memakai logo custom toko.
+  Future<img.Image?> _loadFooterAppIcon({int maxWidth = 90}) async {
+    try {
+      final ByteData data =
+          await rootBundle.load('assets/images/app_icon.png');
+      final Uint8List bytes = data.buffer.asUint8List();
+      var original = img.decodeImage(bytes);
+      if (original == null) return null;
+      if (original.width > maxWidth) {
+        original = img.copyResize(original, width: maxWidth);
+      }
+      return img.grayscale(original);
+    } catch (_) {
+      return null;
+    }
+  }
+
   Future<void> _doPrint() async {
     final settings    = ref.read(storeSettingsProvider);
     final storeName   = settings.storeName.isEmpty ? 'KasirKu' : settings.storeName;
@@ -3596,6 +3620,11 @@ class _SuccessDialogState extends ConsumerState<_SuccessDialog> {
     }
   }
 
+  // ── PERUBAHAN: _buildPdf sekarang hanya menyiapkan data & memanggil
+  // ReceiptPdfBuilder (lib/core/utils/receipt_pdf_builder.dart) untuk urusan
+  // layout/tampilan. Semua angka (subtotal/diskon/pajak/total/kembali) tetap
+  // berasal dari widget.cart / widget.amountPaid / widget.change apa adanya
+  // — TIDAK ada perhitungan ulang di sini maupun di builder.
   Future<Uint8List> _buildPdf(String storeName, String storeAddress) async {
     await initializeDateFormatting('id', null);
     final settings   = ref.read(storeSettingsProvider);
@@ -3603,11 +3632,7 @@ class _SuccessDialogState extends ConsumerState<_SuccessDialog> {
     final storeNote  = settings.storeNote ?? '';
     final logoMaxWidth = settings.receiptSize == '80mm' ? 300 : 200;
 
-    final doc = pw.Document();
-    final now = DateTime.now();
-    final dateStr = DateFormat('dd/MM/yyyy HH:mm', 'id').format(now);
-
-    // Load logo jika aktif
+    // Logo header: custom (mengikuti Pengaturan > Struk), opsional.
     pw.MemoryImage? logoImage;
     if (settings.showLogo) {
       final logoImg = await _loadLogoImage(logoMaxWidth);
@@ -3616,151 +3641,43 @@ class _SuccessDialogState extends ConsumerState<_SuccessDialog> {
       }
     }
 
-    const double fontSize    = 8;
-    const double fontSizeSm  = 7;
-    const double fontSizeLg  = 10;
-    const String divider     = '--------------------------------';
-    const String dividerDash = '- - - - - - - - - - - - - - - -';
+    // Logo footer: PERMANEN, selalu assets/images/app_icon.png.
+    pw.MemoryImage? footerLogoImage;
+    final footerIcon = await _loadFooterAppIcon();
+    if (footerIcon != null) {
+      footerLogoImage = pw.MemoryImage(img.encodePng(footerIcon));
+    }
 
-    pw.Widget _row(String left, String right, {bool bold = false}) =>
-        pw.Row(
-          mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-          children: [
-            pw.Text(left,
-                style: pw.TextStyle(
-                    fontSize: fontSize,
-                    fontWeight: bold ? pw.FontWeight.bold : pw.FontWeight.normal)),
-            pw.Text(right,
-                style: pw.TextStyle(
-                    fontSize: fontSize,
-                    fontWeight: bold ? pw.FontWeight.bold : pw.FontWeight.normal)),
-          ],
-        );
+    final items = widget.cart.items
+        .map((item) => ReceiptPdfItem(
+              name: item.product.name,
+              quantity: item.quantity,
+              price: item.product.sellPrice,
+              subtotal: item.subtotal,
+            ))
+        .toList();
 
-    doc.addPage(pw.Page(
-      pageFormat: PdfPageFormat.roll57,
-      margin: const pw.EdgeInsets.symmetric(horizontal: 6, vertical: 10),
-      build: (pw.Context ctx) {
-        return pw.Column(
-          crossAxisAlignment: pw.CrossAxisAlignment.stretch,
-          children: [
-            // ── Logo (jika ada) ──────────────────────────────────────────
-            if (logoImage != null) ...[
-              pw.Center(
-                child: pw.Image(logoImage, width: 60, height: 60,
-                    fit: pw.BoxFit.contain),
-              ),
-              pw.SizedBox(height: 4),
-            ],
-
-            // ── Header Toko ──────────────────────────────────────────────
-            pw.Text(storeName,
-                style: pw.TextStyle(
-                    fontSize: fontSizeLg + 2,
-                    fontWeight: pw.FontWeight.bold),
-                textAlign: pw.TextAlign.center),
-            if (storeAddress.isNotEmpty) ...[
-              pw.SizedBox(height: 2),
-              pw.Text(storeAddress,
-                  style: const pw.TextStyle(fontSize: fontSizeSm),
-                  textAlign: pw.TextAlign.center),
-            ],
-            if (storePhone.isNotEmpty) ...[
-              pw.SizedBox(height: 1),
-              pw.Text('Telp: $storePhone',
-                  style: const pw.TextStyle(fontSize: fontSizeSm),
-                  textAlign: pw.TextAlign.center),
-            ],
-            pw.SizedBox(height: 4),
-            pw.Text(divider,
-                style: const pw.TextStyle(fontSize: fontSizeSm),
-                textAlign: pw.TextAlign.center),
-            pw.SizedBox(height: 3),
-
-            // ── Info Invoice ─────────────────────────────────────────────
-            _row('No', ': ${widget.invoiceNumber}'),
-            pw.SizedBox(height: 2),
-            _row('Tgl', ': $dateStr'),
-            pw.SizedBox(height: 2),
-            _row('Metode', ': ${_methodLabel(widget.paymentMethod)}'),
-            pw.SizedBox(height: 3),
-            pw.Text(divider,
-                style: const pw.TextStyle(fontSize: fontSizeSm),
-                textAlign: pw.TextAlign.center),
-            pw.SizedBox(height: 3),
-
-            // ── Item List ────────────────────────────────────────────────
-            ...widget.cart.items.map((item) => pw.Padding(
-              padding: const pw.EdgeInsets.only(bottom: 4),
-              child: pw.Column(
-                crossAxisAlignment: pw.CrossAxisAlignment.start,
-                children: [
-                  pw.Text(item.product.name,
-                      style: pw.TextStyle(
-                          fontSize: fontSize,
-                          fontWeight: pw.FontWeight.bold)),
-                  pw.Row(
-                    mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                    children: [
-                      pw.Text(
-                        '  ${item.quantity} x ${CurrencyFormatter.format(item.product.sellPrice)}',
-                        style: const pw.TextStyle(fontSize: fontSizeSm)),
-                      pw.Text(
-                        CurrencyFormatter.format(item.subtotal),
-                        style: pw.TextStyle(
-                            fontSize: fontSize,
-                            fontWeight: pw.FontWeight.bold)),
-                    ],
-                  ),
-                ],
-              ),
-            )),
-
-            pw.Text(divider,
-                style: const pw.TextStyle(fontSize: fontSizeSm),
-                textAlign: pw.TextAlign.center),
-            pw.SizedBox(height: 3),
-
-            // ── Summary ──────────────────────────────────────────────────
-            if (widget.cart.discountTotal > 0) ...[
-              _row('Diskon', '- ${CurrencyFormatter.format(widget.cart.discountTotal)}'),
-              pw.SizedBox(height: 2),
-            ],
-            if (widget.cart.taxAmount > 0) ...[
-              _row('Pajak (${widget.cart.taxPercent.toStringAsFixed(0)}%)',
-                  '+ ${CurrencyFormatter.format(widget.cart.taxAmount)}'),
-              pw.SizedBox(height: 2),
-            ],
-            _row('TOTAL', CurrencyFormatter.format(widget.cart.total), bold: true),
-            pw.SizedBox(height: 2),
-            _row('Dibayar', CurrencyFormatter.format(widget.amountPaid)),
-            if (widget.change > 0) ...[
-              pw.SizedBox(height: 2),
-              _row('Kembali', CurrencyFormatter.format(widget.change), bold: true),
-            ],
-
-            pw.SizedBox(height: 6),
-            pw.Text(dividerDash,
-                style: const pw.TextStyle(fontSize: fontSizeSm),
-                textAlign: pw.TextAlign.center),
-            pw.SizedBox(height: 4),
-
-            // ── Footer ───────────────────────────────────────────────────
-            pw.Text(
-              storeNote.isNotEmpty ? storeNote : 'Terima kasih sudah berbelanja!',
-              style: pw.TextStyle(
-                  fontSize: fontSize, fontWeight: pw.FontWeight.bold),
-              textAlign: pw.TextAlign.center),
-            pw.SizedBox(height: 2),
-            pw.Text('Simpan struk ini sebagai bukti pembelian',
-                style: const pw.TextStyle(fontSize: fontSizeSm),
-                textAlign: pw.TextAlign.center),
-          ],
-        );
-      },
-    ));
-
-    return doc.save();
+    return ReceiptPdfBuilder.build(
+      storeName: storeName,
+      storeAddress: storeAddress,
+      storePhone: storePhone,
+      storeNote: storeNote,
+      invoiceNumber: widget.invoiceNumber,
+      date: DateTime.now(),
+      paymentMethodLabel: _methodLabel(widget.paymentMethod),
+      kasirName: widget.kasirName,
+      customerName: widget.customerName,
+      items: items,
+      discount: widget.cart.discountTotal,
+      tax: widget.cart.taxAmount,
+      taxPercent: widget.cart.taxPercent,
+      total: widget.cart.total,
+      amountPaid: widget.amountPaid,
+      change: widget.change,
+      receiptSize: settings.receiptSize,
+      logoImage: logoImage,
+      footerLogoImage: footerLogoImage,
+    );
   }
 
   String _methodLabel(String method) {

@@ -8,6 +8,11 @@ class CustomersDao extends DatabaseAccessor<AppDatabase>
   // Semua pelanggan (future)
   Future<List<Customer>> getAllCustomers() => select(customers).get();
 
+  // ✅ Ambil satu pelanggan by id (dipakai untuk menampilkan nama pelanggan
+  // pada struk PDF — lihat receipt_pdf_builder.dart)
+  Future<Customer?> getCustomerById(int id) =>
+      (select(customers)..where((c) => c.id.equals(id))).getSingleOrNull();
+
   // Stream biasa
   Stream<List<Customer>> watchCustomers() => select(customers).watch();
 
