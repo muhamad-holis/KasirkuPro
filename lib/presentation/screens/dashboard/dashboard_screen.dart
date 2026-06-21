@@ -377,8 +377,8 @@ class _Header extends ConsumerWidget {
                                   ? settings.storeName
                                   : 'KasirKu',
                               style: const TextStyle(
-                                  fontWeight: FontWeight.w700,
-                                  fontSize: 15,
+                                  fontWeight: FontWeight.w800,
+                                  fontSize: 18,
                                   color: Colors.white),
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,

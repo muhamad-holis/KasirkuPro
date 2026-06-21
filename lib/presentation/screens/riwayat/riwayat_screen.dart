@@ -944,187 +944,152 @@ class _CetakSheetState extends ConsumerState<_CetakSheet> {
       final settings    = ref.read(storeSettingsProvider);
       final storeName   = settings.storeName.isEmpty ? 'KasirKu' : settings.storeName;
       final storeAddress = settings.storeAddress ?? '';
+      final storePhone  = settings.storePhone ?? '';
+      final storeNote   = settings.storeNote ?? '';
+      final logoMaxWidth = settings.receiptSize == '80mm' ? 300 : 200;
 
-      const primaryColor = PdfColor.fromInt(0xFF0D9488);
-      const greyColor    = PdfColor.fromInt(0xFF6B7280);
-      const lightGrey    = PdfColor.fromInt(0xFFF3F4F6);
+      // Load logo jika aktif
+      pw.MemoryImage? logoImage;
+      if (settings.showLogo) {
+        final logoImg = await _loadLogoImage(logoMaxWidth);
+        if (logoImg != null) {
+          logoImage = pw.MemoryImage(img.encodePng(logoImg));
+        }
+      }
 
-      final doc = pw.Document();
-      final dateStr = DateFormat('dd MMMM yyyy, HH:mm', 'id')
+      final doc     = pw.Document();
+      final dateStr = DateFormat('dd/MM/yyyy HH:mm', 'id')
           .format(widget.tx.createdAt.toLocal());
+
+      const double fontSize    = 8;
+      const double fontSizeSm  = 7;
+      const double fontSizeLg  = 10;
+      const String divider     = '--------------------------------';
+      const String dividerDash = '- - - - - - - - - - - - - - - -';
+
+      pw.Widget row(String left, String right, {bool bold = false}) =>
+          pw.Row(
+            mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+            children: [
+              pw.Text(left,
+                  style: pw.TextStyle(
+                      fontSize: fontSize,
+                      fontWeight: bold
+                          ? pw.FontWeight.bold
+                          : pw.FontWeight.normal)),
+              pw.Text(right,
+                  style: pw.TextStyle(
+                      fontSize: fontSize,
+                      fontWeight: bold
+                          ? pw.FontWeight.bold
+                          : pw.FontWeight.normal)),
+            ],
+          );
 
       doc.addPage(pw.Page(
         pageFormat: PdfPageFormat.roll57,
-        margin: const pw.EdgeInsets.all(8),
+        margin: const pw.EdgeInsets.symmetric(horizontal: 6, vertical: 10),
         build: (ctx) => pw.Column(
           crossAxisAlignment: pw.CrossAxisAlignment.stretch,
           children: [
-            // Header toko
-            pw.Container(
-              padding: const pw.EdgeInsets.symmetric(vertical: 10),
-              decoration: const pw.BoxDecoration(
-                color: primaryColor,
-                borderRadius: pw.BorderRadius.all(pw.Radius.circular(8)),
+            // ── Logo (jika ada) ──────────────────────────────────────────
+            if (logoImage != null) ...[
+              pw.Center(
+                child: pw.Image(logoImage, width: 60, height: 60,
+                    fit: pw.BoxFit.contain),
               ),
-              child: pw.Column(children: [
-                pw.Text(storeName,
-                    style: pw.TextStyle(
-                        fontSize: 14,
-                        fontWeight: pw.FontWeight.bold,
-                        color: PdfColors.white),
-                    textAlign: pw.TextAlign.center),
-                if (storeAddress.isNotEmpty) ...[
-                  pw.SizedBox(height: 2),
-                  pw.Text(storeAddress,
-                      style: const pw.TextStyle(
-                          fontSize: 8, color: PdfColors.white),
-                      textAlign: pw.TextAlign.center),
-                ],
-              ]),
-            ),
-            pw.SizedBox(height: 8),
+              pw.SizedBox(height: 4),
+            ],
 
-            // Info invoice
-            pw.Container(
-              padding: const pw.EdgeInsets.all(8),
-              decoration: pw.BoxDecoration(
-                color: lightGrey,
-                borderRadius: const pw.BorderRadius.all(pw.Radius.circular(6)),
-              ),
-              child: pw.Column(children: [
-                pw.Row(
-                  mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                  children: [
-                    pw.Text('No. Invoice',
-                        style: const pw.TextStyle(
-                            fontSize: 8, color: greyColor)),
-                    pw.Text(widget.tx.invoiceNumber,
-                        style: pw.TextStyle(
-                            fontSize: 8, fontWeight: pw.FontWeight.bold)),
-                  ],
-                ),
-                pw.SizedBox(height: 3),
-                pw.Row(
-                  mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                  children: [
-                    pw.Text('Tanggal',
-                        style: const pw.TextStyle(
-                            fontSize: 8, color: greyColor)),
-                    pw.Text(dateStr,
-                        style: const pw.TextStyle(fontSize: 8)),
-                  ],
-                ),
-                pw.SizedBox(height: 3),
-                pw.Row(
-                  mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                  children: [
-                    pw.Text('Metode',
-                        style: const pw.TextStyle(
-                            fontSize: 8, color: greyColor)),
-                    pw.Text(_methodLabel(widget.tx.paymentMethod),
-                        style: pw.TextStyle(
-                            fontSize: 8, fontWeight: pw.FontWeight.bold)),
-                  ],
-                ),
-              ]),
-            ),
-            pw.SizedBox(height: 8),
-
-            // Item rows
-            pw.Container(
-              padding: const pw.EdgeInsets.symmetric(
-                  horizontal: 6, vertical: 4),
-              decoration: const pw.BoxDecoration(color: primaryColor),
-              child: pw.Row(children: [
-                pw.Expanded(flex: 5,
-                    child: pw.Text('Produk',
-                        style: pw.TextStyle(
-                            fontSize: 8,
-                            fontWeight: pw.FontWeight.bold,
-                            color: PdfColors.white))),
-                pw.Expanded(flex: 2,
-                    child: pw.Text('Qty',
-                        style: pw.TextStyle(
-                            fontSize: 8,
-                            fontWeight: pw.FontWeight.bold,
-                            color: PdfColors.white),
-                        textAlign: pw.TextAlign.center)),
-                pw.Expanded(flex: 3,
-                    child: pw.Text('Subtotal',
-                        style: pw.TextStyle(
-                            fontSize: 8,
-                            fontWeight: pw.FontWeight.bold,
-                            color: PdfColors.white),
-                        textAlign: pw.TextAlign.right)),
-              ]),
-            ),
-
-            ..._items.asMap().entries.map((e) {
-              final bg = e.key.isOdd ? PdfColors.white : lightGrey;
-              final item = e.value;
-              return pw.Container(
-                padding: const pw.EdgeInsets.symmetric(
-                    horizontal: 6, vertical: 4),
-                color: bg,
-                child: pw.Row(children: [
-                  pw.Expanded(flex: 5,
-                      child: pw.Text(item.productName,
-                          style: pw.TextStyle(
-                              fontSize: 8,
-                              fontWeight: pw.FontWeight.bold))),
-                  pw.Expanded(flex: 2,
-                      child: pw.Text('${item.quantity}',
-                          style: const pw.TextStyle(fontSize: 8),
-                          textAlign: pw.TextAlign.center)),
-                  pw.Expanded(flex: 3,
-                      child: pw.Text(
-                          CurrencyFormatter.format(item.subtotal),
-                          style: const pw.TextStyle(fontSize: 8),
-                          textAlign: pw.TextAlign.right)),
-                ]),
-              );
-            }),
-
-            pw.Divider(thickness: 0.5),
-
-            // Total
-            pw.Padding(
-              padding: const pw.EdgeInsets.symmetric(horizontal: 6),
-              child: pw.Container(
-                padding: const pw.EdgeInsets.symmetric(
-                    vertical: 6, horizontal: 8),
-                decoration: const pw.BoxDecoration(
-                  color: primaryColor,
-                  borderRadius:
-                      pw.BorderRadius.all(pw.Radius.circular(6)),
-                ),
-                child: pw.Row(
-                  mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                  children: [
-                    pw.Text('TOTAL',
-                        style: pw.TextStyle(
-                            fontSize: 10,
-                            fontWeight: pw.FontWeight.bold,
-                            color: PdfColors.white)),
-                    pw.Text(CurrencyFormatter.format(widget.tx.total),
-                        style: pw.TextStyle(
-                            fontSize: 10,
-                            fontWeight: pw.FontWeight.bold,
-                            color: PdfColors.white)),
-                  ],
-                ),
-              ),
-            ),
-
-            pw.SizedBox(height: 10),
-            pw.Divider(
-                thickness: 0.5, borderStyle: pw.BorderStyle.dashed),
-            pw.SizedBox(height: 6),
-            pw.Text('Terima kasih telah berbelanja!',
+            // ── Header Toko ──────────────────────────────────────────────
+            pw.Text(storeName,
                 style: pw.TextStyle(
-                    fontSize: 9,
-                    fontWeight: pw.FontWeight.bold,
-                    color: primaryColor),
+                    fontSize: fontSizeLg + 2,
+                    fontWeight: pw.FontWeight.bold),
+                textAlign: pw.TextAlign.center),
+            if (storeAddress.isNotEmpty) ...[
+              pw.SizedBox(height: 2),
+              pw.Text(storeAddress,
+                  style: const pw.TextStyle(fontSize: fontSizeSm),
+                  textAlign: pw.TextAlign.center),
+            ],
+            if (storePhone.isNotEmpty) ...[
+              pw.SizedBox(height: 1),
+              pw.Text('Telp: $storePhone',
+                  style: const pw.TextStyle(fontSize: fontSizeSm),
+                  textAlign: pw.TextAlign.center),
+            ],
+            pw.SizedBox(height: 4),
+            pw.Text(divider,
+                style: const pw.TextStyle(fontSize: fontSizeSm),
+                textAlign: pw.TextAlign.center),
+            pw.SizedBox(height: 3),
+
+            // ── Info Invoice ─────────────────────────────────────────────
+            row('No', ': ${widget.tx.invoiceNumber}'),
+            pw.SizedBox(height: 2),
+            row('Tgl', ': $dateStr'),
+            pw.SizedBox(height: 2),
+            row('Metode', ': ${_methodLabel(widget.tx.paymentMethod)}'),
+            pw.SizedBox(height: 3),
+            pw.Text(divider,
+                style: const pw.TextStyle(fontSize: fontSizeSm),
+                textAlign: pw.TextAlign.center),
+            pw.SizedBox(height: 3),
+
+            // ── Item List ────────────────────────────────────────────────
+            ..._items.map((item) => pw.Padding(
+              padding: const pw.EdgeInsets.only(bottom: 4),
+              child: pw.Column(
+                crossAxisAlignment: pw.CrossAxisAlignment.start,
+                children: [
+                  pw.Text(item.productName,
+                      style: pw.TextStyle(
+                          fontSize: fontSize,
+                          fontWeight: pw.FontWeight.bold)),
+                  pw.Row(
+                    mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                    children: [
+                      pw.Text(
+                        '  ${item.quantity} x ${CurrencyFormatter.format(item.price)}',
+                        style: const pw.TextStyle(fontSize: fontSizeSm)),
+                      pw.Text(
+                        CurrencyFormatter.format(item.subtotal),
+                        style: pw.TextStyle(
+                            fontSize: fontSize,
+                            fontWeight: pw.FontWeight.bold)),
+                    ],
+                  ),
+                ],
+              ),
+            )),
+
+            pw.Text(divider,
+                style: const pw.TextStyle(fontSize: fontSizeSm),
+                textAlign: pw.TextAlign.center),
+            pw.SizedBox(height: 3),
+
+            // ── Total ────────────────────────────────────────────────────
+            row('TOTAL', CurrencyFormatter.format(widget.tx.total),
+                bold: true),
+
+            pw.SizedBox(height: 6),
+            pw.Text(dividerDash,
+                style: const pw.TextStyle(fontSize: fontSizeSm),
+                textAlign: pw.TextAlign.center),
+            pw.SizedBox(height: 4),
+
+            // ── Footer ───────────────────────────────────────────────────
+            pw.Text(
+              storeNote.isNotEmpty
+                  ? storeNote
+                  : 'Terima kasih sudah berbelanja!',
+              style: pw.TextStyle(
+                  fontSize: fontSize, fontWeight: pw.FontWeight.bold),
+              textAlign: pw.TextAlign.center),
+            pw.SizedBox(height: 2),
+            pw.Text('Simpan struk ini sebagai bukti pembelian',
+                style: const pw.TextStyle(fontSize: fontSizeSm),
                 textAlign: pw.TextAlign.center),
           ],
         ),

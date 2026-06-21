@@ -233,82 +233,16 @@ class _LainnyaHomeScreen extends ConsumerWidget {
       backgroundColor: isDark ? AppColors.darkBg : AppColors.bg,
       body: CustomScrollView(
         slivers: [
-          // ── Header (Berwarna Hijau) ───────────────────────────────────────────
-          SliverToBoxAdapter(
-            child: Container(
-              padding: EdgeInsets.only(
-                top: MediaQuery.of(context).padding.top + 20, // Menghindari status bar
-                left: 20, 
-                right: 20, 
-                bottom: 24
-              ),
-              decoration: BoxDecoration(
-                color: headerBg,
-                borderRadius: const BorderRadius.vertical(
-                  bottom: Radius.circular(24),
-                ),
-              ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text('Menu',
-                          style: TextStyle(
-                              fontSize: 22,
-                              fontWeight: FontWeight.w800,
-                              color: Colors.white)),
-                      const SizedBox(height: 4),
-                      if (aktifUser != null)
-                        Row(children: [
-                          const Icon(Icons.person_rounded,
-                              size: 13, color: Colors.white),
-                          const SizedBox(width: 4),
-                          Text(aktifUser.name,
-                              style: const TextStyle(
-                                  fontSize: 12, 
-                                  color: Colors.white,
-                                  fontWeight: FontWeight.w600)),
-                          const SizedBox(width: 6),
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 6, vertical: 1),
-                            decoration: BoxDecoration(
-                              color: Colors.white.withOpacity(0.2),
-                              borderRadius: BorderRadius.circular(20),
-                            ),
-                            child: Text(isAdmin ? 'Admin' : 'Kasir',
-                                style: const TextStyle(
-                                    fontSize: 10,
-                                    fontWeight: FontWeight.w700,
-                                    color: Colors.white)),
-                          ),
-                        ]),
-                    ],
-                  ),
-                  // Tombol logout dengan warna kontras
-                  GestureDetector(
-                    onTap: () => _doLogout(context, ref),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 12, vertical: 8),
-                      decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.15),
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      child: const Row(children: [
-                        Icon(Icons.logout_rounded,
-                            size: 16, color: Colors.white),
-                        SizedBox(width: 4),
-                        Text('Logout', style: TextStyle(
-                            fontSize: 12, color: Colors.white,
-                            fontWeight: FontWeight.w700)),
-                      ]),
-                    ),
-                  ),
-                ],
-              ),
+          // ── Header Sticky ─────────────────────────────────────────────────────
+          SliverPersistentHeader(
+            pinned: true,
+            delegate: _MenuHeaderDelegate(
+              isDark: isDark,
+              headerBg: headerBg,
+              aktifUser: aktifUser,
+              isAdmin: isAdmin,
+              onLogout: () => _doLogout(context, ref),
+              topPadding: MediaQuery.of(context).padding.top,
             ),
           ),
 
@@ -481,6 +415,131 @@ class _LainnyaHomeScreen extends ConsumerWidget {
 }
 
 // ─── Card menu Lainnya ────────────────────────────────────────────────────────
+
+// ─── Menu Header Delegate (Sticky) ───────────────────────────────────────────
+
+class _MenuHeaderDelegate extends SliverPersistentHeaderDelegate {
+  final bool isDark;
+  final Color headerBg;
+  final dynamic aktifUser;
+  final bool isAdmin;
+  final VoidCallback onLogout;
+  final double topPadding;
+
+  const _MenuHeaderDelegate({
+    required this.isDark,
+    required this.headerBg,
+    required this.aktifUser,
+    required this.isAdmin,
+    required this.onLogout,
+    required this.topPadding,
+  });
+
+  double get _expandedHeight => topPadding + 90;
+
+  @override
+  double get minExtent => _expandedHeight;
+
+  @override
+  double get maxExtent => _expandedHeight;
+
+  @override
+  bool shouldRebuild(_MenuHeaderDelegate old) =>
+      old.isDark != isDark ||
+      old.aktifUser != aktifUser ||
+      old.isAdmin != isAdmin;
+
+  @override
+  Widget build(
+      BuildContext context, double shrinkOffset, bool overlapsContent) {
+    return Container(
+      padding: EdgeInsets.only(
+        top: topPadding + 20,
+        left: 20,
+        right: 20,
+        bottom: 20,
+      ),
+      decoration: BoxDecoration(
+        color: headerBg,
+        borderRadius: const BorderRadius.vertical(
+          bottom: Radius.circular(24),
+        ),
+        boxShadow: shrinkOffset > 0
+            ? [
+                BoxShadow(
+                    color: Colors.black.withOpacity(0.12),
+                    blurRadius: 8,
+                    offset: const Offset(0, 4))
+              ]
+            : [],
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text('Menu',
+                  style: TextStyle(
+                      fontSize: 22,
+                      fontWeight: FontWeight.w800,
+                      color: Colors.white)),
+              const SizedBox(height: 4),
+              if (aktifUser != null)
+                Row(children: [
+                  const Icon(Icons.person_rounded,
+                      size: 13, color: Colors.white70),
+                  const SizedBox(width: 4),
+                  Text(aktifUser.name,
+                      style: const TextStyle(
+                          fontSize: 12,
+                          color: Colors.white,
+                          fontWeight: FontWeight.w600)),
+                  const SizedBox(width: 6),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 6, vertical: 1),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.2),
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Text(isAdmin ? 'Admin' : 'Kasir',
+                        style: const TextStyle(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w700,
+                            color: Colors.white)),
+                  ),
+                ]),
+            ],
+          ),
+          GestureDetector(
+            onTap: onLogout,
+            child: Container(
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.15),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: const Row(children: [
+                Icon(Icons.logout_rounded, size: 16, color: Colors.white),
+                SizedBox(width: 4),
+                Text('Logout',
+                    style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.white,
+                        fontWeight: FontWeight.w700)),
+              ]),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 
 class _MenuCard extends StatelessWidget {
   final IconData icon;
