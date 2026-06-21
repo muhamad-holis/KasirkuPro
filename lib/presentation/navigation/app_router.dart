@@ -12,6 +12,7 @@ import '../screens/notifikasi/notifikasi_screen.dart';
 import '../screens/kas/kas_screen.dart';
 import '../screens/login/login_screen.dart'; 
 import '../screens/supplier/supplier_screen.dart';
+import '../screens/riwayat/riwayat_screen.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/utils/responsive.dart';
 import '../providers/auth_provider.dart';
@@ -339,14 +340,6 @@ class _LainnyaHomeScreen extends ConsumerWidget {
                       ref.read(currentNavIndexProvider.notifier).state = 3,
                 ),
                 _MenuCard(
-                  icon: Icons.history_rounded,
-                  label: 'Riwayat Transaksi',
-                  description: 'Lihat semua transaksi',
-                  color: AppColors.info,
-                  onTap: () =>
-                      ref.read(currentNavIndexProvider.notifier).state = 1,
-                ),
-                _MenuCard(
                   icon: Icons.insert_chart_outlined_rounded,
                   label: 'Laporan Hari Ini',
                   description: 'Ringkasan penjualan',
@@ -380,6 +373,16 @@ class _LainnyaHomeScreen extends ConsumerWidget {
                       MaterialPageRoute(builder: (_) => ProviderScope(
                         parent: ProviderScope.containerOf(context),
                         child: const SupplierScreen()))),
+                ),
+                _MenuCard(
+                  icon: Icons.receipt_long_rounded,
+                  label: 'Riwayat Transaksi',
+                  description: 'Histori & cetak ulang struk',
+                  color: AppColors.success,
+                  onTap: () => Navigator.push(context,
+                      MaterialPageRoute(builder: (_) => ProviderScope(
+                        parent: ProviderScope.containerOf(context),
+                        child: const RiwayatScreen()))),
                 ),
                 _MenuCard(
                   icon: Icons.account_balance_wallet_rounded,

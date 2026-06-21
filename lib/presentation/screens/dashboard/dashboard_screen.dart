@@ -13,6 +13,7 @@ import '../../navigation/app_router.dart';
 import '../../../data/database/app_database.dart';
 import '../notifikasi/notifikasi_screen.dart';
 import '../settings/settings_screen.dart';
+import '../riwayat/riwayat_screen.dart';
 import '../kasir_management/kasir_management_screen.dart';
 import '../login/login_screen.dart';
 
@@ -828,7 +829,10 @@ class _QuickActions extends ConsumerWidget {
           }),
       _QA(icon: Icons.history_rounded, label: 'Riwayat Transaksi',
           color: AppColors.info,
-          onTap: () => ref.read(currentNavIndexProvider.notifier).state = 1),
+          onTap: () => Navigator.push(context,
+              MaterialPageRoute(builder: (_) => ProviderScope(
+                parent: ProviderScope.containerOf(context),
+                child: const RiwayatScreen())))),
       _QA(icon: Icons.insert_chart_outlined_rounded, label: 'Laporan Hari Ini',
           color: AppColors.warning,
           onTap: () => ref.read(currentNavIndexProvider.notifier).state = 1),

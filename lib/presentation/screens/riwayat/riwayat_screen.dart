@@ -1,0 +1,1218 @@
+import 'dart:typed_data';
+import 'dart:io';
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:intl/intl.dart';
+import 'package:intl/date_symbol_data_local.dart';
+import 'package:pdf/pdf.dart';
+import 'package:pdf/widgets.dart' as pw;
+import 'package:path_provider/path_provider.dart';
+import 'package:share_plus/share_plus.dart';
+import 'package:print_bluetooth_thermal/print_bluetooth_thermal.dart';
+import 'package:esc_pos_utils_plus/esc_pos_utils_plus.dart';
+import 'package:image/image.dart' as img;
+import '../../../core/theme/app_theme.dart';
+import '../../../core/utils/currency.dart';
+import '../../../core/utils/responsive.dart';
+import '../../providers/database_provider.dart';
+import '../../providers/settings_provider.dart';
+import '../../../data/database/app_database.dart';
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Provider
+// ─────────────────────────────────────────────────────────────────────────────
+
+final _riwayatStartProvider = StateProvider<DateTime>((ref) {
+  final now = DateTime.now();
+  return DateTime(now.year, now.month, now.day).subtract(const Duration(days: 6));
+});
+
+final _riwayatEndProvider = StateProvider<DateTime>((ref) {
+  final now = DateTime.now();
+  return DateTime(now.year, now.month, now.day, 23, 59, 59);
+});
+
+final _riwayatSearchProvider = StateProvider<String>((ref) => '');
+
+final _riwayatListProvider = FutureProvider.autoDispose<List<Transaction>>((ref) async {
+  final db    = ref.watch(databaseProvider);
+  final start = ref.watch(_riwayatStartProvider);
+  final end   = ref.watch(_riwayatEndProvider);
+  return db.transactionsDao.getTransactionsByDate(start, end);
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Screen Utama
+// ─────────────────────────────────────────────────────────────────────────────
+
+class RiwayatScreen extends ConsumerStatefulWidget {
+  const RiwayatScreen({super.key});
+
+  @override
+  ConsumerState<RiwayatScreen> createState() => _RiwayatScreenState();
+}
+
+class _RiwayatScreenState extends ConsumerState<RiwayatScreen> {
+  final _searchCtrl = TextEditingController();
+
+  @override
+  void dispose() {
+    _searchCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _pickDateRange(BuildContext context) async {
+    final start = ref.read(_riwayatStartProvider);
+    final end   = ref.read(_riwayatEndProvider);
+
+    final picked = await showDateRangePicker(
+      context: context,
+      firstDate: DateTime(2020),
+      lastDate: DateTime.now(),
+      initialDateRange: DateTimeRange(start: start, end: end),
+      builder: (ctx, child) => Theme(
+        data: Theme.of(ctx).copyWith(
+          colorScheme: const ColorScheme.light(primary: AppColors.primary),
+        ),
+        child: child!,
+      ),
+    );
+    if (picked != null) {
+      ref.read(_riwayatStartProvider.notifier).state = picked.start;
+      ref.read(_riwayatEndProvider.notifier).state =
+          DateTime(picked.end.year, picked.end.month, picked.end.day, 23, 59, 59);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark     = Theme.of(context).brightness == Brightness.dark;
+    final txAsync    = ref.watch(_riwayatListProvider);
+    final start      = ref.watch(_riwayatStartProvider);
+    final end        = ref.watch(_riwayatEndProvider);
+    final query      = ref.watch(_riwayatSearchProvider).toLowerCase().trim();
+    final fmt        = DateFormat('dd/MM/yyyy');
+
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Riwayat Transaksi',
+            style: TextStyle(fontWeight: FontWeight.w700)),
+      ),
+      body: Column(
+        children: [
+          // ── Filter tanggal ──────────────────────────────────────────────
+          Container(
+            margin: const EdgeInsets.fromLTRB(12, 12, 12, 0),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            decoration: BoxDecoration(
+              color: isDark ? AppColors.darkCard : Colors.white,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                  color: isDark ? AppColors.darkBorder : AppColors.border,
+                  width: 0.5),
+            ),
+            child: Row(
+              children: [
+                const Icon(Icons.calendar_today_outlined,
+                    size: 16, color: AppColors.primary),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    '${fmt.format(start)}  →  ${fmt.format(end)}',
+                    style: const TextStyle(
+                        fontSize: 13, fontWeight: FontWeight.w600),
+                  ),
+                ),
+                GestureDetector(
+                  onTap: () => _pickDateRange(context),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 10, vertical: 5),
+                    decoration: BoxDecoration(
+                      color: AppColors.primary,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: const Text('Ubah',
+                        style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700)),
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          // ── Search ──────────────────────────────────────────────────────
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 10, 12, 0),
+            child: TextField(
+              controller: _searchCtrl,
+              onChanged: (v) =>
+                  ref.read(_riwayatSearchProvider.notifier).state = v,
+              decoration: InputDecoration(
+                hintText: 'Cari no. invoice atau metode...',
+                prefixIcon: const Icon(Icons.search, size: 20),
+                isDense: true,
+                suffixIcon: _searchCtrl.text.isNotEmpty
+                    ? IconButton(
+                        icon: const Icon(Icons.clear, size: 18),
+                        onPressed: () {
+                          _searchCtrl.clear();
+                          ref.read(_riwayatSearchProvider.notifier).state = '';
+                        },
+                      )
+                    : null,
+              ),
+            ),
+          ),
+
+          // ── List transaksi ──────────────────────────────────────────────
+          Expanded(
+            child: txAsync.when(
+              loading: () =>
+                  const Center(child: CircularProgressIndicator()),
+              error: (e, _) =>
+                  Center(child: Text('Error: $e')),
+              data: (list) {
+                // Filter by search
+                final filtered = query.isEmpty
+                    ? list
+                    : list.where((t) =>
+                        t.invoiceNumber.toLowerCase().contains(query) ||
+                        t.paymentMethod.toLowerCase().contains(query)).toList();
+
+                if (filtered.isEmpty) {
+                  return _EmptyState(isSearching: query.isNotEmpty);
+                }
+
+                // Summary omzet
+                final totalOmzet =
+                    filtered.fold<double>(0, (s, t) => s + t.total);
+
+                return Column(
+                  children: [
+                    // Banner omzet
+                    _OmzetBanner(
+                      total: totalOmzet,
+                      count: filtered.length,
+                      start: start,
+                      end: end,
+                    ),
+                    // List
+                    Expanded(
+                      child: ListView.separated(
+                        padding:
+                            const EdgeInsets.fromLTRB(12, 8, 12, 80),
+                        itemCount: filtered.length,
+                        separatorBuilder: (_, __) =>
+                            const SizedBox(height: 8),
+                        itemBuilder: (_, i) => _TrxCard(
+                          tx: filtered[i],
+                          onCetak: () =>
+                              _showCetakSheet(context, filtered[i]),
+                        ),
+                      ),
+                    ),
+                  ],
+                );
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showCetakSheet(BuildContext context, Transaction tx) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => ProviderScope(
+        parent: ProviderScope.containerOf(context),
+        child: _CetakSheet(tx: tx),
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Banner Omzet
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _OmzetBanner extends StatelessWidget {
+  final double total;
+  final int count;
+  final DateTime start;
+  final DateTime end;
+
+  const _OmzetBanner({
+    required this.total,
+    required this.count,
+    required this.start,
+    required this.end,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final fmt = DateFormat('dd/MM/yyyy');
+    return Container(
+      margin: const EdgeInsets.fromLTRB(12, 10, 12, 0),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppColors.primary,
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(children: [
+            const Icon(Icons.trending_up_rounded,
+                size: 16, color: Colors.white70),
+            const SizedBox(width: 6),
+            const Text('Total Omzet (hasil filter)',
+                style: TextStyle(fontSize: 12, color: Colors.white70)),
+          ]),
+          const SizedBox(height: 6),
+          Text(
+            CurrencyFormatter.format(total),
+            style: const TextStyle(
+                fontSize: 24,
+                fontWeight: FontWeight.w800,
+                color: Colors.white),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            '$count transaksi · ${fmt.format(start)} s/d ${fmt.format(end)}',
+            style: const TextStyle(fontSize: 12, color: Colors.white70),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Transaction Card
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _TrxCard extends ConsumerStatefulWidget {
+  final Transaction tx;
+  final VoidCallback onCetak;
+
+  const _TrxCard({required this.tx, required this.onCetak});
+
+  @override
+  ConsumerState<_TrxCard> createState() => _TrxCardState();
+}
+
+class _TrxCardState extends ConsumerState<_TrxCard> {
+  bool _expanded = false;
+  List<TransactionItem>? _items;
+  bool _loadingItems = false;
+
+  Future<void> _loadItems() async {
+    if (_items != null) return;
+    setState(() => _loadingItems = true);
+    final db = ref.read(databaseProvider);
+    final items = await db.transactionsDao.getTransactionItems(widget.tx.id);
+    if (mounted) setState(() { _items = items; _loadingItems = false; });
+  }
+
+  String _methodLabel(String method) {
+    switch (method) {
+      case 'tunai':    return 'Tunai';
+      case 'qris':     return 'QRIS';
+      case 'transfer': return 'Transfer';
+      case 'hutang':   return 'Hutang';
+      default:         return method;
+    }
+  }
+
+  Color _methodColor(String method) {
+    switch (method) {
+      case 'tunai':    return AppColors.success;
+      case 'qris':     return AppColors.primary;
+      case 'transfer': return AppColors.info;
+      case 'hutang':   return AppColors.warning;
+      default:         return AppColors.textSecondary;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark   = Theme.of(context).brightness == Brightness.dark;
+    final cardBg   = isDark ? AppColors.darkCard : Colors.white;
+    final fmtDate  = DateFormat('dd MMM yyyy, HH.mm', 'id');
+
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 200),
+      decoration: BoxDecoration(
+        color: cardBg,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+            color: isDark ? AppColors.darkBorder : AppColors.border,
+            width: 0.5),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.04),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          )
+        ],
+      ),
+      child: Column(
+        children: [
+          // ── Header kartu ──────────────────────────────────────────────
+          InkWell(
+            onTap: () async {
+              setState(() => _expanded = !_expanded);
+              if (!_expanded) return;
+              await _loadItems();
+            },
+            borderRadius: BorderRadius.circular(12),
+            child: Padding(
+              padding: const EdgeInsets.all(14),
+              child: Row(
+                children: [
+                  // Icon invoice
+                  Container(
+                    width: 40,
+                    height: 40,
+                    decoration: BoxDecoration(
+                      color: AppColors.primary.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: const Icon(Icons.receipt_long_outlined,
+                        size: 20, color: AppColors.primary),
+                  ),
+                  const SizedBox(width: 12),
+                  // Invoice + tanggal
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(widget.tx.invoiceNumber,
+                            style: const TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w700)),
+                        const SizedBox(height: 2),
+                        Text(
+                          fmtDate.format(widget.tx.createdAt.toLocal()),
+                          style: const TextStyle(
+                              fontSize: 11,
+                              color: AppColors.textSecondary),
+                        ),
+                      ],
+                    ),
+                  ),
+                  // Badge metode + total
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 8, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: _methodColor(widget.tx.paymentMethod)
+                              .withOpacity(0.12),
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: Text(
+                          _methodLabel(widget.tx.paymentMethod),
+                          style: TextStyle(
+                              fontSize: 10,
+                              fontWeight: FontWeight.w700,
+                              color: _methodColor(widget.tx.paymentMethod)),
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        CurrencyFormatter.format(widget.tx.total),
+                        style: const TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w800,
+                            color: AppColors.primary),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(width: 6),
+                  Icon(
+                    _expanded
+                        ? Icons.keyboard_arrow_up_rounded
+                        : Icons.keyboard_arrow_down_rounded,
+                    size: 20,
+                    color: AppColors.textSecondary,
+                  ),
+                ],
+              ),
+            ),
+          ),
+
+          // ── Detail items (expanded) ────────────────────────────────────
+          if (_expanded) ...[
+            Divider(
+                height: 1,
+                color: isDark ? AppColors.darkBorder : AppColors.border),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(14, 10, 14, 0),
+              child: Row(children: [
+                const Icon(Icons.inventory_2_outlined,
+                    size: 13, color: AppColors.textSecondary),
+                const SizedBox(width: 4),
+                const Text('DETAIL ITEM',
+                    style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.textSecondary,
+                        letterSpacing: 0.5)),
+              ]),
+            ),
+            _loadingItems
+                ? const Padding(
+                    padding: EdgeInsets.all(16),
+                    child: Center(
+                        child: SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(strokeWidth: 2))))
+                : _items == null || _items!.isEmpty
+                    ? const Padding(
+                        padding: EdgeInsets.all(12),
+                        child: Text('Tidak ada item',
+                            style: TextStyle(
+                                color: AppColors.textSecondary,
+                                fontSize: 12)))
+                    : ListView.builder(
+                        shrinkWrap: true,
+                        physics: const NeverScrollableScrollPhysics(),
+                        padding: const EdgeInsets.fromLTRB(14, 6, 14, 0),
+                        itemCount: _items!.length,
+                        itemBuilder: (_, i) {
+                          final item = _items![i];
+                          return Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 4),
+                            child: Row(children: [
+                              Expanded(
+                                child: Text(item.productName,
+                                    style: const TextStyle(fontSize: 13)),
+                              ),
+                              Text('${item.quantity}x',
+                                  style: const TextStyle(
+                                      fontSize: 12,
+                                      color: AppColors.textSecondary)),
+                              const SizedBox(width: 8),
+                              Text(
+                                CurrencyFormatter.format(item.subtotal),
+                                style: const TextStyle(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w600),
+                              ),
+                            ]),
+                          );
+                        },
+                      ),
+
+            // ── Summary total ────────────────────────────────────────────
+            if (_items != null) ...[
+              Padding(
+                padding: const EdgeInsets.fromLTRB(14, 6, 14, 0),
+                child: Row(children: [
+                  const Expanded(
+                      child: Text('Total',
+                          style: TextStyle(fontWeight: FontWeight.w700))),
+                  Text(
+                    CurrencyFormatter.format(widget.tx.total),
+                    style: const TextStyle(
+                        fontWeight: FontWeight.w800,
+                        color: AppColors.primary),
+                  ),
+                ]),
+              ),
+            ],
+
+            // ── Tombol Cetak Ulang Struk ──────────────────────────────────
+            Padding(
+              padding: const EdgeInsets.fromLTRB(14, 12, 14, 14),
+              child: SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  icon: const Icon(Icons.print_outlined, size: 18),
+                  label: const Text('Cetak Ulang Struk'),
+                  onPressed: widget.onCetak,
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: AppColors.primary,
+                    side: const BorderSide(color: AppColors.primary),
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10)),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Sheet Cetak Ulang Struk
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _CetakSheet extends ConsumerStatefulWidget {
+  final Transaction tx;
+  const _CetakSheet({required this.tx});
+
+  @override
+  ConsumerState<_CetakSheet> createState() => _CetakSheetState();
+}
+
+class _CetakSheetState extends ConsumerState<_CetakSheet> {
+  bool _printing  = false;
+  bool _pdfing    = false;
+  List<TransactionItem> _items = [];
+  bool _loaded = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadItems();
+  }
+
+  Future<void> _loadItems() async {
+    final db = ref.read(databaseProvider);
+    final items = await db.transactionsDao.getTransactionItems(widget.tx.id);
+    if (mounted) setState(() { _items = items; _loaded = true; });
+  }
+
+  String _methodLabel(String m) {
+    switch (m) {
+      case 'tunai':    return 'Tunai';
+      case 'qris':     return 'QRIS';
+      case 'transfer': return 'Transfer Bank';
+      case 'hutang':   return 'Hutang';
+      default:         return m;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark   = Theme.of(context).brightness == Brightness.dark;
+    final sheetBg  = isDark ? AppColors.darkSurface : Colors.white;
+    final fmtDate  = DateFormat('dd MMM yyyy, HH:mm', 'id');
+    final bottomPad = MediaQuery.of(context).viewInsets.bottom;
+
+    return Container(
+      decoration: BoxDecoration(
+        color: sheetBg,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      padding: EdgeInsets.only(bottom: bottomPad + 16),
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Handle
+            Center(
+              child: Container(
+                width: 36, height: 4,
+                margin: const EdgeInsets.only(bottom: 16),
+                decoration: BoxDecoration(
+                  color: AppColors.border,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+            ),
+
+            // Judul
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text('Cetak Ulang Struk',
+                    style: TextStyle(
+                        fontSize: 17, fontWeight: FontWeight.w800)),
+                IconButton(
+                  icon: const Icon(Icons.close_rounded),
+                  onPressed: () => Navigator.pop(context),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+
+            // Info transaksi
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: AppColors.primary.withOpacity(0.06),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(
+                    color: AppColors.primary.withOpacity(0.2), width: 0.5),
+              ),
+              child: Column(
+                children: [
+                  _InfoRow2(label: 'No. Invoice',
+                      value: widget.tx.invoiceNumber),
+                  const SizedBox(height: 6),
+                  _InfoRow2(
+                      label: 'Tanggal',
+                      value: fmtDate.format(widget.tx.createdAt.toLocal())),
+                  const SizedBox(height: 6),
+                  _InfoRow2(
+                      label: 'Metode',
+                      value: _methodLabel(widget.tx.paymentMethod)),
+                  const SizedBox(height: 6),
+                  _InfoRow2(
+                      label: 'Total',
+                      value: CurrencyFormatter.format(widget.tx.total),
+                      bold: true),
+                ],
+              ),
+            ),
+            const SizedBox(height: 16),
+
+            // Item list
+            if (!_loaded)
+              const Center(child: CircularProgressIndicator())
+            else ...[
+              ...(_items.map((item) => Padding(
+                padding: const EdgeInsets.symmetric(vertical: 3),
+                child: Row(children: [
+                  Expanded(
+                    child: Text(item.productName,
+                        style: const TextStyle(fontSize: 13)),
+                  ),
+                  Text('${item.quantity}x ',
+                      style: const TextStyle(
+                          fontSize: 12, color: AppColors.textSecondary)),
+                  Text(CurrencyFormatter.format(item.subtotal),
+                      style: const TextStyle(
+                          fontSize: 13, fontWeight: FontWeight.w600)),
+                ]),
+              ))),
+              const Divider(height: 20),
+            ],
+            const SizedBox(height: 8),
+
+            // Tombol cetak Bluetooth
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                icon: _printing
+                    ? const SizedBox(
+                        width: 16, height: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2))
+                    : const Icon(Icons.print_outlined, size: 18),
+                label:
+                    Text(_printing ? 'Mencetak...' : 'Cetak Struk (Bluetooth)'),
+                onPressed: _printing ? null : _cetakBluetooth,
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: AppColors.primary,
+                  side: const BorderSide(color: AppColors.primary),
+                  padding: const EdgeInsets.symmetric(vertical: 13),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10)),
+                ),
+              ),
+            ),
+            const SizedBox(height: 10),
+
+            // Tombol share PDF
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                icon: _pdfing
+                    ? const SizedBox(
+                        width: 16, height: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2))
+                    : const Icon(Icons.picture_as_pdf_outlined, size: 18),
+                label: Text(_pdfing ? 'Membuat PDF...' : 'Simpan / Share PDF'),
+                onPressed: _pdfing ? null : _sharePdf,
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: AppColors.info,
+                  side: const BorderSide(color: AppColors.info),
+                  padding: const EdgeInsets.symmetric(vertical: 13),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10)),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ── Load logo ─────────────────────────────────────────────────────────────
+
+  Future<img.Image?> _loadLogoImage(int maxWidth) async {
+    try {
+      final store = ref.read(storeSettingsProvider);
+      img.Image? original;
+      if (store.logoPath.isNotEmpty && File(store.logoPath).existsSync()) {
+        final bytes = await File(store.logoPath).readAsBytes();
+        original = img.decodeImage(bytes);
+      } else {
+        final data = await rootBundle.load('assets/images/app_icon.png');
+        final bytes = data.buffer.asUint8List();
+        original = img.decodeImage(bytes);
+      }
+      if (original == null) return null;
+      if (original.width > maxWidth) {
+        original = img.copyResize(original, width: maxWidth);
+      }
+      return img.grayscale(original);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  // ── Cetak Bluetooth ───────────────────────────────────────────────────────
+
+  Future<void> _cetakBluetooth() async {
+    setState(() => _printing = true);
+    try {
+      final connected = await PrintBluetoothThermal.connectionStatus;
+      if (!connected) {
+        if (context.mounted) await _showPrinterDialog();
+        return;
+      }
+      await _doPrint();
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Gagal cetak: $e'),
+              backgroundColor: AppColors.danger));
+      }
+    } finally {
+      if (mounted) setState(() => _printing = false);
+    }
+  }
+
+  Future<void> _showPrinterDialog() async {
+    final devices = await PrintBluetoothThermal.pairedBluetooths;
+    if (!context.mounted) return;
+    if (devices.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Tidak ada printer Bluetooth yang dipasangkan'),
+          backgroundColor: AppColors.warning));
+      return;
+    }
+    await showDialog(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('Pilih Printer',
+            style: TextStyle(fontWeight: FontWeight.w700)),
+        content: SizedBox(
+          width: double.maxFinite,
+          child: ListView.builder(
+            shrinkWrap: true,
+            itemCount: devices.length,
+            itemBuilder: (_, i) {
+              final d = devices[i];
+              return ListTile(
+                leading: const Icon(Icons.print_outlined,
+                    color: AppColors.primary),
+                title: Text(d.name ?? 'Printer ${i + 1}',
+                    style: const TextStyle(fontWeight: FontWeight.w600)),
+                subtitle: Text(d.macAdress ?? '',
+                    style: const TextStyle(fontSize: 12)),
+                onTap: () async {
+                  Navigator.pop(context);
+                  final ok = await PrintBluetoothThermal.connect(
+                      macPrinterAddress: d.macAdress ?? '');
+                  if (ok) {
+                    await _doPrint();
+                  } else {
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                            content: Text('Gagal terhubung ke printer'),
+                            backgroundColor: AppColors.danger));
+                    }
+                  }
+                },
+              );
+            },
+          ),
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Batal')),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _doPrint() async {
+    final settings    = ref.read(storeSettingsProvider);
+    final storeName   = settings.storeName.isEmpty ? 'KasirKu' : settings.storeName;
+    final storeAddress = settings.storeAddress;
+    final storePhone  = settings.storePhone;
+    final storeNote   = settings.storeNote;
+    final paperSize   = settings.receiptSize == '80mm'
+        ? PaperSize.mm80 : PaperSize.mm58;
+    final logoMaxWidth = settings.receiptSize == '80mm' ? 300 : 200;
+
+    final profile   = await CapabilityProfile.load();
+    final generator = Generator(paperSize, profile);
+    var bytes = <int>[];
+
+    final dateStr = DateFormat('dd/MM/yyyy HH:mm')
+        .format(widget.tx.createdAt.toLocal());
+
+    if (settings.showLogo) {
+      final logoImg = await _loadLogoImage(logoMaxWidth);
+      if (logoImg != null) {
+        bytes += generator.image(logoImg);
+        bytes += generator.feed(1);
+      }
+    }
+
+    bytes += generator.text(storeName,
+        styles: const PosStyles(
+            align: PosAlign.center, bold: true,
+            height: PosTextSize.size2, width: PosTextSize.size2));
+    if (storeAddress.isNotEmpty) {
+      bytes += generator.text(storeAddress,
+          styles: const PosStyles(align: PosAlign.center));
+    }
+    if (storePhone.isNotEmpty) {
+      bytes += generator.text('Telp: $storePhone',
+          styles: const PosStyles(align: PosAlign.center));
+    }
+    bytes += generator.hr();
+    bytes += generator.text('No: ${widget.tx.invoiceNumber}',
+        styles: const PosStyles(align: PosAlign.center));
+    bytes += generator.text(dateStr,
+        styles: const PosStyles(align: PosAlign.center));
+    bytes += generator.hr();
+
+    for (final item in _items) {
+      bytes += generator.text(item.productName,
+          styles: const PosStyles(bold: true));
+      bytes += generator.row([
+        PosColumn(
+            text: '  ${item.quantity} x ${CurrencyFormatter.format(item.price)}',
+            width: 8,
+            styles: const PosStyles(align: PosAlign.left)),
+        PosColumn(
+            text: CurrencyFormatter.format(item.subtotal),
+            width: 4,
+            styles: const PosStyles(align: PosAlign.right)),
+      ]);
+    }
+    bytes += generator.hr();
+
+    bytes += generator.row([
+      PosColumn(text: 'TOTAL', width: 6,
+          styles: const PosStyles(bold: true, align: PosAlign.left)),
+      PosColumn(
+          text: CurrencyFormatter.format(widget.tx.total),
+          width: 6,
+          styles: const PosStyles(bold: true, align: PosAlign.right)),
+    ]);
+    bytes += generator.hr();
+
+    if (storeNote.isNotEmpty) {
+      bytes += generator.text(storeNote,
+          styles: const PosStyles(align: PosAlign.center, bold: true));
+    }
+    bytes += generator.feed(3);
+    bytes += generator.cut();
+
+    await PrintBluetoothThermal.writeBytes(bytes);
+
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Struk berhasil dicetak!'),
+          backgroundColor: AppColors.success));
+    }
+  }
+
+  // ── Share PDF ─────────────────────────────────────────────────────────────
+
+  Future<void> _sharePdf() async {
+    setState(() => _pdfing = true);
+    try {
+      await initializeDateFormatting('id', null);
+      final settings    = ref.read(storeSettingsProvider);
+      final storeName   = settings.storeName.isEmpty ? 'KasirKu' : settings.storeName;
+      final storeAddress = settings.storeAddress ?? '';
+
+      const primaryColor = PdfColor.fromInt(0xFF0D9488);
+      const greyColor    = PdfColor.fromInt(0xFF6B7280);
+      const lightGrey    = PdfColor.fromInt(0xFFF3F4F6);
+
+      final doc = pw.Document();
+      final dateStr = DateFormat('dd MMMM yyyy, HH:mm', 'id')
+          .format(widget.tx.createdAt.toLocal());
+
+      doc.addPage(pw.Page(
+        pageFormat: PdfPageFormat.roll57,
+        margin: const pw.EdgeInsets.all(8),
+        build: (ctx) => pw.Column(
+          crossAxisAlignment: pw.CrossAxisAlignment.stretch,
+          children: [
+            // Header toko
+            pw.Container(
+              padding: const pw.EdgeInsets.symmetric(vertical: 10),
+              decoration: const pw.BoxDecoration(
+                color: primaryColor,
+                borderRadius: pw.BorderRadius.all(pw.Radius.circular(8)),
+              ),
+              child: pw.Column(children: [
+                pw.Text(storeName,
+                    style: pw.TextStyle(
+                        fontSize: 14,
+                        fontWeight: pw.FontWeight.bold,
+                        color: PdfColors.white),
+                    textAlign: pw.TextAlign.center),
+                if (storeAddress.isNotEmpty) ...[
+                  pw.SizedBox(height: 2),
+                  pw.Text(storeAddress,
+                      style: const pw.TextStyle(
+                          fontSize: 8, color: PdfColors.white),
+                      textAlign: pw.TextAlign.center),
+                ],
+              ]),
+            ),
+            pw.SizedBox(height: 8),
+
+            // Info invoice
+            pw.Container(
+              padding: const pw.EdgeInsets.all(8),
+              decoration: pw.BoxDecoration(
+                color: lightGrey,
+                borderRadius: const pw.BorderRadius.all(pw.Radius.circular(6)),
+              ),
+              child: pw.Column(children: [
+                pw.Row(
+                  mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                  children: [
+                    pw.Text('No. Invoice',
+                        style: const pw.TextStyle(
+                            fontSize: 8, color: greyColor)),
+                    pw.Text(widget.tx.invoiceNumber,
+                        style: pw.TextStyle(
+                            fontSize: 8, fontWeight: pw.FontWeight.bold)),
+                  ],
+                ),
+                pw.SizedBox(height: 3),
+                pw.Row(
+                  mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                  children: [
+                    pw.Text('Tanggal',
+                        style: const pw.TextStyle(
+                            fontSize: 8, color: greyColor)),
+                    pw.Text(dateStr,
+                        style: const pw.TextStyle(fontSize: 8)),
+                  ],
+                ),
+                pw.SizedBox(height: 3),
+                pw.Row(
+                  mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                  children: [
+                    pw.Text('Metode',
+                        style: const pw.TextStyle(
+                            fontSize: 8, color: greyColor)),
+                    pw.Text(_methodLabel(widget.tx.paymentMethod),
+                        style: pw.TextStyle(
+                            fontSize: 8, fontWeight: pw.FontWeight.bold)),
+                  ],
+                ),
+              ]),
+            ),
+            pw.SizedBox(height: 8),
+
+            // Item rows
+            pw.Container(
+              padding: const pw.EdgeInsets.symmetric(
+                  horizontal: 6, vertical: 4),
+              decoration: const pw.BoxDecoration(color: primaryColor),
+              child: pw.Row(children: [
+                pw.Expanded(flex: 5,
+                    child: pw.Text('Produk',
+                        style: pw.TextStyle(
+                            fontSize: 8,
+                            fontWeight: pw.FontWeight.bold,
+                            color: PdfColors.white))),
+                pw.Expanded(flex: 2,
+                    child: pw.Text('Qty',
+                        style: pw.TextStyle(
+                            fontSize: 8,
+                            fontWeight: pw.FontWeight.bold,
+                            color: PdfColors.white),
+                        textAlign: pw.TextAlign.center)),
+                pw.Expanded(flex: 3,
+                    child: pw.Text('Subtotal',
+                        style: pw.TextStyle(
+                            fontSize: 8,
+                            fontWeight: pw.FontWeight.bold,
+                            color: PdfColors.white),
+                        textAlign: pw.TextAlign.right)),
+              ]),
+            ),
+
+            ..._items.asMap().entries.map((e) {
+              final bg = e.key.isOdd ? PdfColors.white : lightGrey;
+              final item = e.value;
+              return pw.Container(
+                padding: const pw.EdgeInsets.symmetric(
+                    horizontal: 6, vertical: 4),
+                color: bg,
+                child: pw.Row(children: [
+                  pw.Expanded(flex: 5,
+                      child: pw.Text(item.productName,
+                          style: pw.TextStyle(
+                              fontSize: 8,
+                              fontWeight: pw.FontWeight.bold))),
+                  pw.Expanded(flex: 2,
+                      child: pw.Text('${item.quantity}',
+                          style: const pw.TextStyle(fontSize: 8),
+                          textAlign: pw.TextAlign.center)),
+                  pw.Expanded(flex: 3,
+                      child: pw.Text(
+                          CurrencyFormatter.format(item.subtotal),
+                          style: const pw.TextStyle(fontSize: 8),
+                          textAlign: pw.TextAlign.right)),
+                ]),
+              );
+            }),
+
+            pw.Divider(thickness: 0.5),
+
+            // Total
+            pw.Padding(
+              padding: const pw.EdgeInsets.symmetric(horizontal: 6),
+              child: pw.Container(
+                padding: const pw.EdgeInsets.symmetric(
+                    vertical: 6, horizontal: 8),
+                decoration: const pw.BoxDecoration(
+                  color: primaryColor,
+                  borderRadius:
+                      pw.BorderRadius.all(pw.Radius.circular(6)),
+                ),
+                child: pw.Row(
+                  mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                  children: [
+                    pw.Text('TOTAL',
+                        style: pw.TextStyle(
+                            fontSize: 10,
+                            fontWeight: pw.FontWeight.bold,
+                            color: PdfColors.white)),
+                    pw.Text(CurrencyFormatter.format(widget.tx.total),
+                        style: pw.TextStyle(
+                            fontSize: 10,
+                            fontWeight: pw.FontWeight.bold,
+                            color: PdfColors.white)),
+                  ],
+                ),
+              ),
+            ),
+
+            pw.SizedBox(height: 10),
+            pw.Divider(
+                thickness: 0.5, borderStyle: pw.BorderStyle.dashed),
+            pw.SizedBox(height: 6),
+            pw.Text('Terima kasih telah berbelanja!',
+                style: pw.TextStyle(
+                    fontSize: 9,
+                    fontWeight: pw.FontWeight.bold,
+                    color: primaryColor),
+                textAlign: pw.TextAlign.center),
+          ],
+        ),
+      ));
+
+      final pdfBytes = await doc.save();
+      final dir  = await getTemporaryDirectory();
+      final file = File('${dir.path}/${widget.tx.invoiceNumber}.pdf');
+      await file.writeAsBytes(pdfBytes);
+      await Share.shareXFiles(
+          [XFile(file.path)], text: 'Struk ${widget.tx.invoiceNumber}');
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Gagal buat PDF: $e'),
+              backgroundColor: AppColors.danger));
+      }
+    } finally {
+      if (mounted) setState(() => _pdfing = false);
+    }
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Helpers
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _InfoRow2 extends StatelessWidget {
+  final String label;
+  final String value;
+  final bool bold;
+  const _InfoRow2({required this.label, required this.value, this.bold = false});
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Text(label,
+            style: const TextStyle(
+                fontSize: 12, color: AppColors.textSecondary)),
+        Text(value,
+            style: TextStyle(
+                fontSize: 12,
+                fontWeight: bold ? FontWeight.w800 : FontWeight.w600,
+                color: bold ? AppColors.primary : null)),
+      ],
+    );
+  }
+}
+
+class _EmptyState extends StatelessWidget {
+  final bool isSearching;
+  const _EmptyState({required this.isSearching});
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(
+            isSearching
+                ? Icons.search_off_rounded
+                : Icons.receipt_long_outlined,
+            size: 60,
+            color: AppColors.textHint,
+          ),
+          const SizedBox(height: 12),
+          Text(
+            isSearching
+                ? 'Transaksi tidak ditemukan'
+                : 'Belum ada transaksi',
+            style: const TextStyle(
+                fontSize: 15,
+                fontWeight: FontWeight.w600,
+                color: AppColors.textSecondary),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            isSearching
+                ? 'Coba kata kunci yang berbeda'
+                : 'Transaksi akan muncul di sini',
+            style: const TextStyle(
+                fontSize: 12, color: AppColors.textHint),
+          ),
+        ],
+      ),
+    );
+  }
+}
