@@ -481,14 +481,16 @@ class SettingsScreen extends ConsumerWidget {
         final bytes = await File(store.logoPath).readAsBytes();
         original = img.decodeImage(bytes);
       } else {
-        // Fallback ke icon default
+        // Fallback ke header logo — konsisten dengan kasir & riwayat screen
         final ByteData data =
-            await rootBundle.load('assets/images/app_icon.png');
+            await rootBundle.load('assets/logo/header.png');
         final Uint8List bytes = data.buffer.asUint8List();
         original = img.decodeImage(bytes);
       }
 
       if (original == null) return null;
+      // Trim padding transparan agar logo tidak terlihat kecil
+      original = img.trim(original, mode: img.TrimMode.transparent);
       if (original.width > maxWidth) {
         original = img.copyResize(original, width: maxWidth);
       }
