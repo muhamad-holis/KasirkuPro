@@ -3432,16 +3432,14 @@ class _SuccessDialogState extends ConsumerState<_SuccessDialog> {
         final bytes = await File(store.logoPath).readAsBytes();
         original = img.decodeImage(bytes);
       } else {
-        // Fallback ke logo default dari assets
+        // Fallback ke logo header dari assets/logo/header.png
         final ByteData data =
-            await rootBundle.load('assets/images/app_icon.png');
+            await rootBundle.load('assets/logo/header.png');
         final Uint8List bytes = data.buffer.asUint8List();
         original = img.decodeImage(bytes);
       }
 
       if (original == null) return null;
-      // Potong padding transparan di sekeliling logo agar mark/gambar
-      // yang terlihat memenuhi box secara proporsional
       original = img.trim(original, mode: img.TrimMode.transparent);
       if (original.width > maxWidth) {
         original = img.copyResize(original, width: maxWidth);
@@ -3452,17 +3450,15 @@ class _SuccessDialogState extends ConsumerState<_SuccessDialog> {
     }
   }
 
-  // ── PERUBAHAN #10: loader logo footer permanen KasirKu Pro ─────────────────
-  // Berbeda dengan _loadLogoImage di atas, loader ini SELALU memakai
-  // assets/images/app_icon.png dan TIDAK pernah memakai logo custom toko.
+  // Footer logo PERMANEN KasirKu Pro — selalu dari assets/logo/footer.png,
+  // tidak mengikuti logo custom toko, tidak memakai app_icon.png.
   Future<img.Image?> _loadFooterAppIcon({int maxWidth = 220}) async {
     try {
       final ByteData data =
-          await rootBundle.load('assets/images/app_icon.png');
+          await rootBundle.load('assets/logo/footer.png');
       final Uint8List bytes = data.buffer.asUint8List();
       var original = img.decodeImage(bytes);
       if (original == null) return null;
-      // Trim dulu agar logo footer tidak kelihatan kecil karena kanvas besar
       original = img.trim(original, mode: img.TrimMode.transparent);
       if (original.width > maxWidth) {
         original = img.copyResize(original, width: maxWidth);

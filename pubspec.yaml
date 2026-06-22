@@ -63,6 +63,7 @@ flutter:
   assets:
     - assets/images/
     - assets/videos/
+    - assets/logo/
 
 flutter_icons:
   android: true
