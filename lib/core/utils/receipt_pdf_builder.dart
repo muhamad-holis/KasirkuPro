@@ -1,13 +1,4 @@
 // lib/core/utils/receipt_pdf_builder.dart
-//
-// Generator tampilan PDF struk KasirKu Pro.
-// Dipakai bersama oleh halaman Kasir (struk transaksi baru) dan halaman
-// Riwayat (cetak ulang struk) supaya tampilan struk selalu konsisten.
-//
-// PENTING: file ini HANYA mengatur tampilan/layout PDF (monokrom, hemat
-// tinta, rapi untuk thermal 58mm/80mm maupun export biasa).
-// TIDAK ADA perhitungan bisnis di sini — subtotal/diskon/pajak/total/kembali
-// semuanya dikirim oleh pemanggil apa adanya, tidak dihitung ulang.
 
 import 'dart:typed_data';
 import 'package:pdf/pdf.dart';
@@ -35,14 +26,9 @@ class ReceiptPdfBuilder {
   static const double _fontSize   = 8;
   static const double _fontSizeSm = 7;
   static const double _fontSizeLg = 10;
-  // PERUBAHAN: diperbesar 12 → 16 agar TOTAL terlihat menonjol seperti
-  // pada struk thermal
   static const double _fontSizeXl = 16;
 
   // Jumlah karakter '=' untuk garis pemisah.
-  // Cukup panjang untuk mengisi lebar kertas 80mm; pada 58mm
-  // karakter berlebih akan ter-wrap atau terpotong secara alami
-  // mengikuti lebar kolom pw.Text.
   static const String _divider = '================================================';
 
   static Future<Uint8List> build({
@@ -79,9 +65,7 @@ class ReceiptPdfBuilder {
 
     final totalQty  = items.fold<int>(0, (s, it) => s + it.quantity);
 
-    // PERUBAHAN: subtotal dihitung dari total + discount - tax
-    // (formula ChatGPT sebelumnya salah: total - discount - tax)
-    // Hanya untuk tampilan, tidak mengubah logika bisnis.
+    // Subtotal dihitung dari total + discount - tax
     final subtotal  = total + discount - tax;
 
     doc.addPage(pw.Page(
@@ -124,7 +108,6 @@ class ReceiptPdfBuilder {
             ],
             pw.SizedBox(height: 3),
 
-            // ── PERUBAHAN: garis = seperti struk thermal ─────────────────────
             _hr(),
 
             // ── Info transaksi 2 kolom ──────────────────────────────────────
@@ -143,37 +126,69 @@ class ReceiptPdfBuilder {
 
             _hr(),
 
-            // ── Daftar barang bernomor ───────────────────────────────────────
+            // ── Header Kolom Tabel Barang ────────────────────────────────────
+            pw.Padding(
+              padding: const pw.EdgeInsets.only(bottom: 4),
+              child: pw.Row(
+                crossAxisAlignment: pw.CrossAxisAlignment.start,
+                children: [
+                  pw.SizedBox(
+                      width: 14, 
+                      child: pw.Text('No.', style: pw.TextStyle(fontSize: _fontSizeSm, fontWeight: pw.FontWeight.bold, color: PdfColors.black))),
+                  pw.Expanded(
+                      child: pw.Text('Nama Barang', style: pw.TextStyle(fontSize: _fontSizeSm, fontWeight: pw.FontWeight.bold, color: PdfColors.black))),
+                  pw.SizedBox(
+                      width: 16, 
+                      child: pw.Text('Qty', textAlign: pw.TextAlign.center, style: pw.TextStyle(fontSize: _fontSizeSm, fontWeight: pw.FontWeight.bold, color: PdfColors.black))),
+                  pw.SizedBox(
+                      width: 32, 
+                      child: pw.Text('Harga', textAlign: pw.TextAlign.right, style: pw.TextStyle(fontSize: _fontSizeSm, fontWeight: pw.FontWeight.bold, color: PdfColors.black))),
+                  pw.SizedBox(
+                      width: 36, 
+                      child: pw.Text('Total', textAlign: pw.TextAlign.right, style: pw.TextStyle(fontSize: _fontSizeSm, fontWeight: pw.FontWeight.bold, color: PdfColors.black))),
+                ],
+              ),
+            ),
+            
+            // Garis pemisah bawah header kolom
+            _hr(),
+            pw.SizedBox(height: 2),
+
+            // ── Daftar Barang (Format Tabel) ─────────────────────────────────
             ...items.asMap().entries.map((entry) {
               final number = entry.key + 1;
               final item   = entry.value;
               return pw.Padding(
                 padding: const pw.EdgeInsets.only(bottom: 4),
-                child: pw.Column(
+                child: pw.Row(
                   crossAxisAlignment: pw.CrossAxisAlignment.start,
                   children: [
-                    pw.Text('$number. ${item.name}',
-                        style: const pw.TextStyle(
-                            fontSize: _fontSize,
-                            color: PdfColors.black)),
-                    pw.Row(
-                      children: [
-                        pw.Expanded(
-                          child: pw.Text(
-                            '   ${item.quantity} x ${CurrencyFormatter.format(item.price)}',
-                            style: const pw.TextStyle(
-                                fontSize: _fontSizeSm,
-                                color: PdfColors.black),
-                          ),
-                        ),
-                        pw.Text(
-                          CurrencyFormatter.format(item.subtotal),
-                          style: pw.TextStyle(
-                              fontSize: _fontSize,
-                              fontWeight: pw.FontWeight.bold,
-                              color: PdfColors.black),
-                        ),
-                      ],
+                    pw.SizedBox(
+                      width: 14,
+                      child: pw.Text('$number.', style: const pw.TextStyle(fontSize: _fontSizeSm, color: PdfColors.black)),
+                    ),
+                    pw.Expanded(
+                      child: pw.Text(item.name, style: const pw.TextStyle(fontSize: _fontSizeSm, color: PdfColors.black)),
+                    ),
+                    pw.SizedBox(
+                      width: 16,
+                      child: pw.Text('${item.quantity}', textAlign: pw.TextAlign.center, style: const pw.TextStyle(fontSize: _fontSizeSm, color: PdfColors.black)),
+                    ),
+                    pw.SizedBox(
+                      width: 32,
+                      child: pw.Text(
+                        CurrencyFormatter.format(item.price).replaceAll('Rp', '').trim(), 
+                        textAlign: pw.TextAlign.right, 
+                        style: const pw.TextStyle(fontSize: _fontSizeSm, color: PdfColors.black)
+                      ),
+                    ),
+                    pw.SizedBox(
+                      width: 36,
+                      child: pw.Text(
+                        CurrencyFormatter.format(item.subtotal).replaceAll('Rp', '').trim(), 
+                        textAlign: pw.TextAlign.right, 
+                        style: const pw.TextStyle(fontSize: _fontSizeSm, color: PdfColors.black)
+                      ),
                     ),
                   ],
                 ),
@@ -182,21 +197,32 @@ class ReceiptPdfBuilder {
 
             _hr(),
 
-            // ── PERUBAHAN: Total Item & Total Qty dalam SATU baris ───────────
-            // (sebelumnya dua baris terpisah, di struk thermal foto satu baris)
-            pw.Row(
+            // ── Total Item & Total Qty (Bersusun Rata Kiri) ──────────────────
+            pw.Column(
+              crossAxisAlignment: pw.CrossAxisAlignment.start,
               children: [
-                pw.Expanded(
-                  child: pw.Text(
-                    'Total Item : ${items.length}',
-                    style: const pw.TextStyle(
-                        fontSize: _fontSize, color: PdfColors.black),
-                  ),
+                pw.Row(
+                  children: [
+                    pw.SizedBox(
+                      width: 55, 
+                      child: pw.Text('Total Item', 
+                          style: const pw.TextStyle(fontSize: _fontSize, color: PdfColors.black)),
+                    ),
+                    pw.Text(': ${items.length}', 
+                        style: const pw.TextStyle(fontSize: _fontSize, color: PdfColors.black)),
+                  ],
                 ),
-                pw.Text(
-                  'Total Qty : $totalQty',
-                  style: const pw.TextStyle(
-                      fontSize: _fontSize, color: PdfColors.black),
+                pw.SizedBox(height: 2),
+                pw.Row(
+                  children: [
+                    pw.SizedBox(
+                      width: 55, 
+                      child: pw.Text('Total Qty', 
+                          style: const pw.TextStyle(fontSize: _fontSize, color: PdfColors.black)),
+                    ),
+                    pw.Text(': $totalQty', 
+                        style: const pw.TextStyle(fontSize: _fontSize, color: PdfColors.black)),
+                  ],
                 ),
               ],
             ),
@@ -204,12 +230,10 @@ class ReceiptPdfBuilder {
 
             _hr(),
 
-            // ── PERUBAHAN: baris Subtotal + Diskon + Pajak tanpa prefix +/- ──
-            // (formula subtotal diperbaiki: total + discount - tax)
+            // ── Subtotal, Diskon, Pajak ──────────────────────────────────────
             _infoRow('Subtotal', CurrencyFormatter.format(subtotal)),
             if (discount > 0)
-              _infoRow('Diskon',
-                  CurrencyFormatter.format(discount)),
+              _infoRow('Diskon', CurrencyFormatter.format(discount)),
             if (tax > 0)
               _infoRow(
                   'Pajak ${taxPercent.toStringAsFixed(0)}%',
@@ -218,7 +242,7 @@ class ReceiptPdfBuilder {
 
             _hr(),
 
-            // ── TOTAL menonjol (fontSize 16) ────────────────────────────────
+            // ── TOTAL ────────────────────────────────────────────────────────
             pw.Row(
               mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
               children: [
@@ -236,7 +260,6 @@ class ReceiptPdfBuilder {
             ),
             pw.SizedBox(height: 2),
 
-            // PERUBAHAN: separator setelah TOTAL (di foto ada garis setelah TOTAL)
             _hr(),
 
             // ── Pembayaran ───────────────────────────────────────────────────
@@ -247,7 +270,6 @@ class ReceiptPdfBuilder {
                   boldValue: true),
             pw.SizedBox(height: 2),
 
-            // PERUBAHAN: separator setelah KEMBALI
             _hr(),
 
             // ── Ucapan terima kasih ──────────────────────────────────────────
@@ -269,8 +291,6 @@ class ReceiptPdfBuilder {
                 textAlign: pw.TextAlign.center),
 
             // ── Footer permanen KasirKu Pro ──────────────────────────────────
-            // Logo & teks di bawah ini SELALU tampil dan TIDAK mengikuti
-            // logo custom toko — selalu dari assets/images/app_icon.png.
             pw.SizedBox(height: 6),
             if (footerLogoImage != null) ...[
               pw.Center(
@@ -279,12 +299,10 @@ class ReceiptPdfBuilder {
               ),
               pw.SizedBox(height: 3),
             ],
-            // PERUBAHAN: kapital "K" dan "S" sesuai foto
             pw.Text('Link Kritik dan Saran',
                 style: const pw.TextStyle(
                     fontSize: _fontSizeSm, color: PdfColors.black),
                 textAlign: pw.TextAlign.center),
-            // PERUBAHAN: tambah https:// sesuai foto
             pw.Text('https://KasirkuPro.shop/reports',
                 style: pw.TextStyle(
                     fontSize: _fontSizeSm,
@@ -293,7 +311,6 @@ class ReceiptPdfBuilder {
                 textAlign: pw.TextAlign.center),
             pw.SizedBox(height: 4),
 
-            // PERUBAHAN: separator penutup di bagian paling bawah
             _hr(),
           ],
         );
@@ -304,12 +321,13 @@ class ReceiptPdfBuilder {
   }
 
   // ── Helper: garis = (karakter thermal) ──────────────────────────────────
-  // Menggunakan karakter '=' agar tampilan PDF mirip struk thermal asli.
   static pw.Widget _hr() => pw.Padding(
         padding: const pw.EdgeInsets.symmetric(vertical: 3),
         child: pw.Text(
           _divider,
           textAlign: pw.TextAlign.center,
+          maxLines: 1, // Memperbaiki bug garis ganda
+          overflow: pw.TextOverflow.clip,
           style: const pw.TextStyle(fontSize: 7.5, color: PdfColors.black),
         ),
       );
@@ -345,3 +363,4 @@ class ReceiptPdfBuilder {
         ),
       );
 }
+
