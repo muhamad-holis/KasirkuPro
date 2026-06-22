@@ -780,6 +780,8 @@ class _CetakSheetState extends ConsumerState<_CetakSheet> {
         original = img.decodeImage(bytes);
       }
       if (original == null) return null;
+      // Potong padding transparan sebelum resize agar mark terlihat penuh
+      original = img.trim(original, mode: img.TrimMode.transparent);
       if (original.width > maxWidth) {
         original = img.copyResize(original, width: maxWidth);
       }
@@ -792,12 +794,14 @@ class _CetakSheetState extends ConsumerState<_CetakSheet> {
   // ── PERUBAHAN #10: loader logo footer permanen KasirKu Pro ─────────────────
   // Berbeda dengan _loadLogoImage di atas, loader ini SELALU memakai
   // assets/images/app_icon.png dan TIDAK pernah memakai logo custom toko.
-  Future<img.Image?> _loadFooterAppIcon({int maxWidth = 90}) async {
+  Future<img.Image?> _loadFooterAppIcon({int maxWidth = 220}) async {
     try {
       final data = await rootBundle.load('assets/images/app_icon.png');
       final bytes = data.buffer.asUint8List();
       var original = img.decodeImage(bytes);
       if (original == null) return null;
+      // Trim dulu agar footer tidak kecil karena kanvas besar transparan
+      original = img.trim(original, mode: img.TrimMode.transparent);
       if (original.width > maxWidth) {
         original = img.copyResize(original, width: maxWidth);
       }

@@ -90,11 +90,11 @@ class ReceiptPdfBuilder {
         return pw.Column(
           crossAxisAlignment: pw.CrossAxisAlignment.stretch,
           children: [
-            // ── PERUBAHAN #1: logo toko custom, diperbesar ~35% (60->80) ──
+            // ── PERUBAHAN #1: logo toko custom, diperbesar ~35% (60->110) ──
             if (logoImage != null) ...[
               pw.Center(
                 child: pw.Image(logoImage,
-                    width: 80, height: 80, fit: pw.BoxFit.contain),
+                    width: 110, height: 110, fit: pw.BoxFit.contain),
               ),
               pw.SizedBox(height: 4),
             ],
@@ -250,8 +250,10 @@ class ReceiptPdfBuilder {
             pw.SizedBox(height: 10),
             if (footerLogoImage != null) ...[
               pw.Center(
+                // Lebar 100 tanpa height tetap — proporsional mengikuti rasio
+                // asli logo (misal 3264x1207 → ~2.7:1, tinggi otomatis ~37pt)
                 child: pw.Image(footerLogoImage,
-                    width: 26, height: 26, fit: pw.BoxFit.contain),
+                    width: 100, fit: pw.BoxFit.contain),
               ),
               pw.SizedBox(height: 3),
             ],
