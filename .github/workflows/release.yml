@@ -133,7 +133,37 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      # ── 10. Cleanup ───────────────────────────────────────
+      # ── 10. Upload APK ke Google Drive (nama fixed) ───────
+      - name: Install rclone
+        run: |
+          curl https://rclone.org/install.sh | sudo bash
+
+      - name: Setup rclone config
+        run: |
+          mkdir -p ~/.config/rclone
+          cat > ~/.config/rclone/rclone.conf << EOF
+          [kasirkupro_drive]
+          type = drive
+          client_id = ${{ secrets.RCLONE_CLIENT_ID }}
+          client_secret = ${{ secrets.RCLONE_CLIENT_SECRET }}
+          scope = drive
+          token = ${{ secrets.RCLONE_TOKEN }}
+          EOF
+
+      - name: Copy APK dengan nama fixed untuk landing page
+        run: |
+          cp build/app/outputs/flutter-apk/kasirkupro-${{ github.ref_name }}-signed.apk \
+             build/app/outputs/flutter-apk/KasirkuPro-latest.apk
+
+      - name: Upload APK ke Google Drive
+        run: |
+          rclone copy build/app/outputs/flutter-apk/KasirkuPro-latest.apk \
+            kasirkupro_drive:KasirkuPro-Release \
+            --drive-use-trash=false \
+            -v
+          echo "✅ APK berhasil diupload ke Google Drive!"
+
+      # ── 11. Cleanup ───────────────────────────────────────
       - name: Cleanup sensitive files
         if: always()
         run: |
