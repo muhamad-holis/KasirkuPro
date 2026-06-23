@@ -1,7 +1,7 @@
 name: kasirku
 description: Aplikasi Kasir & Manajemen Toko Indonesia
 publish_to: 'none'
-version: 1.5.7+17
+version: 1.6.0+20
 
 environment:
   sdk: '>=3.0.0 <4.0.0'
