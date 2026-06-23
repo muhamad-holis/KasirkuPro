@@ -44,7 +44,8 @@ class KasirState {
   double get taxAmount => subtotal * (taxPercent / 100);
   // 1 poin = Rp 100 diskon
   double get pointDiscount => redeemPoints * 100;
-  double get total => subtotal - discountTotal - pointDiscount + taxAmount;
+  // BUG-03 FIX: total tidak bisa negatif meski diskon + poin melebihi subtotal
+  double get total => (subtotal - discountTotal - pointDiscount + taxAmount).clamp(0.0, double.infinity);
   double get change => amountPaid - total;
   bool get isEmpty => items.isEmpty;
   int get totalItems => items.fold(0, (s, i) => s + i.quantity);

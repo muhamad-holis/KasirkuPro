@@ -38,26 +38,37 @@ class _SplashScreenState extends ConsumerState<SplashScreen> {
   }
 
   Future<void> _initVideo() async {
-    _videoController = VideoPlayerController.asset('assets/videos/splash.mp4');
-    await _videoController.initialize();
+    // BUG-10 FIX: wrap seluruh inisialisasi video dalam try-catch.
+    // Jika video gagal (file korup, codec tidak didukung, dsb), fallback
+    // langsung ke _afterSplash dengan delay singkat agar user tidak terjebak
+    // di layar hitam selamanya.
+    try {
+      _videoController = VideoPlayerController.asset('assets/videos/splash.mp4');
+      await _videoController.initialize();
 
-    if (mounted) {
-      setState(() => _videoReady = true);
-      _videoController.setLooping(false);
-      _videoController.setVolume(1.0);
-      _videoController.play();
-    }
-
-    _videoController.addListener(() {
-      if (!_navigated &&
-          _videoController.value.duration > Duration.zero &&
-          _videoController.value.position >=
-              _videoController.value.duration) {
-        _afterSplash();
+      if (mounted) {
+        setState(() => _videoReady = true);
+        _videoController.setLooping(false);
+        _videoController.setVolume(1.0);
+        _videoController.play();
       }
-    });
 
-    Future.delayed(const Duration(seconds: 5), _afterSplash);
+      _videoController.addListener(() {
+        if (!_navigated &&
+            _videoController.value.duration > Duration.zero &&
+            _videoController.value.position >=
+                _videoController.value.duration) {
+          _afterSplash();
+        }
+      });
+
+      // Fallback: jika video selesai tapi listener tidak terpanggil
+      Future.delayed(const Duration(seconds: 5), _afterSplash);
+    } catch (_) {
+      // Video gagal diinisialisasi — langsung lanjut ke logika splash
+      // tanpa menampilkan video sama sekali
+      Future.delayed(const Duration(milliseconds: 300), _afterSplash);
+    }
   }
 
   Future<void> _afterSplash() async {
@@ -106,17 +117,28 @@ class _SplashScreenState extends ConsumerState<SplashScreen> {
       final existing = await SecureSession.getSession();
       if (existing != null) return; // sudah ada di secure storage
 
-      final prefs      = await SharedPreferences.getInstance();
-      final lastId     = prefs.getInt('last_user_id');
-      final lastName   = prefs.getString('last_user_name');
-      final lastRole   = prefs.getString('last_user_role');
+      final prefs    = await SharedPreferences.getInstance();
+      final lastId   = prefs.getInt('last_user_id');
+      final lastName = prefs.getString('last_user_name');
+      final lastRole = prefs.getString('last_user_role');
 
       if (lastId != null && lastName != null && lastRole != null) {
+        // BUG-11 FIX: ambil username dari DB menggunakan lastId agar tidak
+        // salah derive (mis. "Budi Santoso" → "budi_santoso" tapi di DB "admin").
+        // Jika DB lookup gagal, fallback ke derivasi nama sebagai last resort.
+        final db = ref.read(databaseProvider);
+        final user = await db.usersDao.getUserById(lastId);
+
+        final username = user?.username ??
+            lastName.toLowerCase().replaceAll(' ', '_');
+        final displayName = user?.displayName ?? lastName;
+        final role = user?.role ?? lastRole;
+
         await SecureSession.saveSession(
           userId:      lastId,
-          username:    lastName.toLowerCase().replaceAll(' ', '_'),
-          displayName: lastName,
-          role:        lastRole,
+          username:    username,
+          displayName: displayName,
+          role:        role,
         );
         // Hapus dari SharedPrefs
         await prefs.remove('last_user_id');
@@ -124,7 +146,7 @@ class _SplashScreenState extends ConsumerState<SplashScreen> {
         await prefs.remove('last_user_role');
       }
     } catch (_) {
-      // Migrasi gagal tidak fatal
+      // Migrasi gagal tidak fatal — user cukup login ulang
     }
   }
 

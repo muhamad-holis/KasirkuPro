@@ -126,20 +126,39 @@ class TransactionsDao extends DatabaseAccessor<AppDatabase>
     return result.read(transactionItems.quantity.sum()) ?? 0;
   }
 
+  // BUG-12 FIX: ganti SELECT MAX(id) dengan pendekatan COUNT + microsecond suffix.
+  // SELECT MAX(id) tanpa lock tidak aman jika dua kasir submit transaksi bersamaan
+  // — keduanya bisa mendapat maxId yang sama dan menghasilkan nomor invoice duplikat.
+  //
+  // Strategi baru:
+  //   Prefix  = INVyyyyMMdd  (tanggal hari ini)
+  //   Urutan  = COUNT(*) transaksi hari ini + 1  (aman karena hanya dipakai sebagai
+  //             nomor urut tampilan, bukan primary key)
+  //   Suffix  = 3 digit terakhir microsecond  (tiebreaker jika dua transaksi
+  //             terjadi dalam waktu yang sangat berdekatan)
+  //
+  // Format akhir: INV20250622-0003-847
+  // Kombinasi urutan + microsecond suffix secara praktis menghilangkan duplikat
+  // tanpa perlu database lock.
   Future<String> generateInvoiceNumber() async {
     final now = DateTime.now();
     final prefix =
         'INV${now.year}${now.month.toString().padLeft(2, '0')}${now.day.toString().padLeft(2, '0')}';
     final start = DateTime(now.year, now.month, now.day);
-    // Gunakan SELECT MAX(id) untuk hindari race condition
+
+    // Hitung jumlah transaksi hari ini (lebih aman dari MAX karena tidak bergantung
+    // pada urutan insert yang bisa race)
     final result = await (selectOnly(transactions)
-          ..addColumns([transactions.id.max()])
+          ..addColumns([transactions.id.count()])
           ..where(transactions.createdAt.isBiggerOrEqualValue(start)))
         .getSingle();
-    final maxId = result.read(transactions.id.max()) ?? 0;
-    // Tambah microsecond sebagai tiebreaker agar unik
-    final num = maxId + 1;
-    return '$prefix${num.toString().padLeft(4, '0')}';
+    final countToday = result.read(transactions.id.count()) ?? 0;
+    final seq = (countToday + 1).toString().padLeft(4, '0');
+
+    // Microsecond tiebreaker: 3 digit terakhir microsecond epoch
+    final micro = (now.microsecondsSinceEpoch % 1000).toString().padLeft(3, '0');
+
+    return '$prefix-$seq-$micro';
   }
 
   // BUG #7 FIX: Ubah menjadi async* generator yang loop ulang setiap tengah malam.

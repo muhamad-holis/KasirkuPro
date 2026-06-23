@@ -210,20 +210,31 @@ class BackupNotifier extends StateNotifier<BackupState> {
         return;
       }
 
-      // Download file backup
+      // BUG-02 FIX: Download ke file TEMPORARY dulu, baru rename atomic.
+      // Menulis langsung ke kasirku.db yang sedang terbuka oleh Drift
+      // dapat menyebabkan korupsi data karena SQLite WAL masih aktif.
+      // Dengan rename atomic, file lama tidak tersentuh sampai download selesai
+      // sempurna — jika download gagal di tengah jalan, data lama tetap aman.
       final response = await driveApi.files.get(
         existingId,
         downloadOptions: drive.DownloadOptions.fullMedia,
       ) as drive.Media;
 
-      final dbFile = await _getDbFile();
-      final sink = dbFile.openWrite();
+      final dbFile  = await _getDbFile();
+      final tempFile = File('${dbFile.path}.restore_tmp');
+
+      // 1. Download ke file temporary
+      final sink = tempFile.openWrite();
       await response.stream.pipe(sink);
       await sink.close();
 
+      // 2. Rename atomic: timpa kasirku.db dengan file temporary
+      //    Drift akan mendeteksi perubahan saat aplikasi di-restart.
+      await tempFile.rename(dbFile.path);
+
       state = state.copyWith(
         status: BackupStatus.success,
-        message: 'Restore berhasil! Restart aplikasi untuk menerapkan perubahan.',
+        message: 'Restore berhasil! Harap restart aplikasi untuk menerapkan perubahan.',
       );
     } catch (e) {
       state = state.copyWith(

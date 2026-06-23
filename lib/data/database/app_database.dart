@@ -60,7 +60,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase() : super(_openConnection());
 
   @override
-  int get schemaVersion => 6;
+  int get schemaVersion => 7;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -151,6 +151,24 @@ class AppDatabase extends _$AppDatabase {
           "notes TEXT,"
           "created_at INTEGER NOT NULL DEFAULT (strftime('%s','now') * 1000)"
           ")"
+        );
+      }
+      if (from < 7) {
+        // CATATAN-02 FIX: Tambah trigger BEFORE INSERT/UPDATE untuk cegah stok negatif.
+        // SQLite tidak mendukung ALTER TABLE ADD CONSTRAINT CHECK pada tabel yang
+        // sudah ada, jadi kita pakai trigger sebagai penegak aturan yang setara.
+        // Pada install fresh, Drift sudah menerapkan CHECK via definisi kolom di Products.
+        await customStatement(
+          "CREATE TRIGGER IF NOT EXISTS prevent_negative_stock_insert "
+          "BEFORE INSERT ON products "
+          "FOR EACH ROW WHEN NEW.stock < 0 "
+          "BEGIN SELECT RAISE(ABORT, 'Stok tidak boleh negatif'); END"
+        );
+        await customStatement(
+          "CREATE TRIGGER IF NOT EXISTS prevent_negative_stock_update "
+          "BEFORE UPDATE OF stock ON products "
+          "FOR EACH ROW WHEN NEW.stock < 0 "
+          "BEGIN SELECT RAISE(ABORT, 'Stok tidak boleh negatif'); END"
         );
       }
     },
