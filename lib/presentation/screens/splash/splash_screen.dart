@@ -78,8 +78,14 @@ class _SplashScreenState extends ConsumerState<SplashScreen> {
     // ── 1. Cek apakah DB perlu setup ──────────────────────────────────────
     final db = ref.read(databaseProvider);
     final needsSetup = await db.needsSetup();
-    if (needsSetup && mounted) {
-      _navigate(const SetupWizardScreen());
+    if (needsSetup) {
+      // FIX: Hapus sisa session lama dari SecureStorage saat fresh install.
+      // Android Auto Backup atau Keystore yang persisten bisa menyebabkan
+      // session lama masih ada meski DB sudah terhapus saat uninstall.
+      // Tanpa ini, session != null → app langsung ke LoginScreen, melewati
+      // SetupWizard padahal tabel users sudah kosong.
+      await SecureSession.clearSession();
+      if (mounted) _navigate(const SetupWizardScreen());
       return;
     }
 
