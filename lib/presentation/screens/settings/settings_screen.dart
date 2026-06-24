@@ -1440,7 +1440,7 @@ class _UpdateSheet extends ConsumerWidget {
           SizedBox(
             width: double.infinity,
             child: ElevatedButton.icon(
-              icon: const Icon(Icons.download_rounded),
+              icon: const Icon(Icons.open_in_browser_rounded),
               label: const Text('Download & Install'),
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppColors.primary,

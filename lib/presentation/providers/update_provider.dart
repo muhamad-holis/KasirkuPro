@@ -1,9 +1,7 @@
-import 'dart:io';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:http/http.dart' as http;
-import 'package:open_file/open_file.dart';
 import 'package:package_info_plus/package_info_plus.dart';
-import 'package:path_provider/path_provider.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'dart:convert';
 
 // ─── Konfigurasi GitHub ───────────────────────────────────────────────────────
@@ -121,107 +119,20 @@ class UpdateNotifier extends StateNotifier<UpdateState> {
     }
   }
 
-  // ── Download APK dari GitHub Releases dan install ─────────────────────────
+  // ── Buka halaman download di browser ─────────────────────────────────────
   Future<void> downloadAndInstall() async {
-    final info = state.info;
-    if (info == null) return;
-
-    state = state.copyWith(status: UpdateStatus.downloading, downloadProgress: 0);
-
     try {
-      final tempDir  = await getTemporaryDirectory();
-      final savePath = '${tempDir.path}/kasirkupro_update.apk';
-      final file     = File(savePath);
-
-      // Hapus file lama jika ada
-      if (await file.exists()) await file.delete();
-
-      // Download dengan progress — follow redirect manual untuk GitHub Releases
-      final client = http.Client();
-      http.StreamedResponse response;
-      var uri = Uri.parse(info.downloadUrl);
-
-      // Follow redirect hingga 5x (GitHub pakai 302 redirect ke S3/CDN)
-      int redirectCount = 0;
-      while (true) {
-        final request = http.Request('GET', uri);
-        request.headers['Accept']     = 'application/octet-stream';
-        request.headers['User-Agent'] = 'KasirkuPro-Updater/1.0';
-        request.followRedirects       = false;
-
-        response = await client.send(request)
-            .timeout(const Duration(minutes: 15));
-
-        if ((response.statusCode == 301 ||
-             response.statusCode == 302 ||
-             response.statusCode == 303 ||
-             response.statusCode == 307 ||
-             response.statusCode == 308) &&
-            redirectCount < 5) {
-          final location = response.headers['location'];
-          if (location == null || location.isEmpty) break;
-          uri = uri.resolve(location);
-          redirectCount++;
-          await response.stream.drain();
-          continue;
-        }
-        break;
+      final uri = Uri.parse(
+          'https://muhamad-holis.github.io/KasirkuPOS/#download');
+      if (await canLaunchUrl(uri)) {
+        await launchUrl(uri, mode: LaunchMode.externalApplication);
+      } else {
+        throw Exception('Tidak dapat membuka browser');
       }
-
-      if (response.statusCode != 200) {
-        throw Exception('Download error: ${response.statusCode}');
-      }
-
-      final totalBytes    = response.contentLength ?? 0;
-      var   receivedBytes = 0;
-      final sink          = file.openWrite();
-
-      await for (final chunk in response.stream) {
-        sink.add(chunk);
-        receivedBytes += chunk.length;
-        if (totalBytes > 0) {
-          state = state.copyWith(
-            downloadProgress: receivedBytes / totalBytes,
-          );
-        } else {
-          // Estimasi jika tidak ada Content-Length
-          state = state.copyWith(
-            downloadProgress:
-                (receivedBytes / (100 * 1024 * 1024)).clamp(0.0, 0.99),
-          );
-        }
-      }
-
-      await sink.close();
-      client.close();
-
-      // Verifikasi file — APK minimal 5MB
-      final fileSize = await file.length();
-      if (fileSize < 5 * 1024 * 1024) {
-        throw Exception(
-            'File tidak valid (${(fileSize / 1024).toStringAsFixed(0)} KB)');
-      }
-
-      state = state.copyWith(
-        status:           UpdateStatus.installing,
-        downloadProgress: 1.0,
-      );
-
-      // Trigger install APK
-      final result = await OpenFile.open(
-        savePath,
-        type: 'application/vnd.android.package-archive',
-      );
-
-      if (result.type != ResultType.done) {
-        throw Exception('Gagal membuka installer: ${result.message}');
-      }
-
-      state = state.copyWith(status: UpdateStatus.idle);
     } catch (e) {
       state = state.copyWith(
         status:       UpdateStatus.error,
-        errorMessage: 'Gagal download: ${e.toString()}',
+        errorMessage: 'Gagal membuka halaman download: ${e.toString()}',
       );
     }
   }
