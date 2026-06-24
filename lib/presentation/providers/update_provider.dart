@@ -4,6 +4,7 @@ import 'package:http/http.dart' as http;
 import 'package:open_file/open_file.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:permission_handler/permission_handler.dart';
 import 'dart:convert';
 
 // ─── Konfigurasi GitHub ───────────────────────────────────────────────────────
@@ -32,7 +33,9 @@ class UpdateInfo {
 // ─── State ────────────────────────────────────────────────────────────────────
 
 enum UpdateStatus {
-  idle, checking, available, downloading, installing, upToDate, error
+  idle, checking, available, downloading, installing, upToDate, error,
+  /// User perlu buka Settings → "Install unknown apps" lalu kembali ke app
+  needInstallPermission,
 }
 
 class UpdateState {
@@ -40,12 +43,15 @@ class UpdateState {
   final UpdateInfo? info;
   final double downloadProgress;
   final String? errorMessage;
+  /// Path APK yang sudah selesai diunduh (dipakai saat user kembali dari Settings)
+  final String? downloadedApkPath;
 
   const UpdateState({
     this.status = UpdateStatus.idle,
     this.info,
     this.downloadProgress = 0,
     this.errorMessage,
+    this.downloadedApkPath,
   });
 
   UpdateState copyWith({
@@ -53,11 +59,13 @@ class UpdateState {
     UpdateInfo? info,
     double? downloadProgress,
     String? errorMessage,
+    String? downloadedApkPath,
   }) => UpdateState(
-    status:           status ?? this.status,
-    info:             info ?? this.info,
-    downloadProgress: downloadProgress ?? this.downloadProgress,
-    errorMessage:     errorMessage ?? this.errorMessage,
+    status:            status ?? this.status,
+    info:              info ?? this.info,
+    downloadProgress:  downloadProgress ?? this.downloadProgress,
+    errorMessage:      errorMessage ?? this.errorMessage,
+    downloadedApkPath: downloadedApkPath ?? this.downloadedApkPath,
   );
 }
 
@@ -91,7 +99,6 @@ class UpdateNotifier extends StateNotifier<UpdateState> {
       final latestTag  = (data['tag_name'] as String? ?? '').replaceFirst('v', '');
       final assets     = data['assets'] as List<dynamic>? ?? [];
 
-      // Cari file APK di assets release
       final apkAsset = assets.firstWhere(
         (a) => (a['name'] as String).endsWith('.apk'),
         orElse: () => null,
@@ -121,11 +128,33 @@ class UpdateNotifier extends StateNotifier<UpdateState> {
     }
   }
 
-  // ── Download APK dari GitHub Releases dan install ─────────────────────────
+  // ── Download APK dan install ──────────────────────────────────────────────
   Future<void> downloadAndInstall() async {
     final info = state.info;
     if (info == null) return;
 
+    // ── 1. Cek permission REQUEST_INSTALL_PACKAGES ─────────────────────────
+    //    Di Android 8+ (API 26+) user harus eksplisit mengizinkan
+    //    "Install unknown apps" per-app lewat system settings.
+    if (Platform.isAndroid) {
+      final canInstall = await Permission.requestInstallPackages.status;
+      if (!canInstall.isGranted) {
+        // Minta permission — ini membuka halaman "Install unknown apps" di Settings
+        final result = await Permission.requestInstallPackages.request();
+        if (!result.isGranted) {
+          // User menolak atau tidak bisa diminta lagi → arahkan manual ke Settings
+          state = state.copyWith(
+            status: UpdateStatus.needInstallPermission,
+            errorMessage:
+                'Izinkan "Install unknown apps" untuk aplikasi ini di Pengaturan, '
+                'lalu tekan tombol install lagi.',
+          );
+          return;
+        }
+      }
+    }
+
+    // ── 2. Download APK ────────────────────────────────────────────────────
     state = state.copyWith(status: UpdateStatus.downloading, downloadProgress: 0);
 
     try {
@@ -133,10 +162,8 @@ class UpdateNotifier extends StateNotifier<UpdateState> {
       final savePath = '${tempDir.path}/kasirkupro_update.apk';
       final file     = File(savePath);
 
-      // Hapus file lama jika ada
       if (await file.exists()) await file.delete();
 
-      // Download dengan progress — GitHub Releases support direct download
       final client   = http.Client();
       final request  = http.Request('GET', Uri.parse(info.downloadUrl));
       request.headers['Accept'] = 'application/octet-stream';
@@ -159,7 +186,6 @@ class UpdateNotifier extends StateNotifier<UpdateState> {
             downloadProgress: receivedBytes / totalBytes,
           );
         } else {
-          // Estimasi jika tidak ada Content-Length
           state = state.copyWith(
             downloadProgress:
                 (receivedBytes / (100 * 1024 * 1024)).clamp(0.0, 0.99),
@@ -177,14 +203,49 @@ class UpdateNotifier extends StateNotifier<UpdateState> {
             'File tidak valid (${(fileSize / 1024).toStringAsFixed(0)} KB)');
       }
 
+      // ── 3. Simpan path, set status installing, lalu buka installer ────────
       state = state.copyWith(
-        status:           UpdateStatus.installing,
-        downloadProgress: 1.0,
+        status:            UpdateStatus.installing,
+        downloadProgress:  1.0,
+        downloadedApkPath: savePath,
       );
 
-      // Trigger install APK
+      await _openInstaller(savePath);
+    } catch (e) {
+      state = state.copyWith(
+        status:       UpdateStatus.error,
+        errorMessage: 'Gagal download: ${e.toString()}',
+      );
+    }
+  }
+
+  /// Dipanggil dari UI saat user sudah kembali dari Settings dan permission granted
+  Future<void> retryInstall() async {
+    final apkPath = state.downloadedApkPath;
+    if (apkPath == null) {
+      // APK belum ada, mulai ulang dari download
+      await downloadAndInstall();
+      return;
+    }
+
+    // Cek lagi permission setelah kembali dari Settings
+    if (Platform.isAndroid) {
+      final canInstall = await Permission.requestInstallPackages.status;
+      if (!canInstall.isGranted) {
+        // Buka Settings sekali lagi
+        await openAppSettings();
+        return;
+      }
+    }
+
+    state = state.copyWith(status: UpdateStatus.installing);
+    await _openInstaller(apkPath);
+  }
+
+  Future<void> _openInstaller(String apkPath) async {
+    try {
       final result = await OpenFile.open(
-        savePath,
+        apkPath,
         type: 'application/vnd.android.package-archive',
       );
 
@@ -196,7 +257,7 @@ class UpdateNotifier extends StateNotifier<UpdateState> {
     } catch (e) {
       state = state.copyWith(
         status:       UpdateStatus.error,
-        errorMessage: 'Gagal download: ${e.toString()}',
+        errorMessage: 'Gagal install: ${e.toString()}',
       );
     }
   }

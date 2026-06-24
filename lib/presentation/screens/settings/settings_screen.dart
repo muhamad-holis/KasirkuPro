@@ -1536,6 +1536,58 @@ class _UpdateSheet extends ConsumerWidget {
           ),
         ]);
 
+      // Perlu izin install dari Settings
+      case UpdateStatus.needInstallPermission:
+        return Column(children: [
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: Colors.orange.withOpacity(0.08),
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: Colors.orange.withOpacity(0.4)),
+            ),
+            child: Column(children: [
+              const Icon(Icons.security_rounded,
+                  color: Colors.orange, size: 36),
+              const SizedBox(height: 10),
+              Text(
+                state.errorMessage ??
+                    'Izinkan "Install unknown apps" untuk aplikasi ini di Pengaturan, '
+                    'lalu tekan tombol install lagi.',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: subColor, fontSize: 13),
+              ),
+            ]),
+          ),
+          const SizedBox(height: 16),
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton.icon(
+              icon: const Icon(Icons.settings_rounded),
+              label: const Text('Buka Pengaturan'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.orange,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(vertical: 14),
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12)),
+              ),
+              onPressed: () =>
+                  ref.read(updateProvider.notifier).retryInstall(),
+            ),
+          ),
+          const SizedBox(height: 8),
+          SizedBox(
+            width: double.infinity,
+            child: TextButton(
+              onPressed: () => ref.read(updateProvider.notifier).reset(),
+              child: Text('Batal',
+                  style: TextStyle(color: subColor)),
+            ),
+          ),
+        ]);
+
       // Error
       case UpdateStatus.error:
         return Column(children: [
