@@ -195,8 +195,7 @@ class UpdateNotifier extends StateNotifier<UpdateState> {
       final fileSize = await file.length();
       if (fileSize < 5 * 1024 * 1024) {
         throw Exception(
-            'File download tidak valid (${(fileSize / 1024).toStringAsFixed(0)} KB).
-'
+            'File download tidak valid (${(fileSize / 1024).toStringAsFixed(0)} KB). '
             'Pastikan file di Google Drive dapat diakses publik.');
       }
 
