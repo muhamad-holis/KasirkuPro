@@ -3023,7 +3023,7 @@ class _SuccessDialogState extends ConsumerState<_SuccessDialog> {
 
   // Footer logo PERMANEN KasirKu Pro — selalu dari assets/logo/footer.png,
   // tidak mengikuti logo custom toko, tidak memakai app_icon.png.
-  Future<img.Image?> _loadFooterAppIcon({int maxWidth = 220}) async {
+  Future<img.Image?> _loadFooterAppIcon({int maxWidth = 400}) async {
     try {
       final ByteData data =
           await rootBundle.load('assets/logo/footer.png');
@@ -3034,7 +3034,8 @@ class _SuccessDialogState extends ConsumerState<_SuccessDialog> {
       if (original.width > maxWidth) {
         original = img.copyResize(original, width: maxWidth);
       }
-      return img.grayscale(original); // footer hanya di struk Bluetooth
+      // Warna penuh untuk PDF — grayscale TIDAK dipakai di sini
+      return original;
     } catch (_) {
       return null;
     }
@@ -3254,6 +3255,9 @@ class _SuccessDialogState extends ConsumerState<_SuccessDialog> {
       customerName: widget.customerName,
       items: items,
       discount: widget.cart.discountTotal,
+      discountPercent: (widget.cart.subtotal > 0 && widget.cart.discountTotal > 0)
+          ? (widget.cart.discountTotal / widget.cart.subtotal * 100)
+          : 0.0,
       tax: widget.cart.taxAmount,
       taxPercent: widget.cart.taxPercent,
       total: widget.cart.total,

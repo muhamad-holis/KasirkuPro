@@ -43,6 +43,7 @@ class ReceiptPdfBuilder {
     String? customerName,
     required List<ReceiptPdfItem> items,
     double discount = 0,
+    double discountPercent = 0,
     double tax = 0,
     double taxPercent = 0,
     required double total,
@@ -68,7 +69,7 @@ class ReceiptPdfBuilder {
           crossAxisAlignment: pw.CrossAxisAlignment.stretch,
           children: [
             if (logoImage != null) ...[
-              pw.Center(child: pw.Image(logoImage, width: 85, height: 85, fit: pw.BoxFit.contain)),
+              pw.Center(child: pw.Image(logoImage, width: 110, height: 110, fit: pw.BoxFit.contain)),
               pw.SizedBox(height: 4),
             ],
             pw.Text(storeName, style: pw.TextStyle(fontSize: _fontSizeLg + 2, fontWeight: pw.FontWeight.bold, color: PdfColors.black), textAlign: pw.TextAlign.center),
@@ -118,7 +119,11 @@ class ReceiptPdfBuilder {
             pw.SizedBox(height: 2),
             _hr(),
             _infoRow('Subtotal', CurrencyFormatter.format(subtotal)),
-            if (discount > 0) _infoRow('Diskon', CurrencyFormatter.format(discount)),
+            if (discount > 0) _infoRow(
+              discountPercent > 0
+                  ? 'Diskon ${discountPercent.toStringAsFixed(0)}%'
+                  : 'Diskon',
+              CurrencyFormatter.format(discount)),
             if (tax > 0) _infoRow('Pajak ${taxPercent.toStringAsFixed(0)}%', CurrencyFormatter.format(tax)),
             pw.SizedBox(height: 2),
             _hr(),
@@ -138,7 +143,7 @@ class ReceiptPdfBuilder {
             pw.Text('Simpan struk ini sebagai bukti pembelian', style: const pw.TextStyle(fontSize: _fontSizeSm, color: PdfColors.black), textAlign: pw.TextAlign.center),
             pw.SizedBox(height: 6),
             if (footerLogoImage != null) ...[
-              pw.Center(child: pw.Image(footerLogoImage, width: 80, fit: pw.BoxFit.contain)),
+              pw.Center(child: pw.Image(footerLogoImage, width: 60, fit: pw.BoxFit.contain)),
               pw.SizedBox(height: 3),
             ],
             pw.Text('Link Kritik dan Saran', style: const pw.TextStyle(fontSize: _fontSizeSm, color: PdfColors.black), textAlign: pw.TextAlign.center),
