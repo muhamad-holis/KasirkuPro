@@ -17,6 +17,7 @@ import '../../providers/settings_provider.dart';
 import '../../providers/database_provider.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/backup_provider.dart';
+import '../../providers/update_provider.dart';
 
 class SettingsScreen extends ConsumerWidget {
   const SettingsScreen({super.key});
@@ -299,6 +300,13 @@ class SettingsScreen extends ConsumerWidget {
               subtitle: 'Versi, lisensi & informasi app',
               color: AppColors.primary,
               onTap: () => _showAbout(context),
+            ),
+            _Tile(
+              icon: Icons.system_update_rounded,
+              title: 'Cek Update',
+              subtitle: 'Periksa versi terbaru aplikasi',
+              color: AppColors.primary,
+              onTap: () => _showUpdateSheet(context, ref),
             ),
           ]),
 
@@ -981,6 +989,19 @@ class SettingsScreen extends ConsumerWidget {
     }
   }
 
+  // ── Cek Update ───────────────────────────────────────────────────────────────
+
+  void _showUpdateSheet(BuildContext context, WidgetRef ref) {
+    // Langsung cek update saat sheet dibuka
+    ref.read(updateProvider.notifier).checkUpdate();
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => const _UpdateSheet(),
+    );
+  }
+
   // ── Tentang Aplikasi ──────────────────────────────────────────────────────
 
   void _showAbout(BuildContext context) {
@@ -1310,6 +1331,311 @@ class _AboutSheet extends StatelessWidget {
     );
   }
 }
+
+// ─── Update Sheet ─────────────────────────────────────────────────────────────
+
+class _UpdateSheet extends ConsumerWidget {
+  const _UpdateSheet();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final state  = ref.watch(updateProvider);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final sheetBg    = isDark ? AppColors.darkSurface : Colors.white;
+    final handleColor= isDark ? AppColors.darkBorder : Colors.grey.shade300;
+    final textColor  = isDark ? Colors.white : AppColors.textPrimary;
+    final subColor   = isDark ? const Color(0xFF94A3B8) : AppColors.textSecondary;
+
+    return Container(
+      decoration: BoxDecoration(
+        color: sheetBg,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      padding: EdgeInsets.fromLTRB(
+          24, 12, 24, MediaQuery.of(context).viewInsets.bottom + 40),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // Handle bar
+          Container(
+            width: 40, height: 4,
+            margin: const EdgeInsets.only(bottom: 24),
+            decoration: BoxDecoration(
+              color: handleColor,
+              borderRadius: BorderRadius.circular(2),
+            ),
+          ),
+
+          // Icon
+          Container(
+            width: 64, height: 64,
+            decoration: BoxDecoration(
+              color: AppColors.primaryLight,
+              borderRadius: BorderRadius.circular(18),
+            ),
+            child: const Icon(Icons.system_update_rounded,
+                color: AppColors.primary, size: 32),
+          ),
+          const SizedBox(height: 14),
+          Text('Update Aplikasi',
+              style: TextStyle(
+                fontSize: 20, fontWeight: FontWeight.w800, color: textColor)),
+          const SizedBox(height: 24),
+
+          // ── Konten berdasarkan status ──────────────────────────────────
+          _buildUpdateContent(context, ref, state, textColor, subColor),
+
+          const SizedBox(height: 8),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildUpdateContent(BuildContext context, WidgetRef ref,
+      UpdateState state, Color textColor, Color subColor) {
+    switch (state.status) {
+      // Checking
+      case UpdateStatus.checking:
+        return Padding(
+          padding: const EdgeInsets.symmetric(vertical: 24),
+          child: Column(children: [
+            const CircularProgressIndicator(color: AppColors.primary),
+            const SizedBox(height: 16),
+            Text('Memeriksa update...', style: TextStyle(color: subColor)),
+          ]),
+        );
+
+      // Ada update
+      case UpdateStatus.available:
+        final info = state.info!;
+        return Column(children: [
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: AppColors.primaryLight,
+              borderRadius: BorderRadius.circular(14),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(children: [
+                  const Icon(Icons.new_releases_rounded,
+                      color: AppColors.primary, size: 18),
+                  const SizedBox(width: 8),
+                  Text('Versi Baru Tersedia!',
+                      style: TextStyle(
+                        fontSize: 14, fontWeight: FontWeight.w700,
+                        color: AppColors.primary)),
+                ]),
+                const SizedBox(height: 10),
+                _versionRow('Versi terpasang', info.currentVersion, subColor),
+                const SizedBox(height: 4),
+                _versionRow('Versi terbaru', info.latestVersion, AppColors.primary,
+                    bold: true),
+                if (info.releaseNotes.isNotEmpty) ...[
+                  const SizedBox(height: 12),
+                  Text('Catatan Update:',
+                      style: TextStyle(
+                          fontSize: 12, fontWeight: FontWeight.w600,
+                          color: textColor)),
+                  const SizedBox(height: 4),
+                  Text(
+                    info.releaseNotes.length > 200
+                        ? '${info.releaseNotes.substring(0, 200)}...'
+                        : info.releaseNotes,
+                    style: TextStyle(fontSize: 12, color: subColor, height: 1.5),
+                  ),
+                ],
+              ],
+            ),
+          ),
+          const SizedBox(height: 16),
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton.icon(
+              icon: const Icon(Icons.download_rounded),
+              label: const Text('Download & Install'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.primary,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(vertical: 14),
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12)),
+              ),
+              onPressed: () =>
+                  ref.read(updateProvider.notifier).downloadAndInstall(),
+            ),
+          ),
+        ]);
+
+      // Downloading
+      case UpdateStatus.downloading:
+        final pct = (state.downloadProgress * 100).toInt();
+        return Padding(
+          padding: const EdgeInsets.symmetric(vertical: 16),
+          child: Column(children: [
+            Text('Mengunduh update... $pct%',
+                style: TextStyle(
+                    fontWeight: FontWeight.w600, color: textColor)),
+            const SizedBox(height: 14),
+            LinearProgressIndicator(
+              value: state.downloadProgress,
+              backgroundColor: AppColors.primaryLight,
+              color: AppColors.primary,
+              minHeight: 8,
+              borderRadius: BorderRadius.circular(4),
+            ),
+            const SizedBox(height: 10),
+            Text('Jangan tutup aplikasi saat proses download',
+                style: TextStyle(fontSize: 12, color: subColor)),
+          ]),
+        );
+
+      // Installing
+      case UpdateStatus.installing:
+        return Padding(
+          padding: const EdgeInsets.symmetric(vertical: 24),
+          child: Column(children: [
+            const CircularProgressIndicator(color: AppColors.primary),
+            const SizedBox(height: 16),
+            Text('Membuka installer...',
+                style: TextStyle(color: subColor)),
+            const SizedBox(height: 8),
+            Text('Ikuti instruksi instalasi yang muncul',
+                style: TextStyle(fontSize: 12, color: subColor)),
+          ]),
+        );
+
+      // Sudah up to date
+      case UpdateStatus.upToDate:
+        final info = state.info;
+        return Column(children: [
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: Colors.green.withOpacity(0.08),
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: Colors.green.withOpacity(0.3)),
+            ),
+            child: Column(children: [
+              const Icon(Icons.check_circle_rounded,
+                  color: Colors.green, size: 40),
+              const SizedBox(height: 10),
+              Text('Aplikasi sudah versi terbaru!',
+                  style: TextStyle(
+                      fontSize: 15, fontWeight: FontWeight.w700,
+                      color: textColor)),
+              if (info != null) ...[
+                const SizedBox(height: 6),
+                Text('Versi ${info.currentVersion}',
+                    style: TextStyle(color: subColor, fontSize: 13)),
+              ],
+            ]),
+          ),
+          const SizedBox(height: 16),
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton(
+              onPressed: () =>
+                  ref.read(updateProvider.notifier).checkUpdate(),
+              style: OutlinedButton.styleFrom(
+                padding: const EdgeInsets.symmetric(vertical: 14),
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12)),
+              ),
+              child: const Text('Cek Ulang'),
+            ),
+          ),
+        ]);
+
+      // Error
+      case UpdateStatus.error:
+        return Column(children: [
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: AppColors.danger.withOpacity(0.07),
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: AppColors.danger.withOpacity(0.3)),
+            ),
+            child: Column(children: [
+              const Icon(Icons.error_outline_rounded,
+                  color: AppColors.danger, size: 36),
+              const SizedBox(height: 10),
+              Text(state.errorMessage ?? 'Terjadi kesalahan',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: subColor, fontSize: 13)),
+            ]),
+          ),
+          const SizedBox(height: 16),
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton.icon(
+              icon: const Icon(Icons.refresh_rounded),
+              label: const Text('Coba Lagi'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.primary,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(vertical: 14),
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12)),
+              ),
+              onPressed: () =>
+                  ref.read(updateProvider.notifier).checkUpdate(),
+            ),
+          ),
+        ]);
+
+      // Idle
+      case UpdateStatus.idle:
+      default:
+        return Column(children: [
+          Text('Tekan tombol di bawah untuk memeriksa versi terbaru.',
+              textAlign: TextAlign.center,
+              style: TextStyle(color: subColor, fontSize: 13)),
+          const SizedBox(height: 16),
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton.icon(
+              icon: const Icon(Icons.search_rounded),
+              label: const Text('Cek Update Sekarang'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.primary,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(vertical: 14),
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12)),
+              ),
+              onPressed: () =>
+                  ref.read(updateProvider.notifier).checkUpdate(),
+            ),
+          ),
+        ]);
+    }
+  }
+
+  Widget _versionRow(String label, String value, Color valueColor,
+      {bool bold = false}) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Text(label,
+            style: const TextStyle(fontSize: 13, color: AppColors.textSecondary)),
+        Text(value,
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: bold ? FontWeight.w700 : FontWeight.w500,
+              color: valueColor,
+            )),
+      ],
+    );
+  }
+}
+
+// ─── About Row ────────────────────────────────────────────────────────────────
 
 class _AboutRow extends StatelessWidget {
   final String label;
