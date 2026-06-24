@@ -1433,20 +1433,6 @@ class _UpdateSheet extends ConsumerWidget {
                 const SizedBox(height: 4),
                 _versionRow('Versi terbaru', info.latestVersion, AppColors.primary,
                     bold: true),
-                if (info.releaseNotes.isNotEmpty) ...[
-                  const SizedBox(height: 12),
-                  Text('Catatan Update:',
-                      style: TextStyle(
-                          fontSize: 12, fontWeight: FontWeight.w600,
-                          color: textColor)),
-                  const SizedBox(height: 4),
-                  Text(
-                    info.releaseNotes.length > 200
-                        ? '${info.releaseNotes.substring(0, 200)}...'
-                        : info.releaseNotes,
-                    style: TextStyle(fontSize: 12, color: subColor, height: 1.5),
-                  ),
-                ],
               ],
             ),
           ),
