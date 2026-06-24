@@ -136,12 +136,37 @@ class UpdateNotifier extends StateNotifier<UpdateState> {
       // Hapus file lama jika ada
       if (await file.exists()) await file.delete();
 
-      // Download dengan progress — GitHub Releases support direct download
-      final client   = http.Client();
-      final request  = http.Request('GET', Uri.parse(info.downloadUrl));
-      request.headers['Accept'] = 'application/octet-stream';
-      final response = await client.send(request)
-          .timeout(const Duration(minutes: 15));
+      // Download dengan progress — follow redirect manual untuk GitHub Releases
+      final client = http.Client();
+      http.StreamedResponse response;
+      var uri = Uri.parse(info.downloadUrl);
+
+      // Follow redirect hingga 5x (GitHub pakai 302 redirect ke S3/CDN)
+      int redirectCount = 0;
+      while (true) {
+        final request = http.Request('GET', uri);
+        request.headers['Accept']     = 'application/octet-stream';
+        request.headers['User-Agent'] = 'KasirkuPro-Updater/1.0';
+        request.followRedirects       = false;
+
+        response = await client.send(request)
+            .timeout(const Duration(minutes: 15));
+
+        if ((response.statusCode == 301 ||
+             response.statusCode == 302 ||
+             response.statusCode == 303 ||
+             response.statusCode == 307 ||
+             response.statusCode == 308) &&
+            redirectCount < 5) {
+          final location = response.headers['location'];
+          if (location == null || location.isEmpty) break;
+          uri = uri.resolve(location);
+          redirectCount++;
+          await response.stream.drain();
+          continue;
+        }
+        break;
+      }
 
       if (response.statusCode != 200) {
         throw Exception('Download error: ${response.statusCode}');
