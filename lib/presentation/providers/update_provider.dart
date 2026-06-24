@@ -16,8 +16,10 @@ const _kVersionJsonFileId = '12kAROePLOYrf1frMzPR3lJWGQvVOWtpA';
 const _kApkFileId = '1aCYrsoJI5RoVWzo75A5vASagmH14GP9W';
 
 // URL direct download Google Drive
+// Untuk file besar, Google Drive redirect ke halaman konfirmasi virus scan.
+// Gunakan endpoint /uc dengan confirm=1 dan tambah cookie bypass.
 String _driveDownloadUrl(String fileId) =>
-    'https://drive.google.com/uc?export=download&id=$fileId&confirm=t';
+    'https://drive.usercontent.google.com/download?id=$fileId&export=download&confirm=t&authuser=0';
 
 // ─── Model ────────────────────────────────────────────────────────────────────
 
@@ -131,12 +133,41 @@ class UpdateNotifier extends StateNotifier<UpdateState> {
       final savePath = '${tempDir.path}/kasirkupro_update.apk';
       final file     = File(savePath);
 
+      // Hapus file lama jika ada
+      if (await file.exists()) await file.delete();
+
       final downloadUrl = _driveDownloadUrl(info.apkFileId);
 
-      // Download dengan progress
-      final request  = http.Request('GET', Uri.parse(downloadUrl));
-      final response = await request.send()
-          .timeout(const Duration(minutes: 15));
+      // Download dengan progress + handle redirect Google Drive
+      final client  = http.Client();
+      var   uri     = Uri.parse(downloadUrl);
+      http.StreamedResponse response;
+
+      // Follow redirect manual (Google Drive kadang redirect beberapa kali)
+      int redirectCount = 0;
+      while (true) {
+        final request = http.Request('GET', uri);
+        request.headers['User-Agent'] =
+            'Mozilla/5.0 (Android; Mobile) AppleWebKit/537.36';
+        response = await client.send(request)
+            .timeout(const Duration(minutes: 15));
+
+        if ((response.statusCode == 301 || response.statusCode == 302 ||
+             response.statusCode == 303 || response.statusCode == 307) &&
+            redirectCount < 5) {
+          final location = response.headers['location'];
+          if (location == null) break;
+          uri = Uri.parse(location);
+          redirectCount++;
+          await response.stream.drain(); // buang body redirect
+          continue;
+        }
+        break;
+      }
+
+      if (response.statusCode != 200) {
+        throw Exception('Server error: ${response.statusCode}');
+      }
 
       final totalBytes    = response.contentLength ?? 0;
       var   receivedBytes = 0;
@@ -149,18 +180,30 @@ class UpdateNotifier extends StateNotifier<UpdateState> {
           state = state.copyWith(
             downloadProgress: receivedBytes / totalBytes,
           );
+        } else {
+          // Tidak ada Content-Length — estimasi dari ukuran file
+          state = state.copyWith(
+            downloadProgress: (receivedBytes / (100 * 1024 * 1024))
+                .clamp(0.0, 0.99),
+          );
         }
       }
       await sink.close();
+      client.close();
 
-      // Verifikasi file tidak kosong
+      // Verifikasi file — APK minimal 5MB
       final fileSize = await file.length();
-      if (fileSize < 1024 * 1024) {
-        // Kurang dari 1MB — kemungkinan bukan APK valid
-        throw Exception('File download tidak valid (${fileSize} bytes)');
+      if (fileSize < 5 * 1024 * 1024) {
+        throw Exception(
+            'File download tidak valid (${(fileSize / 1024).toStringAsFixed(0)} KB).
+'
+            'Pastikan file di Google Drive dapat diakses publik.');
       }
 
-      state = state.copyWith(status: UpdateStatus.installing);
+      state = state.copyWith(
+        status: UpdateStatus.installing,
+        downloadProgress: 1.0,
+      );
 
       // Trigger install
       final result = await OpenFile.open(
