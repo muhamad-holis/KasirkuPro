@@ -157,11 +157,31 @@ jobs:
 
       - name: Upload APK ke Google Drive
         run: |
+          # Upload APK
           rclone copy build/app/outputs/flutter-apk/KasirkuPro-latest.apk \
             kasirkupro_drive:KasirkuPro-Release \
             --drive-use-trash=false \
             -v
-          echo "✅ APK berhasil diupload ke Google Drive!"
+
+          # Buat dan upload version.json
+          # App membaca file ini untuk cek versi terbaru
+          VERSION="${{ github.ref_name }}"
+          VERSION_NUMBER="${VERSION#v}"  # hapus prefix "v"
+          cat > /tmp/version.json << EOF
+          {
+            "version": "$VERSION_NUMBER",
+            "tag": "$VERSION",
+            "apk_file_id": "1aCYrsoJI5RoVWzo75A5vASagmH14GP9W",
+            "updated_at": "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          }
+          EOF
+
+          rclone copy /tmp/version.json \
+            kasirkupro_drive:KasirkuPro-Release \
+            --drive-use-trash=false \
+            -v
+
+          echo "✅ APK dan version.json berhasil diupload ke Google Drive!"
 
       # ── 11. Cleanup ───────────────────────────────────────
       - name: Cleanup sensitive files
