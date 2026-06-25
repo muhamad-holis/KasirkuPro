@@ -83,11 +83,16 @@ class _KasirScreenState extends ConsumerState<KasirScreen> {
   }
 
   void _openScanner() {
-    showModalBottomSheet(
+    showGeneralDialog(
       context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (_) => ProviderScope(
+      barrierDismissible: false,
+      barrierColor: Colors.black87,
+      transitionDuration: const Duration(milliseconds: 250),
+      transitionBuilder: (ctx, anim, _, child) => FadeTransition(
+        opacity: anim,
+        child: child,
+      ),
+      pageBuilder: (ctx, _, __) => ProviderScope(
         parent: ProviderScope.containerOf(context),
         child: _BarcodeScannerSheet(
           onDetected: (code) async {
@@ -818,11 +823,16 @@ class _SearchBarState extends ConsumerState<_SearchBar> {
   }
 
   void _openScanner() {
-    showModalBottomSheet(
+    showGeneralDialog(
       context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (_) => ProviderScope(
+      barrierDismissible: false,
+      barrierColor: Colors.black87,
+      transitionDuration: const Duration(milliseconds: 250),
+      transitionBuilder: (ctx, anim, _, child) => FadeTransition(
+        opacity: anim,
+        child: child,
+      ),
+      pageBuilder: (ctx, _, __) => ProviderScope(
         parent: ProviderScope.containerOf(context),
         child: _BarcodeScannerSheet(
           onDetected: (code) async {
@@ -964,117 +974,270 @@ class _BarcodeScannerSheetState
 
   @override
   Widget build(BuildContext context) {
-    // ── LAYOUT BARU: panel kamera kompak & diposisikan di bagian ATAS sheet,
-    // bukan memenuhi ~72% layar seperti sebelumnya. Tinggi kamera tetap (fixed),
-    // sisanya (counter panel + tombol selesai) menyesuaikan secara natural.
-    // Tidak ada perubahan logika scan/debounce/callback di bagian ini.
-    const double cameraHeight = 220;
-    return Container(
-      decoration: const BoxDecoration(
-        color: Colors.black,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          // Handle bar
-          Container(
-            margin: const EdgeInsets.only(top: 12),
-            width: 40,
-            height: 4,
-            decoration: BoxDecoration(
-              color: Colors.white38,
-              borderRadius: BorderRadius.circular(2),
-            ),
-          ),
-          // Title row (kompak, menyatu langsung di atas kamera)
-          Padding(
-            padding: const EdgeInsets.fromLTRB(20, 10, 8, 6),
-            child: Row(children: [
-              const Expanded(
-                child: Text('Scan Barcode',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 15,
-                    fontWeight: FontWeight.w700,
-                  )),
-              ),
-              // Torch toggle
-              IconButton(
-                icon: Icon(
-                  _torchOn
-                      ? Icons.flashlight_on
-                      : Icons.flashlight_off_outlined,
-                  color: _torchOn ? Colors.yellow : Colors.white70,
-                ),
-                onPressed: () {
-                  _scannerCtrl.toggleTorch();
-                  setState(() => _torchOn = !_torchOn);
-                },
-              ),
-              IconButton(
-                icon: const Icon(Icons.close, color: Colors.white70),
-                onPressed: () => Navigator.pop(context),
-              ),
-            ]),
-          ),
+    // ── LAYOUT FULLSCREEN: kamera di atas (30% layar), panel item scan di bawah.
+    // Mirip gaya POS scanner modern — kamera selalu terlihat di atas,
+    // daftar item yang sudah scan tampil di bawah secara real-time.
+    final screenHeight = MediaQuery.of(context).size.height;
+    final cameraHeight = screenHeight * 0.30;
+    final totalScanned = _scanLog.values.fold(0, (a, b) => a + b);
 
-          // Camera view — tinggi tetap & ringkas, ditempatkan di atas
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 0, 16, 0),
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(16),
-              child: SizedBox(
-                height: cameraHeight,
-                child: Stack(
-                  children: [
-                    // Scanner
-                    MobileScanner(
-                      controller: _scannerCtrl,
-                      onDetect: _onDetect,
-                    ),
-                    // Overlay viewfinder — LANDSCAPE (lebar x pendek),
-                    // sesuai bentuk barcode produk, bukan kotak.
-                    Center(
-                      child: Container(
-                        width: 220,
-                        height: 110,
-                        decoration: BoxDecoration(
-                          border: Border.all(
-                            color: AppColors.primary,
-                            width: 3,
-                          ),
-                          borderRadius: BorderRadius.circular(12),
+    return Scaffold(
+      backgroundColor: Colors.black,
+      body: SafeArea(
+        child: Column(
+          children: [
+            // ── Bagian ATAS: Kamera (50% layar) ─────────────────────────────
+            SizedBox(
+              height: cameraHeight,
+              child: Stack(
+                children: [
+                  // Kamera penuh memenuhi area atas
+                  MobileScanner(
+                    controller: _scannerCtrl,
+                    onDetect: _onDetect,
+                  ),
+
+                  // AppBar overlay di atas kamera
+                  Positioned(
+                    top: 0, left: 0, right: 0,
+                    child: Container(
+                      decoration: const BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.topCenter,
+                          end: Alignment.bottomCenter,
+                          colors: [Colors.black87, Colors.transparent],
                         ),
-                        child: Stack(children: [
-                          // Corner decorators
-                          _Corner(Alignment.topLeft),
-                          _Corner(Alignment.topRight),
-                          _Corner(Alignment.bottomLeft),
-                          _Corner(Alignment.bottomRight),
-                        ]),
                       ),
-                    ),
-                    // Hint text
-                    Positioned(
-                      bottom: 10,
-                      left: 0,
-                      right: 0,
-                      child: Center(
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 16, vertical: 6),
-                          decoration: BoxDecoration(
-                            color: Colors.black54,
-                            borderRadius: BorderRadius.circular(20),
-                          ),
-                          child: const Text(
-                            'Arahkan kamera ke barcode produk',
+                      padding: const EdgeInsets.fromLTRB(4, 8, 4, 20),
+                      child: Row(children: [
+                        IconButton(
+                          icon: const Icon(Icons.arrow_back_ios_new,
+                              color: Colors.white, size: 20),
+                          onPressed: () => Navigator.pop(context),
+                        ),
+                        const Expanded(
+                          child: Text('Scan Barcode',
                             style: TextStyle(
                               color: Colors.white,
-                              fontSize: 11,
+                              fontSize: 16,
+                              fontWeight: FontWeight.w700,
+                            )),
+                        ),
+                        // Total item badge
+                        if (totalScanned > 0)
+                          Container(
+                            margin: const EdgeInsets.only(right: 8),
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 10, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: AppColors.primary,
+                              borderRadius: BorderRadius.circular(20),
+                            ),
+                            child: Text(
+                              '$totalScanned item',
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 12,
+                                fontWeight: FontWeight.w700,
+                              ),
                             ),
                           ),
+                        // Torch toggle
+                        IconButton(
+                          icon: Icon(
+                            _torchOn
+                                ? Icons.flashlight_on
+                                : Icons.flashlight_off_outlined,
+                            color: _torchOn ? Colors.yellow : Colors.white70,
+                          ),
+                          onPressed: () {
+                            _scannerCtrl.toggleTorch();
+                            setState(() => _torchOn = !_torchOn);
+                          },
+                        ),
+                      ]),
+                    ),
+                  ),
+
+                  // Viewfinder di tengah kamera
+                  Center(
+                    child: Container(
+                      width: 240,
+                      height: 120,
+                      decoration: BoxDecoration(
+                        border: Border.all(
+                          color: AppColors.primary,
+                          width: 3,
+                        ),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Stack(children: [
+                        _Corner(Alignment.topLeft),
+                        _Corner(Alignment.topRight),
+                        _Corner(Alignment.bottomLeft),
+                        _Corner(Alignment.bottomRight),
+                      ]),
+                    ),
+                  ),
+
+                  // Hint text di bawah kamera (gradient overlay bawah)
+                  Positioned(
+                    bottom: 0, left: 0, right: 0,
+                    child: Container(
+                      decoration: const BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.bottomCenter,
+                          end: Alignment.topCenter,
+                          colors: [Colors.black87, Colors.transparent],
+                        ),
+                      ),
+                      padding: const EdgeInsets.fromLTRB(0, 20, 0, 12),
+                      child: const Center(
+                        child: Text(
+                          'Arahkan kamera ke barcode produk',
+                          style: TextStyle(
+                            color: Colors.white70,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
+            // ── Bagian BAWAH: Panel item scan (50% sisa layar) ──────────────
+            Expanded(
+              child: Container(
+                decoration: const BoxDecoration(
+                  color: Color(0xFF1A1A2E),
+                  borderRadius: BorderRadius.vertical(top: Radius.circular(0)),
+                ),
+                child: Column(
+                  children: [
+                    // Header panel
+                    Container(
+                      padding: const EdgeInsets.fromLTRB(16, 14, 16, 10),
+                      decoration: const BoxDecoration(
+                        border: Border(
+                          bottom: BorderSide(color: Colors.white12),
+                        ),
+                      ),
+                      child: Row(children: [
+                        const Icon(Icons.shopping_cart_outlined,
+                            color: Colors.white70, size: 16),
+                        const SizedBox(width: 8),
+                        Text(
+                          totalScanned > 0
+                              ? 'Item Terpindai ($totalScanned)'
+                              : 'Belum ada item',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 13,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ]),
+                    ),
+
+                    // Daftar item scan
+                    Expanded(
+                      child: _scanLog.isEmpty
+                          ? const Center(
+                              child: Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Icon(Icons.qr_code_scanner,
+                                      color: Colors.white24, size: 48),
+                                  SizedBox(height: 12),
+                                  Text('Scan barcode untuk\nmenambahkan produk',
+                                    textAlign: TextAlign.center,
+                                    style: TextStyle(
+                                      color: Colors.white38,
+                                      fontSize: 13,
+                                    )),
+                                ],
+                              ),
+                            )
+                          : ListView(
+                              padding: const EdgeInsets.symmetric(
+                                  vertical: 8, horizontal: 12),
+                              children: _scanLog.entries.map((e) => Container(
+                                margin: const EdgeInsets.only(bottom: 8),
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 14, vertical: 10),
+                                decoration: BoxDecoration(
+                                  color: Colors.white10,
+                                  borderRadius: BorderRadius.circular(10),
+                                  border: Border.all(color: Colors.white12),
+                                ),
+                                child: Row(children: [
+                                  Container(
+                                    width: 32, height: 32,
+                                    decoration: BoxDecoration(
+                                      color: AppColors.primary.withOpacity(0.2),
+                                      borderRadius: BorderRadius.circular(8),
+                                    ),
+                                    child: const Icon(Icons.inventory_2_outlined,
+                                        color: AppColors.primary, size: 16),
+                                  ),
+                                  const SizedBox(width: 10),
+                                  Expanded(
+                                    child: Text(
+                                      e.key.length > 28
+                                          ? '${e.key.substring(0, 28)}…'
+                                          : e.key,
+                                      style: const TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 13,
+                                      ),
+                                    ),
+                                  ),
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 10, vertical: 4),
+                                    decoration: BoxDecoration(
+                                      color: AppColors.primary,
+                                      borderRadius: BorderRadius.circular(20),
+                                    ),
+                                    child: Text(
+                                      'x${e.value}',
+                                      style: const TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w700,
+                                      ),
+                                    ),
+                                  ),
+                                ]),
+                              )).toList(),
+                            ),
+                    ),
+
+                    // Tombol selesai
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+                      child: SizedBox(
+                        width: double.infinity,
+                        child: ElevatedButton.icon(
+                          icon: const Icon(Icons.check_circle_outline,
+                              size: 18),
+                          label: Text(totalScanned == 0
+                              ? 'Scan Barcode untuk mulai'
+                              : 'Selesai – $totalScanned item ditambahkan'),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: totalScanned == 0
+                                ? Colors.white24
+                                : AppColors.primary,
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(vertical: 14),
+                            shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12)),
+                          ),
+                          onPressed: totalScanned == 0
+                              ? null
+                              : () => Navigator.pop(context),
                         ),
                       ),
                     ),
@@ -1082,115 +1245,8 @@ class _BarcodeScannerSheetState
                 ),
               ),
             ),
-          ),
-
-          // ── Live Scan Counter Panel ───────────────────────────────────
-          // (Dibungkus tinggi maksimum + scroll agar tidak overflow,
-          // karena sheet sekarang tidak lagi pakai tinggi fixed 72% layar.
-          // Konten & logika di dalamnya TIDAK diubah.)
-          if (_scanLog.isNotEmpty)
-            ConstrainedBox(
-              constraints: BoxConstraints(
-                maxHeight: MediaQuery.of(context).size.height * 0.22,
-              ),
-              child: SingleChildScrollView(
-                child: Container(
-                  margin: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 14, vertical: 10),
-                  decoration: BoxDecoration(
-                    color: Colors.white12,
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: Colors.white24),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Row(children: [
-                        const Icon(Icons.shopping_cart_outlined,
-                            color: Colors.white70, size: 14),
-                        const SizedBox(width: 6),
-                        Text(
-                          'Sudah masuk keranjang (${_scanLog.values.fold(0, (a, b) => a + b)} item)',
-                          style: const TextStyle(
-                              color: Colors.white70,
-                              fontSize: 11,
-                              fontWeight: FontWeight.w600),
-                        ),
-                      ]),
-                      const SizedBox(height: 6),
-                      ..._scanLog.entries.map((e) => Padding(
-                            padding:
-                                const EdgeInsets.symmetric(vertical: 2),
-                            child: Row(
-                                mainAxisAlignment:
-                                    MainAxisAlignment.spaceBetween,
-                                children: [
-                                  Text(
-                                    e.key.length > 22
-                                        ? '${e.key.substring(0, 22)}…'
-                                        : e.key,
-                                    style: const TextStyle(
-                                        color: Colors.white54,
-                                        fontSize: 11),
-                                  ),
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(
-                                        horizontal: 8, vertical: 2),
-                                    decoration: BoxDecoration(
-                                      color: AppColors.primary
-                                          .withOpacity(0.8),
-                                      borderRadius:
-                                          BorderRadius.circular(20),
-                                    ),
-                                    child: Text(
-                                      'x${e.value}',
-                                      style: const TextStyle(
-                                          color: Colors.white,
-                                          fontSize: 11,
-                                          fontWeight: FontWeight.w700),
-                                    ),
-                                  ),
-                                ]),
-                          )),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-
-          // Tombol selesai scan
-          SafeArea(
-            top: false,
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(16, 10, 16, 16),
-              child: SizedBox(
-                width: double.infinity,
-                child: ElevatedButton.icon(
-                  icon: const Icon(Icons.check_circle_outline,
-                      size: 18),
-                  label: Text(_scanLog.isEmpty
-                      ? 'Scan Barcode untuk mulai'
-                      : 'Selesai – ${_scanLog.values.fold(0, (a, b) => a + b)} item ditambahkan'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: _scanLog.isEmpty
-                        ? Colors.white24
-                        : AppColors.primary,
-                    foregroundColor: Colors.white,
-                    padding:
-                        const EdgeInsets.symmetric(vertical: 13),
-                    shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12)),
-                  ),
-                  onPressed: _scanLog.isEmpty
-                      ? null
-                      : () => Navigator.pop(context),
-                ),
-              ),
-            ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
