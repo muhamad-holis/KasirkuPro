@@ -5,6 +5,7 @@ import '../screens/dashboard/dashboard_screen.dart';
 import '../screens/kasir/kasir_screen.dart';
 import '../screens/stok/stok_screen.dart';
 import '../screens/laporan/laporan_screen.dart';
+import '../screens/payment_method/payment_method_screen.dart';
 import '../screens/settings/settings_screen.dart';
 import '../screens/pelanggan/pelanggan_screen.dart';
 import '../screens/hutang/hutang_screen.dart';
@@ -347,6 +348,16 @@ class _LainnyaHomeScreen extends ConsumerWidget {
                     context: context,
                     builder: (_) => const _KalkulatorDialog(),
                   ),
+                ),
+                _MenuCard(
+                  icon: Icons.payment_rounded,
+                  label: 'Metode Pembayaran',
+                  description: 'QRIS & rekening transfer',
+                  color: AppColors.primary,
+                  onTap: () => Navigator.push(context,
+                      MaterialPageRoute(builder: (_) => ProviderScope(
+                        parent: ProviderScope.containerOf(context),
+                        child: const PaymentMethodScreen()))),
                 ),
                 if (isAdmin) ...[
                   _MenuCard(

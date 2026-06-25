@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'database_provider.dart';
@@ -29,6 +30,38 @@ class ThemeModeNotifier extends StateNotifier<bool> {
 
 // ─── Store Settings ───────────────────────────────────────────────────────────
 
+// ─── Model Rekening Bank ─────────────────────────────────────────────────────
+
+class BankAccount {
+  final String id;         // uuid unik
+  final String bankName;   // nama bank / e-wallet
+  final String accountNumber;
+  final String accountHolder;
+
+  const BankAccount({
+    required this.id,
+    required this.bankName,
+    required this.accountNumber,
+    required this.accountHolder,
+  });
+
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'bankName': bankName,
+    'accountNumber': accountNumber,
+    'accountHolder': accountHolder,
+  };
+
+  factory BankAccount.fromJson(Map<String, dynamic> j) => BankAccount(
+    id:            j['id'] as String,
+    bankName:      j['bankName'] as String,
+    accountNumber: j['accountNumber'] as String,
+    accountHolder: j['accountHolder'] as String,
+  );
+}
+
+// ─── Store Settings ───────────────────────────────────────────────────────────
+
 class StoreSettings {
   final String storeName;
   final String storeAddress;
@@ -38,7 +71,9 @@ class StoreSettings {
   final String currency;
   final bool showLogo;
   final bool printAfterTransaction;
-  final String logoPath; // path ke file logo custom
+  final String logoPath;
+  final String qrisImagePath;        // path gambar QR code toko
+  final List<BankAccount> bankAccounts; // daftar rekening transfer
 
   const StoreSettings({
     this.storeName            = 'KasirKu',
@@ -50,6 +85,8 @@ class StoreSettings {
     this.showLogo             = true,
     this.printAfterTransaction = false,
     this.logoPath             = '',
+    this.qrisImagePath        = '',
+    this.bankAccounts         = const [],
   });
 
   StoreSettings copyWith({
@@ -62,6 +99,8 @@ class StoreSettings {
     bool? showLogo,
     bool? printAfterTransaction,
     String? logoPath,
+    String? qrisImagePath,
+    List<BankAccount>? bankAccounts,
   }) => StoreSettings(
     storeName:             storeName             ?? this.storeName,
     storeAddress:          storeAddress          ?? this.storeAddress,
@@ -72,6 +111,8 @@ class StoreSettings {
     showLogo:              showLogo              ?? this.showLogo,
     printAfterTransaction: printAfterTransaction ?? this.printAfterTransaction,
     logoPath:              logoPath              ?? this.logoPath,
+    qrisImagePath:         qrisImagePath         ?? this.qrisImagePath,
+    bankAccounts:          bankAccounts          ?? this.bankAccounts,
   );
 }
 
@@ -86,6 +127,18 @@ class StoreSettingsNotifier extends StateNotifier<StoreSettings> {
     final db = _ref.read(databaseProvider);
     final all = await db.settingsDao.getAllSettings();
     final map = {for (final s in all) s.key: s.value ?? ''};
+    // Parse daftar rekening dari JSON
+    List<BankAccount> accounts = [];
+    try {
+      final raw = map['bank_accounts'] ?? '';
+      if (raw.isNotEmpty) {
+        final list = jsonDecode(raw) as List<dynamic>;
+        accounts = list
+            .map((e) => BankAccount.fromJson(e as Map<String, dynamic>))
+            .toList();
+      }
+    } catch (_) {}
+
     state = StoreSettings(
       storeName:             map['toko_nama']            ?? 'KasirKu',
       storeAddress:          map['toko_alamat']          ?? '',
@@ -96,6 +149,8 @@ class StoreSettingsNotifier extends StateNotifier<StoreSettings> {
       showLogo:              map['struk_logo']           != 'false',
       printAfterTransaction: map['cetak_otomatis']       == 'true',
       logoPath:              map['logo_path']            ?? '',
+      qrisImagePath:         map['qris_image_path']      ?? '',
+      bankAccounts:          accounts,
     );
   }
 
@@ -103,15 +158,17 @@ class StoreSettingsNotifier extends StateNotifier<StoreSettings> {
     state = s;
     final db = _ref.read(databaseProvider);
     final entries = {
-      'toko_nama':      s.storeName,
-      'toko_alamat':    s.storeAddress,
-      'toko_telepon':   s.storePhone,
-      'struk_catatan':  s.storeNote,
-      'struk_ukuran':   s.receiptSize,
-      'mata_uang':      s.currency,
-      'struk_logo':     s.showLogo.toString(),
-      'cetak_otomatis': s.printAfterTransaction.toString(),
-      'logo_path':      s.logoPath,
+      'toko_nama':       s.storeName,
+      'toko_alamat':     s.storeAddress,
+      'toko_telepon':    s.storePhone,
+      'struk_catatan':   s.storeNote,
+      'struk_ukuran':    s.receiptSize,
+      'mata_uang':       s.currency,
+      'struk_logo':      s.showLogo.toString(),
+      'cetak_otomatis':  s.printAfterTransaction.toString(),
+      'logo_path':       s.logoPath,
+      'qris_image_path': s.qrisImagePath,
+      'bank_accounts':   jsonEncode(s.bankAccounts.map((e) => e.toJson()).toList()),
     };
     for (final e in entries.entries) {
       await db.settingsDao.setSetting(e.key, e.value);

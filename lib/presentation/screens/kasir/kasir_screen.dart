@@ -19,6 +19,7 @@ import '../../../core/utils/currency.dart';
 import '../../../core/utils/responsive.dart';
 import '../../../core/utils/receipt_pdf_builder.dart';
 import '../../providers/kasir_provider.dart';
+import '../../providers/settings_provider.dart';
 import '../../providers/products_provider.dart';
 import '../../providers/database_provider.dart';
 import '../../providers/settings_provider.dart';
@@ -1667,6 +1668,18 @@ class _PaymentSheetState extends ConsumerState<_PaymentSheet> {
               ],
             ),
             const SizedBox(height: 16),
+
+            // ── Tampilan QRIS ──────────────────────────────────────────────
+            if (_method == 'qris') ...[
+              _QrisDisplay(onTap: () {}),
+              const SizedBox(height: 16),
+            ],
+
+            // ── Tampilan info rekening Transfer ────────────────────────────
+            if (_method == 'transfer') ...[
+              _TransferAccountsDisplay(),
+              const SizedBox(height: 16),
+            ],
 
             if (_method == 'tunai') ...[
               TextField(
@@ -3351,6 +3364,194 @@ class _EmptyCart extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+// ─── Widget QRIS Display di Payment Sheet ────────────────────────────────────
+
+class _QrisDisplay extends ConsumerWidget {
+  final VoidCallback? onTap;
+  const _QrisDisplay({this.onTap});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final store   = ref.watch(storeSettingsProvider);
+    final isDark  = Theme.of(context).brightness == Brightness.dark;
+    final cardBg  = isDark ? AppColors.darkSurface : Colors.grey.shade50;
+    final subColor= isDark ? const Color(0xFF94A3B8) : AppColors.textSecondary;
+
+    return Container(
+      width: double.infinity,
+      decoration: BoxDecoration(
+        color: cardBg,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: isDark ? AppColors.darkBorder : Colors.grey.shade200),
+      ),
+      child: store.qrisImagePath.isNotEmpty &&
+              File(store.qrisImagePath).existsSync()
+          ? Column(children: [
+              ClipRRect(
+                borderRadius:
+                    const BorderRadius.vertical(top: Radius.circular(13)),
+                child: Image.file(
+                  File(store.qrisImagePath),
+                  width: double.infinity,
+                  height: 220,
+                  fit: BoxFit.contain,
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 12, vertical: 10),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.qr_code_scanner_rounded,
+                        size: 16, color: subColor),
+                    const SizedBox(width: 6),
+                    Text('Minta customer scan QR di atas',
+                        style: TextStyle(
+                            fontSize: 12, color: subColor)),
+                  ],
+                ),
+              ),
+            ])
+          : Padding(
+              padding: const EdgeInsets.all(20),
+              child: Column(children: [
+                Icon(Icons.qr_code_2_rounded,
+                    size: 48, color: Colors.grey.shade400),
+                const SizedBox(height: 8),
+                Text('Belum ada gambar QRIS',
+                    style: TextStyle(
+                        fontWeight: FontWeight.w600, color: subColor)),
+                const SizedBox(height: 4),
+                Text('Upload gambar QRIS di Menu → Metode Pembayaran',
+                    textAlign: TextAlign.center,
+                    style:
+                        TextStyle(fontSize: 12, color: subColor)),
+              ]),
+            ),
+    );
+  }
+}
+
+// ─── Widget Transfer Accounts Display di Payment Sheet ───────────────────────
+
+class _TransferAccountsDisplay extends ConsumerWidget {
+  const _TransferAccountsDisplay();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final store    = ref.watch(storeSettingsProvider);
+    final accounts = store.bankAccounts;
+    final isDark   = Theme.of(context).brightness == Brightness.dark;
+    final subColor = isDark ? const Color(0xFF94A3B8) : AppColors.textSecondary;
+
+    if (accounts.isEmpty) {
+      return Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: isDark ? AppColors.darkSurface : Colors.grey.shade50,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(
+              color: isDark ? AppColors.darkBorder : Colors.grey.shade200),
+        ),
+        child: Column(children: [
+          Icon(Icons.account_balance_outlined,
+              size: 40, color: Colors.grey.shade400),
+          const SizedBox(height: 8),
+          Text('Belum ada rekening tersimpan',
+              style: TextStyle(
+                  fontWeight: FontWeight.w600, color: subColor)),
+          const SizedBox(height: 4),
+          Text('Tambah rekening di Menu → Metode Pembayaran',
+              textAlign: TextAlign.center,
+              style: TextStyle(fontSize: 12, color: subColor)),
+        ]),
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('Transfer ke rekening:',
+            style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: subColor)),
+        const SizedBox(height: 8),
+        ...accounts.map((acc) => Container(
+              margin: const EdgeInsets.only(bottom: 8),
+              padding: const EdgeInsets.symmetric(
+                  horizontal: 14, vertical: 12),
+              decoration: BoxDecoration(
+                color: isDark ? AppColors.darkSurface : Colors.white,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                    color: isDark
+                        ? AppColors.darkBorder
+                        : Colors.grey.shade200),
+              ),
+              child: Row(children: [
+                Container(
+                  width: 38, height: 38,
+                  decoration: BoxDecoration(
+                    color: AppColors.primaryLight,
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: const Icon(Icons.account_balance_rounded,
+                      color: AppColors.primary, size: 18),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(acc.bankName,
+                          style: const TextStyle(
+                              fontWeight: FontWeight.w700,
+                              fontSize: 13)),
+                      const SizedBox(height: 2),
+                      Text(acc.accountNumber,
+                          style: const TextStyle(
+                              fontWeight: FontWeight.w600,
+                              fontSize: 15,
+                              letterSpacing: 0.5)),
+                      Text('a/n ${acc.accountHolder}',
+                          style: TextStyle(
+                              fontSize: 11, color: subColor)),
+                    ],
+                  ),
+                ),
+                GestureDetector(
+                  onTap: () {
+                    Clipboard.setData(
+                        ClipboardData(text: acc.accountNumber));
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text(
+                            'No. rekening ${acc.bankName} disalin'),
+                        duration: const Duration(seconds: 2),
+                        backgroundColor: AppColors.success,
+                      ),
+                    );
+                  },
+                  child: Container(
+                    padding: const EdgeInsets.all(6),
+                    decoration: BoxDecoration(
+                      color: AppColors.primaryLight,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: const Icon(Icons.copy_rounded,
+                        size: 16, color: AppColors.primary),
+                  ),
+                ),
+              ]),
+            )),
+      ],
     );
   }
 }
