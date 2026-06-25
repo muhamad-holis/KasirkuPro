@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:file_picker/file_picker.dart';
@@ -1016,8 +1017,26 @@ class SettingsScreen extends ConsumerWidget {
 
 // ─── About Sheet ──────────────────────────────────────────────────────────────
 
-class _AboutSheet extends StatelessWidget {
+class _AboutSheet extends StatefulWidget {
   const _AboutSheet();
+
+  @override
+  State<_AboutSheet> createState() => _AboutSheetState();
+}
+
+class _AboutSheetState extends State<_AboutSheet> {
+  String _appVersion = '...';
+
+  @override
+  void initState() {
+    super.initState();
+    _loadVersion();
+  }
+
+  Future<void> _loadVersion() async {
+    final info = await PackageInfo.fromPlatform();
+    if (mounted) setState(() => _appVersion = info.version);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -1159,7 +1178,7 @@ class _AboutSheet extends StatelessWidget {
                 children: [
                   _AboutRow(
                     label: 'Versi',
-                    value: '1.0.0',
+                    value: _appVersion,
                     icon: Icons.tag_rounded,
                     isDark: isDark,
                   ),
