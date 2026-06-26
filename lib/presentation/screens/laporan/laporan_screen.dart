@@ -705,34 +705,34 @@ class _SalesTab extends ConsumerWidget {
                   return Builder(builder: (context) {
                     final isDark = Theme.of(context).brightness == Brightness.dark;
                     return Container(
-                    margin: const EdgeInsets.only(bottom: 4),
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 14, vertical: 10),
-                    decoration: BoxDecoration(
-                      color: Theme.of(context).cardColor,
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: isDark ? AppColors.darkBorder : Colors.grey.shade100),
-                    ),
-                    child: Row(children: [
-                      Expanded(
-                          child: Text(dateStr,
-                              style: const TextStyle(
-                                  fontWeight: FontWeight.w600,
-                                  fontSize: 13))),
-                      Text('${row['jumlah']} transaksi',
-                          style: TextStyle(
-                              fontSize: 12,
-                              color: Colors.grey.shade500)),
-                      const SizedBox(width: 12),
-                      Text(
-                          CurrencyFormatter.formatCompact(
-                              (row['omzet'] as num).toDouble()),
-                          style: const TextStyle(
-                              color: AppColors.success,
-                              fontWeight: FontWeight.w700,
-                              fontSize: 13)),
-                    ]),
-                  );
+                      margin: const EdgeInsets.only(bottom: 4),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 14, vertical: 10),
+                      decoration: BoxDecoration(
+                        color: Theme.of(context).cardColor,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: isDark ? AppColors.darkBorder : Colors.grey.shade100),
+                      ),
+                      child: Row(children: [
+                        Expanded(
+                            child: Text(dateStr,
+                                style: const TextStyle(
+                                    fontWeight: FontWeight.w600,
+                                    fontSize: 13))),
+                        Text('${row['jumlah']} transaksi',
+                            style: TextStyle(
+                                fontSize: 12,
+                                color: Colors.grey.shade500)),
+                        const SizedBox(width: 12),
+                        Text(
+                            CurrencyFormatter.formatCompact(
+                                (row['omzet'] as num).toDouble()),
+                            style: const TextStyle(
+                                color: AppColors.success,
+                                fontWeight: FontWeight.w700,
+                                fontSize: 13)),
+                      ]),
+                    );
                   });
                 }),
                 
