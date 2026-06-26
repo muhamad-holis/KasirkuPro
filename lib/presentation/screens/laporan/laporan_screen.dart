@@ -851,8 +851,9 @@ class _SalesTab extends ConsumerWidget {
                                 )
                               ),
                               Text(CurrencyFormatter.formatCompact(p['omzet']), style: const TextStyle(fontWeight: FontWeight.w700, color: AppColors.success, fontSize: 13)),
-                            ]
-                          );
+                            ],
+                          ),
+                        );
                         })).toList()
                       );
                     }
