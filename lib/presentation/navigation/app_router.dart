@@ -595,14 +595,16 @@ class _MenuCard extends StatelessWidget {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Container(
-                padding: const EdgeInsets.all(8),
+                width: 64,
+                height: 64,
+                padding: imagePath != null ? EdgeInsets.zero : const EdgeInsets.all(10),
                 decoration: BoxDecoration(
                   color: color.withOpacity(0.12),
-                  borderRadius: BorderRadius.circular(10),
+                  borderRadius: BorderRadius.circular(14),
                 ),
                 child: imagePath != null
-                    ? Image.asset(imagePath!, width: 28, height: 28)
-                    : Icon(icon ?? Icons.apps, color: color, size: 20),
+                    ? Image.asset(imagePath!, fit: BoxFit.contain)
+                    : Icon(icon ?? Icons.apps, color: color, size: 28),
               ),
               Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
