@@ -65,6 +65,7 @@ flutter:
     - assets/images/
     - assets/videos/
     - assets/logo/
+    - assets/icons/menu/
 
 flutter_icons:
   android: true

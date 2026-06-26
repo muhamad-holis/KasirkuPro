@@ -318,7 +318,9 @@ class _ProductListTab extends ConsumerWidget {
                           onSelected: (_) => ref
                               .read(selectedCategoryProvider.notifier)
                               .state = null,
-                          selectedColor: AppColors.primaryLight,
+                          selectedColor: Theme.of(context).brightness == Brightness.dark
+                              ? AppColors.darkPrimaryLight
+                              : AppColors.primaryLight,
                           checkmarkColor: AppColors.primary,
                         ),
                       ),
@@ -330,7 +332,9 @@ class _ProductListTab extends ConsumerWidget {
                           onSelected: (_) => ref
                               .read(selectedCategoryProvider.notifier)
                               .state = selectedCat == c.id ? null : c.id,
-                          selectedColor: AppColors.primaryLight,
+                          selectedColor: Theme.of(context).brightness == Brightness.dark
+                              ? AppColors.darkPrimaryLight
+                              : AppColors.primaryLight,
                           checkmarkColor: AppColors.primary,
                         ),
                       )),
@@ -963,7 +967,9 @@ class _KategoriEmptyState extends StatelessWidget {
             width: 80,
             height: 80,
             decoration: BoxDecoration(
-              color: AppColors.primaryLight,
+              color: Theme.of(context).brightness == Brightness.dark
+                  ? AppColors.darkPrimaryLight
+                  : AppColors.primaryLight,
               shape: BoxShape.circle,
             ),
             child: const Icon(Icons.category_outlined,
@@ -1093,8 +1099,8 @@ class _ProductGridCard extends ConsumerWidget {
               flex: 5,
               child: Container(
                 color: isOut
-                    ? Colors.grey.shade100
-                    : AppColors.primaryLight,
+                    ? (Theme.of(context).brightness == Brightness.dark ? AppColors.darkSurface : Colors.grey.shade100)
+                    : (Theme.of(context).brightness == Brightness.dark ? AppColors.darkPrimaryLight : AppColors.primaryLight),
                 child: product.imagePath != null &&
                         product.imagePath!.isNotEmpty
                     ? Image.file(
@@ -1219,8 +1225,8 @@ class _ProductCard extends ConsumerWidget {
               height: 46,
               decoration: BoxDecoration(
                 color: isOut
-                    ? Colors.grey.shade100
-                    : AppColors.primaryLight,
+                    ? (Theme.of(context).brightness == Brightness.dark ? AppColors.darkSurface : Colors.grey.shade100)
+                    : (Theme.of(context).brightness == Brightness.dark ? AppColors.darkPrimaryLight : AppColors.primaryLight),
                 borderRadius: BorderRadius.circular(12),
                 image: product.imagePath != null && product.imagePath!.isNotEmpty
                     ? DecorationImage(
@@ -1392,7 +1398,9 @@ class _AddProductSheetState extends ConsumerState<_AddProductSheet> {
               child: Container(
                 width: 100, height: 100,
                 decoration: BoxDecoration(
-                  color: AppColors.primaryLight,
+                  color: Theme.of(context).brightness == Brightness.dark
+                      ? AppColors.darkPrimaryLight
+                      : AppColors.primaryLight,
                   borderRadius: BorderRadius.circular(16),
                   border: Border.all(
                     color: AppColors.primary.withOpacity(0.3),
@@ -1475,7 +1483,9 @@ class _AddProductSheetState extends ConsumerState<_AddProductSheet> {
                     padding: const EdgeInsets.symmetric(
                         horizontal: 12, vertical: 12),
                     decoration: BoxDecoration(
-                      color: AppColors.primaryLight,
+                      color: Theme.of(context).brightness == Brightness.dark
+                          ? AppColors.darkPrimaryLight
+                          : AppColors.primaryLight,
                       borderRadius: BorderRadius.circular(10),
                       border: Border.all(
                           color: AppColors.primary.withOpacity(0.4)),
@@ -2107,7 +2117,9 @@ class _EditProductSheetState extends ConsumerState<_EditProductSheet>
                           child: Container(
                             width: 90, height: 90,
                             decoration: BoxDecoration(
-                              color: AppColors.primaryLight,
+                              color: Theme.of(context).brightness == Brightness.dark
+                                  ? AppColors.darkPrimaryLight
+                                  : AppColors.primaryLight,
                               borderRadius: BorderRadius.circular(14),
                               border: Border.all(
                                 color: AppColors.primary.withOpacity(0.3),

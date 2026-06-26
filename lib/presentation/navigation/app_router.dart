@@ -259,7 +259,7 @@ class _LainnyaHomeScreen extends ConsumerWidget {
               ),
               delegate: SliverChildListDelegate([
                 _MenuCard(
-                  icon: Icons.shopping_cart_outlined,
+                  imagePath: 'assets/icons/menu/mulai_kasir.png',
                   label: 'Mulai Kasir',
                   description: 'Transaksi penjualan',
                   color: AppColors.primary,
@@ -267,7 +267,7 @@ class _LainnyaHomeScreen extends ConsumerWidget {
                       ref.read(currentNavIndexProvider.notifier).state = 2,
                 ),
                 _MenuCard(
-                  icon: Icons.add_box_outlined,
+                  imagePath: 'assets/icons/menu/tambah_stok.png',
                   label: 'Tambah Produk',
                   description: 'Kelola stok produk',
                   color: AppColors.success,
@@ -275,7 +275,7 @@ class _LainnyaHomeScreen extends ConsumerWidget {
                       ref.read(currentNavIndexProvider.notifier).state = 3,
                 ),
                 _MenuCard(
-                  icon: Icons.insert_chart_outlined_rounded,
+                  imagePath: 'assets/icons/menu/laporan.png',
                   label: 'Laporan Hari Ini',
                   description: 'Ringkasan penjualan',
                   color: AppColors.warning,
@@ -283,14 +283,14 @@ class _LainnyaHomeScreen extends ConsumerWidget {
                       ref.read(currentNavIndexProvider.notifier).state = 1,
                 ),
                 _MenuCard(
-                  icon: Icons.payments_rounded,
+                  imagePath: 'assets/icons/menu/keuangan.png',
                   label: 'Kas & Keuangan',
                   description: 'Kas masuk & keluar',
                   color: AppColors.success,
                   onTap: () => MainNavigation.navigateToKas(context),
                 ),
                 _MenuCard(
-                  icon: Icons.people_rounded,
+                  imagePath: 'assets/icons/menu/pelanggan.png',
                   label: 'Pelanggan',
                   description: 'Kelola data pelanggan',
                   color: AppColors.primary,
@@ -300,7 +300,7 @@ class _LainnyaHomeScreen extends ConsumerWidget {
                         child: const PelangganScreen()))),
                 ),
                 _MenuCard(
-                  icon: Icons.local_shipping_rounded,
+                  imagePath: 'assets/icons/menu/pemasok.png',
                   label: 'Pemasok',
                   description: 'Data supplier & sales',
                   color: AppColors.info,
@@ -310,7 +310,7 @@ class _LainnyaHomeScreen extends ConsumerWidget {
                         child: const SupplierScreen()))),
                 ),
                 _MenuCard(
-                  icon: Icons.receipt_long_rounded,
+                  imagePath: 'assets/icons/menu/riwayat_transaksi.png',
                   label: 'Riwayat Transaksi',
                   description: 'Histori & cetak ulang struk',
                   color: AppColors.success,
@@ -320,7 +320,7 @@ class _LainnyaHomeScreen extends ConsumerWidget {
                         child: const RiwayatScreen()))),
                 ),
                 _MenuCard(
-                  icon: Icons.account_balance_wallet_rounded,
+                  imagePath: 'assets/icons/menu/hutang.png',
                   label: 'Hutang',
                   description: 'Catat hutang piutang',
                   color: AppColors.warning,
@@ -330,7 +330,7 @@ class _LainnyaHomeScreen extends ConsumerWidget {
                         child: const HutangScreen()))),
                 ),
                 _MenuCard(
-                  icon: Icons.notifications_rounded,
+                  imagePath: 'assets/icons/menu/notifikasi.png',
                   label: 'Notifikasi',
                   description: 'Stok & jatuh tempo',
                   color: AppColors.info,
@@ -340,7 +340,7 @@ class _LainnyaHomeScreen extends ConsumerWidget {
                         child: const NotifikasiScreen()))),
                 ),
                 _MenuCard(
-                  icon: Icons.calculate_rounded,
+                  imagePath: 'assets/icons/menu/kalkulator.png',
                   label: 'Kalkulator',
                   description: 'Hitung cepat',
                   color: AppColors.info,
@@ -350,7 +350,7 @@ class _LainnyaHomeScreen extends ConsumerWidget {
                   ),
                 ),
                 _MenuCard(
-                  icon: Icons.payment_rounded,
+                  imagePath: 'assets/icons/menu/motode_pembayaran.png',
                   label: 'Metode Pembayaran',
                   description: 'QRIS & rekening transfer',
                   color: AppColors.primary,
@@ -361,7 +361,7 @@ class _LainnyaHomeScreen extends ConsumerWidget {
                 ),
                 if (isAdmin) ...[
                   _MenuCard(
-                    icon: Icons.people_alt_rounded,
+                    imagePath: 'assets/icons/menu/kelola_admin.png',
                     label: 'Kelola Kasir',
                     description: 'Tambah & atur akun',
                     color: AppColors.success,
@@ -371,7 +371,7 @@ class _LainnyaHomeScreen extends ConsumerWidget {
                           child: const KasirManagementScreen()))),
                   ),
                   _MenuCard(
-                    icon: Icons.settings_rounded,
+                    imagePath: 'assets/icons/menu/pengaturan.png',
                     label: 'Pengaturan',
                     description: 'Toko, struk & printer',
                     color: AppColors.textSecondary,
@@ -553,14 +553,16 @@ class _MenuHeaderDelegate extends SliverPersistentHeaderDelegate {
 // ─────────────────────────────────────────────────────────────────────────────
 
 class _MenuCard extends StatelessWidget {
-  final IconData icon;
+  final IconData? icon;
+  final String? imagePath;
   final String label;
   final String description;
   final Color color;
   final VoidCallback onTap;
 
   const _MenuCard({
-    required this.icon,
+    this.icon,
+    this.imagePath,
     required this.label,
     required this.description,
     required this.color,
@@ -598,7 +600,9 @@ class _MenuCard extends StatelessWidget {
                   color: color.withOpacity(0.12),
                   borderRadius: BorderRadius.circular(10),
                 ),
-                child: Icon(icon, color: color, size: 20),
+                child: imagePath != null
+                    ? Image.asset(imagePath!, width: 28, height: 28)
+                    : Icon(icon ?? Icons.apps, color: color, size: 20),
               ),
               Column(
                 crossAxisAlignment: CrossAxisAlignment.start,

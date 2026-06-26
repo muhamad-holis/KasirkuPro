@@ -702,14 +702,16 @@ class _SalesTab extends ConsumerWidget {
                       dateStr = dateRaw.toString();
                     }
                   }
-                  return Container(
+                  return Builder(builder: (context) {
+                    final isDark = Theme.of(context).brightness == Brightness.dark;
+                    return Container(
                     margin: const EdgeInsets.only(bottom: 4),
                     padding: const EdgeInsets.symmetric(
                         horizontal: 14, vertical: 10),
                     decoration: BoxDecoration(
-                      color: Colors.white,
+                      color: Theme.of(context).cardColor,
                       borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: Colors.grey.shade100),
+                      border: Border.all(color: isDark ? AppColors.darkBorder : Colors.grey.shade100),
                     ),
                     child: Row(children: [
                       Expanded(
@@ -731,6 +733,7 @@ class _SalesTab extends ConsumerWidget {
                               fontSize: 13)),
                     ]),
                   );
+                  });
                 }),
                 
                 const SizedBox(height: 24),
@@ -755,9 +758,9 @@ class _SalesTab extends ConsumerWidget {
                       return Container(
                         padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 16),
                         decoration: BoxDecoration(
-                          color: Colors.white,
+                          color: Theme.of(ctx).cardColor,
                           borderRadius: BorderRadius.circular(16),
-                          border: Border.all(color: Colors.grey.shade200),
+                          border: Border.all(color: Theme.of(ctx).brightness == Brightness.dark ? AppColors.darkBorder : Colors.grey.shade200),
                         ),
                         child: Row(
                           children: [
@@ -819,13 +822,15 @@ class _SalesTab extends ConsumerWidget {
                     data: (products) {
                       if (products.isEmpty) return const Text('Belum ada data', style: TextStyle(color: Colors.grey));
                       return Column(
-                        children: products.map((p) => Container(
+                        children: products.map((p) => Builder(builder: (context) {
+                          final isDark = Theme.of(context).brightness == Brightness.dark;
+                          return Container(
                           margin: const EdgeInsets.only(bottom: 8),
                           padding: const EdgeInsets.all(12),
                           decoration: BoxDecoration(
-                            color: Colors.white,
+                            color: Theme.of(context).cardColor,
                             borderRadius: BorderRadius.circular(12),
-                            border: Border.all(color: Colors.grey.shade100),
+                            border: Border.all(color: isDark ? AppColors.darkBorder : Colors.grey.shade100),
                           ),
                           child: Row(
                             children: [
@@ -847,8 +852,8 @@ class _SalesTab extends ConsumerWidget {
                               ),
                               Text(CurrencyFormatter.formatCompact(p['omzet']), style: const TextStyle(fontWeight: FontWeight.w700, color: AppColors.success, fontSize: 13)),
                             ]
-                          )
-                        )).toList()
+                          );
+                        })).toList()
                       );
                     }
                   );
@@ -1153,9 +1158,9 @@ class _ArusKasTab extends ConsumerWidget {
                       margin: const EdgeInsets.only(bottom: 6),
                       padding: const EdgeInsets.all(12),
                       decoration: BoxDecoration(
-                        color: Colors.white,
+                        color: Theme.of(context).cardColor,
                         borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: Colors.grey.shade100),
+                        border: Border.all(color: Theme.of(context).brightness == Brightness.dark ? AppColors.darkBorder : Colors.grey.shade100),
                       ),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1803,13 +1808,14 @@ class _CashFlowTile extends StatelessWidget {
     final color = isIncome ? AppColors.success : AppColors.danger;
     final sign = isIncome ? '+' : '-';
 
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: Theme.of(context).cardColor,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: AppColors.border, width: 0.5),
+        border: Border.all(color: isDark ? AppColors.darkBorder : AppColors.border, width: 0.5),
       ),
       child: Row(children: [
         Container(
@@ -1955,9 +1961,9 @@ class _CashFlowFormState extends ConsumerState<_CashFlowForm> {
         right: 20,
         bottom: MediaQuery.of(context).viewInsets.bottom + 24,
       ),
-      decoration: const BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      decoration: BoxDecoration(
+        color: Theme.of(context).scaffoldBackgroundColor,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
       ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -2437,7 +2443,7 @@ class _KatRow extends StatelessWidget {
       margin: const EdgeInsets.only(bottom: 8),
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: Theme.of(context).cardColor,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: AppColors.border),
       ),
