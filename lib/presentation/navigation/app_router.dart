@@ -147,7 +147,7 @@ class _MainNavigationState extends ConsumerState<MainNavigation> {
             : IndexedStack(index: idx, children: _screens),
         bottomNavigationBar:
             isTabletLandscape ? null : _BottomNavBar(currentIndex: idx, ref: ref),
-        floatingActionButton: (isTabletLandscape && idx != 2)
+        floatingActionButton: (isTabletLandscape && idx == 0)
             ? FloatingActionButton.extended(
                 onPressed: () =>
                     ref.read(currentNavIndexProvider.notifier).state = 2,
@@ -614,7 +614,7 @@ class _MenuCard extends StatelessWidget {
                     style: TextStyle(
                       fontSize: 12,
                       fontWeight: FontWeight.w700,
-                      color: color,
+                      color: AppColors.primary,
                     ),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
@@ -1164,7 +1164,7 @@ class _SideNavRail extends StatelessWidget {
                     current: currentIndex,
                     icon: Icons.point_of_sale_outlined,
                     activeIcon: Icons.point_of_sale_rounded,
-                    label: 'Kasir / POS',
+                    label: 'Kasir',
                     ref: ref,
                   ),
                   isAdmin
