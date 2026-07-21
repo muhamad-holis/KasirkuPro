@@ -27,6 +27,7 @@ import '../../providers/auth_provider.dart';
 import '../../../data/database/app_database.dart';
 import '../dashboard/dashboard_screen.dart' show dashboardStatsProvider;
 import '../../navigation/app_router.dart' show currentNavIndexProvider;
+import 'manual_nota_screen.dart';
 
 // Index tab "Kasir" pada bottom navigation (lihat _screens di app_router.dart)
 const int _kKasirTabIndex = 2;
@@ -39,6 +40,58 @@ class KasirScreen extends ConsumerStatefulWidget {
 }
 
 class _KasirScreenState extends ConsumerState<KasirScreen> {
+  /// Popup dipanggil setiap kali tab Kasir ditekan. "Otomatis" melanjutkan
+  /// alur kasir yang sudah ada (scan barcode → keranjang → bayar, TIDAK
+  /// diubah). "Manual" membuka ManualNotaScreen (ketik bebas nama & harga,
+  /// tidak menyentuh stok/Products sama sekali).
+  Future<void> _showKasirModeDialog() async {
+    final mode = await showDialog<String>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Row(
+          children: [
+            Icon(Icons.point_of_sale_outlined, color: AppColors.primary, size: 22),
+            SizedBox(width: 8),
+            Text('Mode Kasir', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+          ],
+        ),
+        content: const Text('Pilih cara mencatat transaksi kali ini.'),
+        actionsAlignment: MainAxisAlignment.center,
+        actions: [
+          OutlinedButton.icon(
+            onPressed: () => Navigator.pop(context, 'manual'),
+            icon: const Icon(Icons.edit_note_outlined),
+            label: const Text('Manual'),
+          ),
+          ElevatedButton.icon(
+            style: ElevatedButton.styleFrom(backgroundColor: AppColors.primary),
+            onPressed: () => Navigator.pop(context, 'otomatis'),
+            icon: const Icon(Icons.qr_code_scanner_outlined),
+            label: const Text('Otomatis'),
+          ),
+        ],
+      ),
+    );
+    if (!mounted) return;
+    if (mode == 'manual') {
+      await Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => ProviderScope(
+            parent: ProviderScope.containerOf(context),
+            child: const ManualNotaScreen(),
+          ),
+        ),
+      );
+    } else if (mode == 'otomatis') {
+      _openScanner();
+    }
+    // Kalau dialog ditutup tanpa pilihan (mis. back button Android), tidak
+    // ada aksi lanjutan — user tetap di tab Kasir seperti biasa.
+  }
+
   @override
   void initState() {
     super.initState();
@@ -129,11 +182,13 @@ class _KasirScreenState extends ConsumerState<KasirScreen> {
   Widget build(BuildContext context) {
     final cart = ref.watch(kasirProvider);
 
-    // Buka scanner hanya saat user aktif berpindah ke tab "Kasir",
-    // bukan saat cold start (IndexedStack membangun semua screen sekaligus).
+    // Setiap kali user aktif berpindah ke tab "Kasir" (bukan saat cold start,
+    // karena IndexedStack membangun semua screen sekaligus), tanya dulu mode
+    // yang mau dipakai: Manual (Nota Manual, ketik bebas) atau Otomatis
+    // (alur kasir/scan barcode yang sudah ada, tidak diubah sama sekali).
     ref.listen<int>(currentNavIndexProvider, (previous, next) {
       if (next == _kKasirTabIndex && previous != _kKasirTabIndex) {
-        _openScanner();
+        _showKasirModeDialog();
       }
     });
 

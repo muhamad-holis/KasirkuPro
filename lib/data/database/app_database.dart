@@ -19,6 +19,7 @@ part 'tables/sync_queue_table.dart';
 part 'tables/users_table.dart';
 part 'tables/audit_logs_table.dart';
 part 'tables/suppliers_table.dart';
+part 'tables/manual_notas_table.dart';
 
 part 'daos/products_dao.dart';
 part 'daos/categories_dao.dart';
@@ -31,6 +32,7 @@ part 'daos/stock_movements_dao.dart';
 part 'daos/settings_dao.dart';
 part 'daos/users_dao.dart';
 part 'daos/suppliers_dao.dart';
+part 'daos/manual_notas_dao.dart';
 
 part 'app_database.g.dart';
 
@@ -47,20 +49,20 @@ LazyDatabase _openConnection() {
     Categories, Products, Customers, Transactions,
     TransactionItems, Debts, StockMovements,
     CashFlows, Settings, SyncQueue, Users, AuditLogs,
-    Suppliers,
+    Suppliers, ManualNotas,
   ],
   daos: [
     ProductsDao, CategoriesDao, TransactionsDao,
     CustomersDao, DebtsDao, ReportsDao, SyncDao,
     StockMovementsDao, SettingsDao, UsersDao,
-    SuppliersDao,
+    SuppliersDao, ManualNotasDao,
   ],
 )
 class AppDatabase extends _$AppDatabase {
   AppDatabase() : super(_openConnection());
 
   @override
-  int get schemaVersion => 7;
+  int get schemaVersion => 8;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -169,6 +171,23 @@ class AppDatabase extends _$AppDatabase {
           "BEFORE UPDATE OF stock ON products "
           "FOR EACH ROW WHEN NEW.stock < 0 "
           "BEGIN SELECT RAISE(ABORT, 'Stok tidak boleh negatif'); END"
+        );
+      }
+      if (from < 8) {
+        // Fitur Nota Manual: nota tulis-tangan cepat, terpisah dari
+        // Transactions karena item-nya bebas (tidak terhubung ke Products/stok).
+        await customStatement(
+          "CREATE TABLE IF NOT EXISTS manual_notas ("
+          "id INTEGER PRIMARY KEY AUTOINCREMENT,"
+          "invoice_number TEXT NOT NULL,"
+          "customer_name TEXT,"
+          "items_json TEXT NOT NULL,"
+          "total REAL NOT NULL DEFAULT 0,"
+          "amount_paid REAL,"
+          "is_synced INTEGER NOT NULL DEFAULT 0,"
+          "created_at INTEGER NOT NULL DEFAULT (strftime('%s','now') * 1000),"
+          "updated_at INTEGER NOT NULL DEFAULT (strftime('%s','now') * 1000)"
+          ")"
         );
       }
     },
