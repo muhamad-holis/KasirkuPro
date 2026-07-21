@@ -1,10 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:print_bluetooth_thermal/print_bluetooth_thermal.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/currency.dart';
 import '../../../core/utils/manual_nota_printer.dart';
-import '../../../data/database/app_database.dart';
 import '../../providers/manual_nota_provider.dart';
 import '../../providers/settings_provider.dart';
 
@@ -21,11 +19,37 @@ class ManualNotaScreen extends ConsumerStatefulWidget {
 class _ManualNotaScreenState extends ConsumerState<ManualNotaScreen> {
   bool _saving = false;
   final _bayarController = TextEditingController();
+  final Map<String, FocusNode> _nameFocusNodes = {};
+
+  FocusNode _nameFocusFor(String id) =>
+      _nameFocusNodes.putIfAbsent(id, () => FocusNode());
 
   @override
   void dispose() {
     _bayarController.dispose();
+    for (final node in _nameFocusNodes.values) {
+      node.dispose();
+    }
     super.dispose();
+  }
+
+  /// Dipanggil saat Enter ditekan di kolom Qty baris ke-[index]. Kalau ini
+  /// baris terakhir, tambah baris baru lalu pindah fokus ke nama baris baru
+  /// itu; kalau bukan, pindah fokus ke nama baris berikutnya. Sama seperti
+  /// handleEnterQty di page.tsx Nota Tulis.
+  void _handleRowSubmitted(int index) {
+    final items = ref.read(manualNotaProvider).items;
+    if (index >= items.length - 1) {
+      ref.read(manualNotaProvider.notifier).addRow();
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        final newItems = ref.read(manualNotaProvider).items;
+        if (newItems.isNotEmpty) {
+          _nameFocusFor(newItems.last.id).requestFocus();
+        }
+      });
+    } else {
+      _nameFocusFor(items[index + 1].id).requestFocus();
+    }
   }
 
   Future<void> _confirmClear() async {
@@ -48,7 +72,11 @@ class _ManualNotaScreenState extends ConsumerState<ManualNotaScreen> {
     if (ok == true) ref.read(manualNotaProvider.notifier).reset();
   }
 
-  Future<void> _saveAndMaybePrint() async {
+  /// Simpan nota, lalu COBA cetak (bukan dicek dulu status koneksinya —
+  /// mengikuti pola handlePrint() di page.tsx Nota Tulis: langsung coba,
+  /// kalau gagal cukup tampilkan pesan, nota tetap tersimpan). Dibungkus
+  /// timeout supaya kalau plugin printer macet, tidak nge-hang selamanya.
+  Future<void> _saveAndPrint() async {
     final notifier = ref.read(manualNotaProvider.notifier);
     final bayar = double.tryParse(_bayarController.text.replaceAll(RegExp(r'[^0-9]'), ''));
 
@@ -60,27 +88,21 @@ class _ManualNotaScreenState extends ConsumerState<ManualNotaScreen> {
       final items = decodeManualNotaItems(nota.itemsJson);
       final settings = ref.read(storeSettingsProvider);
 
-      final connected = await PrintBluetoothThermal.connectionStatus;
-      if (!connected) {
-        final wantPrint = await showDialog<bool>(
-          context: context,
-          builder: (_) => AlertDialog(
-            title: const Text('Nota Tersimpan'),
-            content: const Text('Printer belum terhubung. Cetak sekarang?'),
-            actions: [
-              TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Nanti')),
-              ElevatedButton(onPressed: () => Navigator.pop(context, true), child: const Text('Cetak')),
-            ],
-          ),
-        );
-        if (wantPrint == true && mounted) {
-          await _pickPrinterAndPrint(nota, items, settings);
-        }
-      } else {
-        await ManualNotaPrinter.print(nota: nota, items: items, settings: settings);
+      try {
+        await ManualNotaPrinter.print(nota: nota, items: items, settings: settings)
+            .timeout(const Duration(seconds: 6));
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(content: Text('Nota tersimpan & dicetak'), backgroundColor: AppColors.success),
+          );
+        }
+      } catch (_) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Nota tersimpan. Gagal mencetak — cek koneksi printer.'),
+              backgroundColor: AppColors.warning,
+            ),
           );
         }
       }
@@ -90,56 +112,12 @@ class _ManualNotaScreenState extends ConsumerState<ManualNotaScreen> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Gagal: $e'), backgroundColor: AppColors.danger),
+          SnackBar(content: Text('Gagal menyimpan: $e'), backgroundColor: AppColors.danger),
         );
       }
     } finally {
       if (mounted) setState(() => _saving = false);
     }
-  }
-
-  Future<void> _pickPrinterAndPrint(
-      ManualNota nota, List<ManualNotaItem> items, StoreSettings settings) async {
-    final devices = await PrintBluetoothThermal.pairedBluetooths;
-    if (!mounted) return;
-    if (devices.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Tidak ada printer Bluetooth yang dipasangkan'), backgroundColor: AppColors.warning),
-      );
-      return;
-    }
-    await showDialog(
-      context: context,
-      builder: (_) => AlertDialog(
-        title: const Text('Pilih Printer'),
-        content: SizedBox(
-          width: double.maxFinite,
-          child: ListView.builder(
-            shrinkWrap: true,
-            itemCount: devices.length,
-            itemBuilder: (_, i) {
-              final d = devices[i];
-              return ListTile(
-                leading: const Icon(Icons.print_outlined, color: AppColors.primary),
-                title: Text(d.name ?? 'Printer ${i + 1}'),
-                onTap: () async {
-                  Navigator.pop(context);
-                  final ok = await PrintBluetoothThermal.connect(macPrinterAddress: d.macAdress ?? '');
-                  if (ok) {
-                    await ManualNotaPrinter.print(nota: nota, items: items, settings: settings);
-                  } else if (context.mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Gagal terhubung ke printer'), backgroundColor: AppColors.danger),
-                    );
-                  }
-                },
-              );
-            },
-          ),
-        ),
-        actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('Batal'))],
-      ),
-    );
   }
 
   @override
@@ -184,10 +162,11 @@ class _ManualNotaScreenState extends ConsumerState<ManualNotaScreen> {
                 return _ManualNotaRow(
                   key: ValueKey(item.id),
                   item: item,
+                  nameFocusNode: _nameFocusFor(item.id),
                   onChanged: (name, price, qty) =>
                       notifier.updateItem(item.id, name: name, price: price, qty: qty),
                   onRemove: () => notifier.removeItem(item.id),
-                  onSubmitted: notifier.ensureTrailingRow,
+                  onRowSubmitted: () => _handleRowSubmitted(i),
                 );
               },
             ),
@@ -249,7 +228,7 @@ class _ManualNotaScreenState extends ConsumerState<ManualNotaScreen> {
                     width: double.infinity,
                     height: 48,
                     child: ElevatedButton.icon(
-                      onPressed: (_saving || state.validItems.isEmpty) ? null : _saveAndMaybePrint,
+                      onPressed: (_saving || state.validItems.isEmpty) ? null : _saveAndPrint,
                       icon: _saving
                           ? const SizedBox(
                               width: 18, height: 18,
@@ -271,16 +250,18 @@ class _ManualNotaScreenState extends ConsumerState<ManualNotaScreen> {
 
 class _ManualNotaRow extends StatefulWidget {
   final ManualNotaItem item;
+  final FocusNode nameFocusNode;
   final void Function(String? name, double? price, int? qty) onChanged;
   final VoidCallback onRemove;
-  final VoidCallback onSubmitted;
+  final VoidCallback onRowSubmitted;
 
   const _ManualNotaRow({
     super.key,
     required this.item,
+    required this.nameFocusNode,
     required this.onChanged,
     required this.onRemove,
-    required this.onSubmitted,
+    required this.onRowSubmitted,
   });
 
   @override
@@ -291,6 +272,8 @@ class _ManualNotaRowState extends State<_ManualNotaRow> {
   late final TextEditingController _nameCtrl;
   late final TextEditingController _priceCtrl;
   late final TextEditingController _qtyCtrl;
+  final FocusNode _priceFocus = FocusNode();
+  final FocusNode _qtyFocus = FocusNode();
 
   @override
   void initState() {
@@ -305,6 +288,8 @@ class _ManualNotaRowState extends State<_ManualNotaRow> {
     _nameCtrl.dispose();
     _priceCtrl.dispose();
     _qtyCtrl.dispose();
+    _priceFocus.dispose();
+    _qtyFocus.dispose();
     super.dispose();
   }
 
@@ -326,6 +311,8 @@ class _ManualNotaRowState extends State<_ManualNotaRow> {
                 Expanded(
                   child: TextField(
                     controller: _nameCtrl,
+                    focusNode: widget.nameFocusNode,
+                    textInputAction: TextInputAction.next,
                     decoration: const InputDecoration(
                       hintText: 'Nama barang',
                       border: InputBorder.none,
@@ -333,6 +320,7 @@ class _ManualNotaRowState extends State<_ManualNotaRow> {
                     ),
                     style: const TextStyle(fontWeight: FontWeight.w600),
                     onChanged: (v) => widget.onChanged(v, null, null),
+                    onSubmitted: (_) => FocusScope.of(context).requestFocus(_priceFocus),
                   ),
                 ),
                 IconButton(
@@ -347,10 +335,12 @@ class _ManualNotaRowState extends State<_ManualNotaRow> {
                   flex: 3,
                   child: TextField(
                     controller: _priceCtrl,
+                    focusNode: _priceFocus,
                     keyboardType: TextInputType.number,
+                    textInputAction: TextInputAction.next,
                     decoration: const InputDecoration(hintText: 'Harga', isDense: true),
                     onChanged: (v) => widget.onChanged(null, double.tryParse(v) ?? 0, null),
-                    onSubmitted: (_) => widget.onSubmitted(),
+                    onSubmitted: (_) => FocusScope.of(context).requestFocus(_qtyFocus),
                   ),
                 ),
                 const SizedBox(width: 8),
@@ -358,10 +348,12 @@ class _ManualNotaRowState extends State<_ManualNotaRow> {
                   flex: 1,
                   child: TextField(
                     controller: _qtyCtrl,
+                    focusNode: _qtyFocus,
                     keyboardType: TextInputType.number,
+                    textInputAction: TextInputAction.done,
                     decoration: const InputDecoration(hintText: 'Qty', isDense: true),
                     onChanged: (v) => widget.onChanged(null, null, int.tryParse(v) ?? 1),
-                    onSubmitted: (_) => widget.onSubmitted(),
+                    onSubmitted: (_) => widget.onRowSubmitted(),
                   ),
                 ),
                 const SizedBox(width: 8),
