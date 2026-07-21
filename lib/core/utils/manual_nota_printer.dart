@@ -5,6 +5,7 @@ import 'package:esc_pos_utils_plus/esc_pos_utils_plus.dart';
 import 'package:print_bluetooth_thermal/print_bluetooth_thermal.dart';
 import 'package:image/image.dart' as img;
 import 'package:intl/intl.dart';
+import '../../data/database/app_database.dart';
 import '../../presentation/providers/manual_nota_provider.dart';
 import '../../presentation/providers/settings_provider.dart';
 import 'currency.dart';

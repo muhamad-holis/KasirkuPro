@@ -4,6 +4,7 @@ import 'package:print_bluetooth_thermal/print_bluetooth_thermal.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/currency.dart';
 import '../../../core/utils/manual_nota_printer.dart';
+import '../../../data/database/app_database.dart';
 import '../../providers/manual_nota_provider.dart';
 import '../../providers/settings_provider.dart';
 
